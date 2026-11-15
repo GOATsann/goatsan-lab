@@ -309,9 +309,21 @@ function renderCompare() {
     drawChart(card, cfg, names.map(n => ({ name: n, color: colorOf[n], points: seriesFor(data.runs[n], cfg) })), true);
   }
   if (!names.length) charts.querySelectorAll(".empty").forEach(e => { e.textContent = "Pick a run above."; });
-  const box = document.getElementById("videos"); box.replaceChildren();
   document.getElementById("videos-note").textContent = "The latest test race of each run, on the same track.";
-  names.forEach((n, i) => { const v = data.runs[n].videos.at(-1); if (v) box.appendChild(videoCard(v, `${n} · ${fmtSteps(v.steps)}`, scoreOf(data.runs[n], v.steps), colorOf[n])); });
+  // Keep video elements that are still wanted: a redraw (every refresh, and on resize, which
+  // going full screen triggers) must not replace a playing or full-screen video.
+  const box = document.getElementById("videos");
+  if (box.dataset.run !== COMPARE) { box.replaceChildren(); box.dataset.run = COMPARE; }
+  const have = new Map([...box.children].map(c => [c.dataset.key, c]));
+  const cards = names.flatMap(n => {
+    const v = data.runs[n].videos.at(-1); if (!v) return [];
+    const key = `${n}:${v.steps}`;
+    const card = have.get(key) || videoCard(v, `${n} · ${fmtSteps(v.steps)}`, scoreOf(data.runs[n], v.steps));
+    card.dataset.key = key; card.style.borderColor = colorOf[n];
+    return [card];
+  });
+  for (const c of [...box.children]) if (!cards.includes(c)) c.remove();
+  cards.forEach((c, i) => { if (box.children[i] !== c) box.insertBefore(c, box.children[i] || null); });
 }
 
 function scoreOf(run, steps) { const r = run.races.find(x => x.steps === steps); return r ? r.score : undefined; }
