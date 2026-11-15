@@ -57,6 +57,23 @@ def test_race(model: PPO, video_path: Path | None) -> float:
     return score
 
 
+class AdvantageStats(BaseCallback):
+    """Log the size of the raw advantages before PPO rescales them.
+
+    PPO normalizes advantages in every batch (average 0, spread 1), so plotting
+    them after that is a flat line. Their raw size shows how surprised the critic
+    still is: big early on, smaller as its guesses improve.
+    """
+
+    def _on_rollout_end(self) -> None:
+        adv = self.model.rollout_buffer.advantages  # raw GAE values, before normalization
+        self.logger.record("advantage/raw_abs_mean", float(np.abs(adv).mean()))
+        self.logger.record("advantage/raw_std", float(adv.std()))
+
+    def _on_step(self) -> bool:
+        return True
+
+
 class ProgressRaces(BaseCallback):
     """At the start and every `every` steps: a test race, its video, and a CSV row."""
 
@@ -164,6 +181,7 @@ def main() -> None:
                 save_vecnormalize=True,
             ),
             ProgressRaces(every, run_dir, video_dir),
+            AdvantageStats(),
         ]
     )
     model.learn(

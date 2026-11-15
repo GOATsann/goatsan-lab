@@ -10,3 +10,6 @@ car-racing/videos/
 # Voice-over scripts are private (read on camera, not published)
 *-script.md
 *script*.md
+
+# Dashboard data (made from runs/)
+car-racing/dashboard/data.json

@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Car Racing Training</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+  /* Layout: status strip, headline numbers, small multiples (one measure per chart,
+     never two axes), then the progress races as videos. One dark "night track" look. */
+  :root {
+    --bg: #0b0f14;
+    --panel: #141a22;
+    --line: #253041;
+    --grid: #1c2430;
+    --ink: #e8edf2;
+    --dim: #93a0ae;
+    --muted: #6b7786;
+    --reward: #b8841a;      /* score lines (validated for this dark surface) */
+    --reward-ink: #ffc94a;  /* score text */
+    --signal: #2a86c2;      /* learning-signal lines (validated) */
+    --good: #3fa34d;
+    --warn: #e5a03a;
+    --display: "Chakra Petch", "Arial Narrow", system-ui, sans-serif;
+    --text: "Inter", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--text); }
+  .page { max-width: 1180px; margin: 0 auto; padding: 28px 16px 64px; display: grid; gap: 28px; }
+  .kicker { font-family: var(--mono); font-size: 0.8rem; letter-spacing: 0.12em; color: var(--reward-ink); text-transform: uppercase; }
+  h1 { font-family: var(--display); font-size: clamp(1.8rem, 4vw, 2.6rem); margin: 4px 0 0; line-height: 1.1; }
+  h2 { font-family: var(--display); font-size: 1.3rem; margin: 0; }
+  .head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 16px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; color: var(--dim); font-size: 0.85rem; }
+  select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+  .chip { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-family: var(--mono); font-size: 0.75rem; }
+  .chip i { width: 8px; height: 8px; border-radius: 99px; background: var(--muted); }
+  .chip.live i { background: var(--good); box-shadow: 0 0 0 3px rgba(63,163,77,0.2); }
+  .chip.done i { background: var(--reward-ink); }
+  .chip.stale i { background: var(--warn); }
+
+  .progress { display: grid; gap: 8px; }
+  .bar { height: 10px; border-radius: 99px; background: var(--panel); border: 1px solid var(--line); overflow: hidden; }
+  .bar > span { display: block; height: 100%; background: var(--reward); border-radius: 99px; transition: width 0.6s ease; }
+  .bar-label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-family: var(--mono); font-size: 0.8rem; color: var(--dim); font-variant-numeric: tabular-nums; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 4px; }
+  .tile b { font-family: var(--display); font-size: 2rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .tile b.score { color: var(--reward-ink); }
+  .tile span { color: var(--dim); font-size: 0.85rem; }
+
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 16px 10px; display: grid; gap: 6px; min-width: 0; position: relative; }
+  .card h3 { margin: 0; font-size: 0.98rem; font-weight: 600; }
+  .card p { margin: 0; color: var(--dim); font-size: 0.82rem; }
+  .card svg { width: 100%; height: 190px; display: block; overflow: visible; }
+  .empty { color: var(--muted); font-size: 0.85rem; padding: 40px 0; text-align: center; }
+  .tip { position: absolute; pointer-events: none; background: #0b0f14; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 0.8rem; white-space: nowrap; transform: translate(-50%, -110%); }
+  .tip strong { display: block; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+  .tip span { color: var(--dim); font-family: var(--mono); font-size: 0.72rem; }
+
+  .videos { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+  .vid { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .vid video { width: 100%; display: block; aspect-ratio: 3 / 2; background: #000; }
+  .vid div { display: flex; justify-content: space-between; padding: 8px 12px; font-family: var(--mono); font-size: 0.78rem; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .vid div b { color: var(--reward-ink); font-weight: 500; }
+  .note { color: var(--muted); font-size: 0.8rem; }
+  @media (prefers-reduced-motion: reduce) { .bar > span { transition: none; } }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="head">
+    <div>
+      <div class="kicker">BULSHY.FM · Build #1</div>
+      <h1>Car racing training</h1>
+    </div>
+    <div class="meta">
+      <label for="run">Run</label>
+      <select id="run"></select>
+      <span class="chip" id="status"><i></i><span>loading</span></span>
+      <span id="updated"></span>
+    </div>
+  </header>
+
+  <section class="progress" aria-label="Training progress">
+    <div class="bar"><span id="bar" style="width:0%"></span></div>
+    <div class="bar-label"><span id="steps">0 steps</span><span id="eta"></span></div>
+  </section>
+
+  <section class="tiles" aria-label="Headline numbers">
+    <div class="tile"><span>Latest test race</span><b class="score" id="t-latest">–</b><span id="t-latest-at"></span></div>
+    <div class="tile"><span>Best test race</span><b class="score" id="t-best">–</b><span>900 = solved</span></div>
+    <div class="tile"><span>Coach accuracy</span><b id="t-coach">–</b><span>1.00 = predicts the points perfectly</span></div>
+    <div class="tile"><span>Driver's randomness</span><b id="t-explore">–</b><span>shrinks as it gets confident</span></div>
+  </section>
+
+  <section class="charts" id="charts" aria-label="Charts"></section>
+
+  <section style="display:grid;gap:12px" aria-label="Progress races">
+    <h2>Watch it learn</h2>
+    <p class="note">One test race on the same track every 100,000 steps. Newest first.</p>
+    <div class="videos" id="videos"></div>
+  </section>
+</main>
+
+<script>
+const CHARTS = [
+  { key: "races", title: "Test race score", desc: "Same track every time, so the scores compare fairly. 900 means solved.", color: "--reward", target: 900, fmt: v => v.toFixed(0) },
+  { key: "practice_score", title: "Practice race score (average)", desc: "Average score of the last 100 practice races.", color: "--reward", target: 900, fmt: v => v.toFixed(0) },
+  { key: "coach_accuracy", title: "Coach accuracy", desc: "How well the critic predicts the points (explained variance).", color: "--signal", min: 0, max: 1, fmt: v => v.toFixed(2) },
+  { key: "exploration", title: "Driver's randomness", desc: "Spread of its actions. High = still experimenting.", color: "--signal", min: 0, fmt: v => v.toFixed(3) },
+  { key: "clipped_share", title: "Updates hitting the ±20% cap", desc: "Share of actions where PPO's clip stopped a bigger change.", color: "--signal", min: 0, fmt: v => (v * 100).toFixed(0) + "%" },
+  { key: "update_size", title: "Update size", desc: "How much the driver changed per update (approx. KL).", color: "--signal", min: 0, fmt: v => v.toFixed(3) },
+  { key: "coach_loss", title: "Coach loss", desc: "Squared gap between the critic's guess and the real points.", color: "--signal", min: 0, fmt: v => v.toFixed(3) },
+  { key: "driver_loss", title: "Driver loss", desc: "The clipped policy loss. Noisy by nature; watch the trend.", color: "--signal", fmt: v => v.toFixed(3) },
+  { key: "advantage_size", title: "Advantage size", desc: "Average size of the raw advantage: how surprised the coach still is.", color: "--signal", min: 0, fmt: v => v.toFixed(2) },
+];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmtSteps = s => s >= 1e6 ? (s / 1e6).toFixed(2) + "M" : s >= 1e3 ? Math.round(s / 1e3) + "k" : String(s);
+let data = null, runName = null;
+
+function niceTicks(lo, hi, n = 4) {
+  const span = hi - lo || 1, raw = span / n, mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => span / s <= n) || 10 * mag;
+  const ticks = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) ticks.push(+v.toFixed(10));
+  return ticks;
+}
+
+function drawChart(card, cfg, points) {
+  const svgNS = "http://www.w3.org/2000/svg";
+  card.querySelectorAll("svg, .empty, .tip").forEach(e => e.remove());
+  if (!points || points.length < 2) {
+    const e = document.createElement("div"); e.className = "empty";
+    e.textContent = cfg.key === "advantage_size" ? "Logged from the next training run onward." : "Waiting for data…";
+    card.appendChild(e); return;
+  }
+  const W = Math.max(280, card.clientWidth - 32), H = 190, L = 44, R = 10, T = 10, B = 24;
+  const xs = points.map(p => p[0]), ys = points.map(p => p[1]);
+  const x0 = 0, x1 = Math.max(Math.max(...xs), 1);
+  let y0 = cfg.min ?? Math.min(...ys), y1 = cfg.max ?? Math.max(...ys);
+  if (cfg.target && Math.max(...ys) > cfg.target * 0.6) y1 = Math.max(y1, cfg.target);
+  if (y0 === y1) { y0 -= 1; y1 += 1; }
+  const pad = (y1 - y0) * 0.06; if (cfg.min === undefined) y0 -= pad; if (cfg.max === undefined) y1 += pad;
+  const X = v => L + (v - x0) / (x1 - x0) * (W - L - R), Y = v => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
+  const svg = document.createElementNS(svgNS, "svg"); svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("role", "img"); svg.setAttribute("aria-label", `${cfg.title}: latest ${cfg.fmt(ys.at(-1))}`);
+  const add = (tag, attrs) => { const el = document.createElementNS(svgNS, tag); for (const k in attrs) el.setAttribute(k, attrs[k]); svg.appendChild(el); return el; };
+  for (const t of niceTicks(y0, y1)) {
+    add("line", { x1: L, x2: W - R, y1: Y(t), y2: Y(t), stroke: css("--grid") });
+    const lab = add("text", { x: L - 6, y: Y(t) + 4, "text-anchor": "end", fill: css("--muted"), "font-size": 11, "font-family": "JetBrains Mono" }); lab.textContent = cfg.fmt(t);
+  }
+  for (const t of niceTicks(x0, x1, 4)) {
+    const lab = add("text", { x: X(t), y: H - 6, "text-anchor": "middle", fill: css("--muted"), "font-size": 11, "font-family": "JetBrains Mono" }); lab.textContent = fmtSteps(t);
+  }
+  if (cfg.target && y1 >= cfg.target) {
+    add("line", { x1: L, x2: W - R, y1: Y(cfg.target), y2: Y(cfg.target), stroke: css("--reward-ink"), "stroke-dasharray": "4 4", opacity: 0.6 });
+    const t = add("text", { x: W - R, y: Y(cfg.target) - 5, "text-anchor": "end", fill: css("--reward-ink"), "font-size": 11 }); t.textContent = "solved";
+  }
+  const color = css(cfg.color);
+  add("path", { d: points.map((p, i) => (i ? "L" : "M") + X(p[0]).toFixed(1) + " " + Y(p[1]).toFixed(1)).join(""), fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" });
+  if (points.length <= 20) for (const p of points) add("circle", { cx: X(p[0]), cy: Y(p[1]), r: 4, fill: color, stroke: css("--panel"), "stroke-width": 2 });
+  const last = points.at(-1); add("circle", { cx: X(last[0]), cy: Y(last[1]), r: 5, fill: color, stroke: css("--panel"), "stroke-width": 2 });
+  // hover: crosshair snaps to the nearest step
+  const hair = add("line", { y1: T, y2: H - B, stroke: css("--dim"), "stroke-width": 1, opacity: 0 });
+  const dot = add("circle", { r: 5, fill: color, stroke: css("--ink"), "stroke-width": 1.5, opacity: 0 });
+  const hit = add("rect", { x: L, y: 0, width: W - L - R, height: H, fill: "transparent" });
+  const tip = document.createElement("div"); tip.className = "tip"; tip.hidden = true;
+  const tv = document.createElement("strong"), ts = document.createElement("span"); tip.append(tv, ts); card.appendChild(tip);
+  const show = evt => {
+    const r = svg.getBoundingClientRect(), sx = (evt.clientX - r.left) * (W / r.width);
+    let best = points[0]; for (const p of points) if (Math.abs(X(p[0]) - sx) < Math.abs(X(best[0]) - sx)) best = p;
+    hair.setAttribute("x1", X(best[0])); hair.setAttribute("x2", X(best[0])); hair.setAttribute("opacity", 0.6);
+    dot.setAttribute("cx", X(best[0])); dot.setAttribute("cy", Y(best[1])); dot.setAttribute("opacity", 1);
+    tv.textContent = cfg.fmt(best[1]); ts.textContent = fmtSteps(best[0]) + " steps";
+    tip.hidden = false; tip.style.left = (svg.offsetLeft + X(best[0]) * r.width / W) + "px"; tip.style.top = (svg.offsetTop + Y(best[1]) * r.height / H) + "px";
+  };
+  hit.addEventListener("pointermove", show);
+  hit.addEventListener("pointerleave", () => { tip.hidden = true; hair.setAttribute("opacity", 0); dot.setAttribute("opacity", 0); });
+  card.appendChild(svg);
+}
+
+function render() {
+  if (!data) return;
+  const run = data.runs[runName]; if (!run) return;
+  const races = run.races, s = run.series;
+  const steps = Math.max(0, ...(s.practice_score || []).map(p => p[0]), ...races.map(r => r.steps));
+  document.getElementById("bar").style.width = Math.min(100, steps / data.target_steps * 100).toFixed(1) + "%";
+  document.getElementById("steps").textContent = `${steps.toLocaleString()} / ${data.target_steps.toLocaleString()} steps`;
+  const fps = (s.fps || []).at(-1)?.[1];
+  const left = fps ? (data.target_steps - steps) / fps / 60 : null;
+  document.getElementById("eta").textContent = steps >= data.target_steps ? "finished" : fps ? `${Math.round(fps)} steps/s · about ${left > 90 ? (left / 60).toFixed(1) + " h" : Math.round(left) + " min"} left` : "";
+  const updatedAt = new Date(data.updated.replace(" ", "T"));
+  const ageMin = (Date.now() - updatedAt) / 60000;
+  const status = document.getElementById("status"), done = steps >= data.target_steps;
+  status.className = "chip " + (done ? "done" : ageMin > 25 ? "stale" : "live");
+  status.querySelector("span").textContent = done ? "finished" : ageMin > 25 ? "no new data" : "training";
+  document.getElementById("updated").textContent = "updated " + updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const latest = races.at(-1), best = races.reduce((b, r) => (b && b.score > r.score ? b : r), null);
+  document.getElementById("t-latest").textContent = latest ? latest.score.toFixed(0) : "–";
+  document.getElementById("t-latest-at").textContent = latest ? `at ${fmtSteps(latest.steps)} steps, ${latest.minutes.toFixed(0)} min in` : "";
+  document.getElementById("t-best").textContent = best ? best.score.toFixed(0) : "–";
+  const coach = (s.coach_accuracy || []).at(-1)?.[1], explore = (s.exploration || []).at(-1)?.[1];
+  document.getElementById("t-coach").textContent = coach !== undefined ? coach.toFixed(2) : "–";
+  document.getElementById("t-explore").textContent = explore !== undefined ? explore.toFixed(3) : "–";
+
+  const charts = document.getElementById("charts");
+  for (const cfg of CHARTS) {
+    if (charts.querySelector(`[data-key="${cfg.key}"]`)) continue;
+    const card = document.createElement("article"); card.className = "card"; card.dataset.key = cfg.key;
+    const h = document.createElement("h3"); h.textContent = cfg.title;
+    const p = document.createElement("p"); p.textContent = cfg.desc;
+    card.append(h, p); charts.appendChild(card);
+  }
+  // Draw only once every card is in the grid, so each knows its real width.
+  for (const cfg of CHARTS) {
+    const card = charts.querySelector(`[data-key="${cfg.key}"]`);
+    const pts = cfg.key === "races" ? races.map(r => [r.steps, r.score]) : s[cfg.key];
+    drawChart(card, cfg, pts);
+  }
+
+  const box = document.getElementById("videos"), scoreAt = Object.fromEntries(races.map(r => [r.steps, r.score]));
+  for (const v of [...run.videos].reverse()) {
+    if (box.querySelector(`[data-steps="${v.steps}"]`)) continue;
+    const card = document.createElement("figure"); card.className = "vid"; card.dataset.steps = v.steps; card.style.margin = 0;
+    const video = document.createElement("video"); video.src = v.src; video.controls = true; video.muted = true; video.loop = true; video.playsInline = true; video.preload = "metadata";
+    const cap = document.createElement("div"); const a = document.createElement("span"); a.textContent = fmtSteps(v.steps) + " steps";
+    const b = document.createElement("b"); b.textContent = scoreAt[v.steps] !== undefined ? "score " + scoreAt[v.steps].toFixed(0) : "";
+    cap.append(a, b); card.append(video, cap);
+    const after = [...box.children].find(c => +c.dataset.steps < v.steps);
+    box.insertBefore(card, after || null);
+  }
+}
+
+async function load() {
+  try {
+    const r = await fetch("data.json?t=" + Date.now(), { cache: "no-store" });
+    data = await r.json();
+  } catch { document.getElementById("status").querySelector("span").textContent = "no data yet"; return; }
+  const sel = document.getElementById("run"), names = Object.keys(data.runs);
+  if (sel.options.length !== names.length) {
+    sel.replaceChildren(...names.map(n => { const o = document.createElement("option"); o.value = n; o.textContent = n; return o; }));
+    runName ??= names.includes("baseline") ? "baseline" : names[0];
+    sel.value = runName;
+  }
+  render();
+}
+document.getElementById("run").addEventListener("change", e => { runName = e.target.value; document.getElementById("videos").replaceChildren(); render(); });
+let resizeTimer; window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 150); });
+load(); setInterval(load, 30000);
+</script>
+</body>
+</html>
