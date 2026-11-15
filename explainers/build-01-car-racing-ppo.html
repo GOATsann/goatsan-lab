@@ -84,7 +84,7 @@
 
     <!-- screen -> eyes -->
     <path d="M330 402 V450" stroke="#5cc8ff" stroke-width="2.5" fill="none" marker-end="url(#a-cyan)"/>
-    <text x="346" y="434" font-family="Inter, sans-serif" font-size="17" fill="#5cc8ff">screen: last 4 frames, 96×96, grayscale</text>
+    <text x="346" y="434" font-family="Inter, sans-serif" font-size="17" fill="#5cc8ff">screen: last 2 frames, 64×64, grayscale</text>
 
     <!-- the eyes -->
     <rect x="110" y="454" width="710" height="112" rx="16" fill="#141a22" stroke="#2a3441" stroke-width="1.5"/>
@@ -166,7 +166,7 @@
 
     <!-- repeat -->
     <path d="M465 1340 V1386" stroke="#8b97a5" stroke-width="2" fill="none" marker-end="url(#a-dim)"/>
-    <text x="465" y="1416" text-anchor="middle" font-family="Chakra Petch, sans-serif" font-weight="600" font-size="22" fill="#e8edf2">Drive again with the better driver. Repeat ~1 million frames.</text>
+    <text x="465" y="1416" text-anchor="middle" font-family="Chakra Petch, sans-serif" font-weight="600" font-size="22" fill="#e8edf2">Drive again with the better driver. Repeat for ~1 million steps.</text>
 
     <!-- the key line -->
     <rect x="110" y="1448" width="710" height="76" rx="16" fill="none" stroke="#ffc94a" stroke-width="1.5" stroke-dasharray="8 6"/>
@@ -176,7 +176,7 @@
 
   <section class="key" aria-label="How to read it">
     <h2>How to read it</h2>
-    <p><strong class="cyan">Cyan</strong> is what the AI sees and does. Every frame, the game shows it the screen, the image network sums it up, and the <strong>actor</strong> picks steering, gas and brake. The <strong>critic</strong> guesses how many points are still coming.</p>
+    <p><strong class="cyan">Cyan</strong> is what the AI sees and does. At every step, the game shows it the screen, the image network sums it up, and the <strong>actor</strong> picks steering, gas and brake. The <strong>critic</strong> guesses how many points are still coming.</p>
     <p><strong class="gold">Gold</strong> is the reward. The game hands out points after each action, and they go only into the memory of the drive. In the learning step, points earned minus the critic's guess gives the <strong>advantage</strong>: actions that did better than expected get more likely, worse ones less likely, and no single update can change the driver by more than about 20%.</p>
     <p>That's PPO: <strong>the actor is the driver, the critic is the coach, and the rule is "improve, but not too fast."</strong></p>
     <div class="tags"><span>Gymnasium CarRacing</span><span>PPO · Stable-Baselines3</span><span>continuous controls</span><span>~2M weights</span></div>

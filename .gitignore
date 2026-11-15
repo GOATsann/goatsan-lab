@@ -1,0 +1,12 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+# Training output (big; models go to Hugging Face)
+car-racing/runs/
+car-racing/videos/
+.DS_Store
+
+# Voice-over scripts are private (read on camera, not published)
+*-script.md
+*script*.md
