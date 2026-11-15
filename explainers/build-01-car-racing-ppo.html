@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How an AI Learns to Race</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+  /* Layout: one tall telemetry poster (works as a 9:16 video frame), with a short
+     plain-language key under it. One committed dark "night track" look. */
+  :root {
+    --asphalt: #0b0f14;      /* page */
+    --panel: #141a22;        /* boxes */
+    --line: #2a3441;         /* box borders, quiet rules */
+    --ink: #e8edf2;          /* main text */
+    --dim: #8b97a5;          /* secondary text */
+    --signal: #5cc8ff;       /* what the AI sees and does */
+    --reward: #ffc94a;       /* the reward's path (Goatsan gold) */
+    --grass: #3fa34d;        /* the game */
+    --display: "Chakra Petch", "Arial Narrow", system-ui, sans-serif;
+    --text: "Inter", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    color-scheme: dark;
+  }
+  body {
+    background: var(--asphalt);
+    color: var(--ink);
+    font-family: var(--text);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 24px 48px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; display: grid; gap: 28px; }
+  .poster { width: 100%; height: auto; display: block; border-radius: 18px; background: var(--asphalt); }
+  .key { display: grid; gap: 14px; font-size: 1rem; line-height: 1.6; max-width: 66ch; }
+  .key h2 { font-family: var(--display); font-weight: 600; font-size: 1.4rem; margin: 0; text-wrap: balance; }
+  .key p { margin: 0; color: var(--dim); }
+  .key strong { color: var(--ink); font-weight: 600; }
+  .gold { color: var(--reward); }
+  .cyan { color: var(--signal); }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; font-family: var(--mono); font-size: 0.8rem; color: var(--dim); }
+  .tags span { border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; }
+</style>
+
+</head>
+<body>
+<main class="wrap">
+  <svg class="poster" id="poster" viewBox="0 0 900 1560" role="img" aria-labelledby="t d" xmlns="http://www.w3.org/2000/svg">
+    <title id="t">How an AI learns to race</title>
+    <desc id="d">PPO on Gymnasium CarRacing. The game shows the AI the screen; a shared image network feeds an actor that picks steering, gas and brake, and a critic that guesses future points. The game's reward goes into a memory of the drive and is used only in the learning step, to compute the advantage that updates the actor and the critic.</desc>
+    <defs>
+      <marker id="a-cyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#5cc8ff"/></marker>
+      <marker id="a-gold" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#ffc94a"/></marker>
+      <marker id="a-dim" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8b97a5"/></marker>
+      <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse"><path d="M30 0H0V30" fill="none" stroke="#141b24" stroke-width="1"/></pattern>
+    </defs>
+
+    <rect width="900" height="1560" fill="#0b0f14"/>
+    <rect width="900" height="1560" fill="url(#grid)"/>
+
+    <!-- header -->
+    <text x="110" y="74" font-family="JetBrains Mono, monospace" font-size="20" fill="#ffc94a" letter-spacing="2">BULSHY.FM · BUILD #1</text>
+    <text x="110" y="132" font-family="Chakra Petch, sans-serif" font-weight="700" font-size="54" fill="#e8edf2">How an AI learns to race</text>
+    <text x="110" y="172" font-family="Inter, sans-serif" font-size="22" fill="#8b97a5">PPO on Gymnasium CarRacing. <tspan fill="#ffc94a">Gold</tspan> shows where the reward goes.</text>
+
+    <!-- section 1 -->
+    <text x="110" y="232" font-family="JetBrains Mono, monospace" font-size="17" fill="#8b97a5" letter-spacing="2">1 · DRIVE</text>
+    <line x1="230" y1="226" x2="820" y2="226" stroke="#2a3441"/>
+
+    <!-- the game -->
+    <rect x="110" y="252" width="450" height="150" rx="16" fill="#141a22" stroke="#3fa34d" stroke-width="1.5"/>
+    <text x="134" y="294" font-family="Chakra Petch, sans-serif" font-weight="600" font-size="28" fill="#e8edf2">The game</text>
+    <text x="134" y="326" font-family="Inter, sans-serif" font-size="18" fill="#8b97a5">Gymnasium CarRacing, new track every race</text>
+    <text x="134" y="356" font-family="JetBrains Mono, monospace" font-size="15" fill="#ffc94a">reward: +1000/N per new road tile</text>
+    <text x="134" y="380" font-family="JetBrains Mono, monospace" font-size="15" fill="#ffc94a">−0.1 per frame · −100 off the map</text>
+
+    <!-- mini track -->
+    <rect x="590" y="252" width="230" height="150" rx="16" fill="#12301a"/>
+    <path d="M625 300 C625 270 665 268 700 280 C735 292 770 268 790 290 C808 310 795 340 770 350 C740 362 720 345 690 360 C660 375 625 365 625 335 Z" fill="none" stroke="#4a4f57" stroke-width="16" stroke-linejoin="round"/>
+    <path d="M625 300 C625 270 665 268 700 280 C735 292 770 268 790 290 C808 310 795 340 770 350 C740 362 720 345 690 360 C660 375 625 365 625 335 Z" fill="none" stroke="#e8edf2" stroke-width="1" stroke-dasharray="6 7" opacity="0.6"/>
+    <rect x="690" y="273" width="16" height="9" rx="2" fill="#ff5b5b" transform="rotate(18 698 277)"/>
+
+    <!-- screen -> eyes -->
+    <path d="M330 402 V450" stroke="#5cc8ff" stroke-width="2.5" fill="none" marker-end="url(#a-cyan)"/>
+    <text x="346" y="434" font-family="Inter, sans-serif" font-size="17" fill="#5cc8ff">screen: last 4 frames, 96×96, grayscale</text>
+
+    <!-- the eyes -->
+    <rect x="110" y="454" width="710" height="112" rx="16" fill="#141a22" stroke="#2a3441" stroke-width="1.5"/>
+    <text x="134" y="494" font-family="Chakra Petch, sans-serif" font-weight="600" font-size="26" fill="#e8edf2">The eyes · image network (CNN)</text>
+    <text x="134" y="524" font-family="Inter, sans-serif" font-size="18" fill="#8b97a5">3 filter layers: edges, then road borders, then the next turn</text>
+    <text x="134" y="551" font-family="Inter, sans-serif" font-size="18" fill="#5cc8ff">turns the screen into 512 numbers</text>
+
+    <!-- split -->
+    <path d="M277 566 V616" stroke="#5cc8ff" stroke-width="2.5" fill="none" marker-end="url(#a-cyan)"/>
+    <path d="M652 566 V616" stroke="#5cc8ff" stroke-width="2.5" fill="none" marker-end="url(#a-cyan)"/>
+
+    <!-- actor -->
+    <rect x="110" y="620" width="335" height="140" rx="16" fill="#141a22" stroke="#5cc8ff" stroke-width="1.5"/>
+    <text x="134" y="658" font-family="Chakra Petch, sans-serif" font-weight="600" font-size="24" fill="#e8edf2">Actor = the driver</text>
+    <text x="134" y="684" font-family="JetBrains Mono, monospace" font-size="15" fill="#8b97a5">the policy</text>
+    <text x="134" y="714" font-family="Inter, sans-serif" font-size="19" fill="#5cc8ff">steer · gas · brake</text>
+    <text x="134" y="742" font-family="Inter, sans-serif" font-size="16" fill="#8b97a5">average ± spread, so it explores</text>
+
+    <!-- critic -->
+    <rect x="485" y="620" width="335" height="140" rx="16" fill="#141a22" stroke="#2a3441" stroke-width="1.5"/>
+    <text x="509" y="658" font-family="Chakra Petch, sans-serif" font-weight="600" font-size="24" fill="#e8edf2">Critic = the coach</text>
+    <text x="509" y="684" font-family="JetBrains Mono, monospace" font-size="15" fill="#8b97a5">the value V(s)</text>
+    <text x="509" y="714" font-family="Inter, sans-serif" font-size="19" fill="#e8edf2">"I expect X more points"</text>
+    <text x="509" y="742" font-family="Inter, sans-serif" font-size="16" fill="#8b97a5">used only while training</text>
+
+    <!-- action loop (left channel) -->
+    <path d="M110 690 H62 V318 H106" stroke="#5cc8ff" stroke-width="2.5" fill="none" marker-end="url(#a-cyan)"/>
+    <text transform="translate(48 600) rotate(-90)" font-family="Inter, sans-serif" font-size="17" fill="#5cc8ff">action: steer, gas, brake</text>
+
+    <!-- reward (right channel) -->
+    <path d="M820 330 H862 V900 H824" stroke="#ffc94a" stroke-width="3.5" fill="none" marker-end="url(#a-gold)"/>
+    <text transform="translate(884 640) rotate(90)" font-family="Inter, sans-serif" font-weight="600" font-size="18" fill="#ffc94a">reward: points for this step</text>
+
+    <!-- section 2 -->
+    <line x1="110" y1="816" x2="262" y2="816" stroke="#2a3441"/>
+    <text x="300" y="822" font-family="JetBrains Mono, monospace" font-size="17" fill="#8b97a5" letter-spacing="2">2 · LEARN (PPO UPDATE)</text>
+    <line x1="570" y1="816" x2="638" y2="816" stroke="#2a3441"/>
+    <line x1="666" y1="816" x2="820" y2="816" stroke="#2a3441"/>
+
+    <!-- actor/critic -> memory -->
+    <path d="M277 760 V844" stroke="#5cc8ff" stroke-width="2" fill="none" marker-end="url(#a-cyan)"/>
+    <path d="M652 760 V844" stroke="#8b97a5" stroke-width="2" stroke-dasharray="6 6" fill="none" marker-end="url(#a-dim)"/>
+    <text x="290" y="788" font-family="Inter, sans-serif" font-size="15" fill="#5cc8ff">action taken</text>
+    <text x="665" y="790" font-family="Inter, sans-serif" font-size="15" fill="#8b97a5">its guess</text>
+
+    <!-- memory -->
+    <rect x="110" y="848" width="710" height="104" rx="16" fill="#141a22" stroke="#2a3441" stroke-width="1.5"/>
+    <text x="134" y="888" font-family="Chakra Petch, sans-serif" font-weight="600" font-size="24" fill="#e8edf2">Memory of the drive</text>
+    <text x="134" y="920" font-family="Inter, sans-serif" font-size="17" fill="#8b97a5">screen, action + its probability, <tspan fill="#ffc94a">reward</tspan>, guess</text>
+    <text x="134" y="942" font-family="JetBrains Mono, monospace" font-size="14" fill="#8b97a5">rollout buffer · emptied after every update</text>
+
+    <!-- memory -> advantage -->
+    <path d="M465 952 V1002" stroke="#ffc94a" stroke-width="3.5" fill="none" marker-end="url(#a-gold)"/>
+
+    <!-- advantage -->
+    <rect x="110" y="1006" width="710" height="140" rx="16" fill="#2a2414" stroke="#ffc94a" stroke-width="2"/>
+    <text x="134" y="1048" font-family="Chakra Petch, sans-serif" font-weight="700" font-size="27" fill="#ffc94a">Advantage = points earned − critic's guess</text>
+    <text x="134" y="1082" font-family="Inter, sans-serif" font-size="19" fill="#e8edf2">better than expected: do it more</text>
+    <text x="134" y="1108" font-family="Inter, sans-serif" font-size="19" fill="#e8edf2">worse than expected: do it less</text>
+    <text x="134" y="1134" font-family="JetBrains Mono, monospace" font-size="14" fill="#8b97a5">GAE · γ = 0.99 · λ = 0.95</text>
+
+    <!-- advantage -> updates -->
+    <path d="M277 1146 V1196" stroke="#ffc94a" stroke-width="3.5" fill="none" marker-end="url(#a-gold)"/>
+    <path d="M652 1146 V1196" stroke="#ffc94a" stroke-width="3.5" fill="none" marker-end="url(#a-gold)"/>
+    <text x="672" y="1178" font-family="Inter, sans-serif" font-size="15" fill="#ffc94a">real points added up</text>
+
+    <!-- updates -->
+    <rect x="110" y="1200" width="335" height="140" rx="16" fill="#141a22" stroke="#5cc8ff" stroke-width="1.5"/>
+    <text x="134" y="1240" font-family="Chakra Petch, sans-serif" font-weight="600" font-size="23" fill="#e8edf2">Update the driver</text>
+    <text x="134" y="1272" font-family="Inter, sans-serif" font-size="17" fill="#8b97a5">policy loss: more of what beat</text>
+    <text x="134" y="1300" font-family="Inter, sans-serif" font-size="17" fill="#ffc94a">expectations, capped at ±20%</text>
+    <text x="134" y="1324" font-family="JetBrains Mono, monospace" font-size="14" fill="#8b97a5">the PPO "clip"</text>
+
+    <rect x="485" y="1200" width="335" height="140" rx="16" fill="#141a22" stroke="#2a3441" stroke-width="1.5"/>
+    <text x="509" y="1240" font-family="Chakra Petch, sans-serif" font-weight="600" font-size="23" fill="#e8edf2">Update the coach</text>
+    <text x="509" y="1272" font-family="Inter, sans-serif" font-size="17" fill="#8b97a5">value loss: (guess − real points)²</text>
+    <text x="509" y="1300" font-family="Inter, sans-serif" font-size="17" fill="#8b97a5">pulls its guess toward the truth</text>
+    <text x="509" y="1324" font-family="JetBrains Mono, monospace" font-size="14" fill="#8b97a5">one optimizer updates all weights</text>
+
+    <!-- repeat -->
+    <path d="M465 1340 V1386" stroke="#8b97a5" stroke-width="2" fill="none" marker-end="url(#a-dim)"/>
+    <text x="465" y="1416" text-anchor="middle" font-family="Chakra Petch, sans-serif" font-weight="600" font-size="22" fill="#e8edf2">Drive again with the better driver. Repeat ~1 million frames.</text>
+
+    <!-- the key line -->
+    <rect x="110" y="1448" width="710" height="76" rx="16" fill="none" stroke="#ffc94a" stroke-width="1.5" stroke-dasharray="8 6"/>
+    <text x="465" y="1480" text-anchor="middle" font-family="Inter, sans-serif" font-weight="600" font-size="19" fill="#ffc94a">The AI never sees its score.</text>
+    <text x="465" y="1506" text-anchor="middle" font-family="Inter, sans-serif" font-size="17" fill="#e8edf2">Points only shape the learning step, never the network's input.</text>
+  </svg>
+
+  <section class="key" aria-label="How to read it">
+    <h2>How to read it</h2>
+    <p><strong class="cyan">Cyan</strong> is what the AI sees and does. Every frame, the game shows it the screen, the image network sums it up, and the <strong>actor</strong> picks steering, gas and brake. The <strong>critic</strong> guesses how many points are still coming.</p>
+    <p><strong class="gold">Gold</strong> is the reward. The game hands out points after each action, and they go only into the memory of the drive. In the learning step, points earned minus the critic's guess gives the <strong>advantage</strong>: actions that did better than expected get more likely, worse ones less likely, and no single update can change the driver by more than about 20%.</p>
+    <p>That's PPO: <strong>the actor is the driver, the critic is the coach, and the rule is "improve, but not too fast."</strong></p>
+    <div class="tags"><span>Gymnasium CarRacing</span><span>PPO · Stable-Baselines3</span><span>continuous controls</span><span>~2M weights</span></div>
+  </section>
+</main>
+</body>
+</html>
