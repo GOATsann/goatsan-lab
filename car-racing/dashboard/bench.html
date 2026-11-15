@@ -22,6 +22,7 @@
   .results td small { color: var(--muted); font-size: 0.78rem; }
   .key { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 8px; vertical-align: middle; }
   .wide { grid-column: 1 / -1; }
+  .card .card-title { margin: 0; font-family: var(--text); font-size: 0.98rem; font-weight: 600; }
   .card svg.tall { height: auto; }
   .h2h { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--dim); font-size: 0.85rem; }
   .verdict { font-family: var(--mono); font-size: 0.85rem; color: var(--ink); }
@@ -55,11 +56,11 @@
 
   <section class="charts">
     <article class="card wide" id="strip-card">
-      <h3>Return on every track</h3>
+      <h2 class="card-title">Return on every track</h2>
       <p>One dot per track. The bar marks the mean and its 95% confidence interval.</p>
     </article>
     <article class="card wide" id="h2h-card">
-      <h3>Head to head, track by track</h3>
+      <h2 class="card-title">Head to head, track by track</h2>
       <p>Each dot is one track. Above the diagonal = the second run scored higher on that track.</p>
       <div class="h2h">
         <select id="h2h-a" aria-label="First run"></select><span>vs</span><select id="h2h-b" aria-label="Second run"></select>
