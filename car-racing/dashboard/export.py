@@ -49,6 +49,19 @@ def races(run_dir: Path) -> list[dict]:
         return [{"steps": int(r["steps"]), "minutes": float(r["minutes"]), "score": float(r["test_race_score"])} for r in csv.DictReader(f)]
 
 
+def bench(run_dir: Path) -> list[dict] | None:
+    """Rows of bench.py's fixed-track benchmark, if it has been run for this model."""
+    log = run_dir / "bench.csv"
+    if not log.exists():
+        return None
+    with log.open() as f:
+        return [
+            {"seed": int(r["seed"]), "return": float(r["return"]), "frames": int(r["frames"]),
+             "tiles": float(r["tiles_visited"]), "lap": int(r["lap_completed"]), "wrong_way": float(r["wrong_way_share"])}
+            for r in csv.DictReader(f)
+        ]
+
+
 def videos(run: str) -> list[dict]:
     folder = ROOT / "videos" / run
     found = []
@@ -62,7 +75,7 @@ def videos(run: str) -> list[dict]:
 def main() -> None:
     runs = {}
     for run_dir in sorted(p for p in (ROOT / "runs").iterdir() if p.is_dir()):
-        runs[run_dir.name] = {"series": scalars(run_dir), "races": races(run_dir), "videos": videos(run_dir.name)}
+        runs[run_dir.name] = {"series": scalars(run_dir), "races": races(run_dir), "videos": videos(run_dir.name), "bench": bench(run_dir)}
     data = {"updated": time.strftime("%Y-%m-%d %H:%M:%S"), "target_steps": 4_000_000, "solved_score": 900, "runs": runs}
     out = ROOT / "dashboard" / "data.json"
     out.write_text(json.dumps(data))

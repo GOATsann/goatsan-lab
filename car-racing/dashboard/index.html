@@ -7,90 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
-<style>
-  /* Layout: status strip, headline numbers, small multiples (one measure per chart,
-     never two axes), then the progress races as videos. One dark "night track" look. */
-  :root {
-    --bg: #0b0f14;
-    --panel: #141a22;
-    --line: #253041;
-    --grid: #1c2430;
-    --ink: #e8edf2;
-    --dim: #93a0ae;
-    --muted: #6b7786;
-    --reward: #b8841a;      /* score lines (validated for this dark surface) */
-    --reward-ink: #ffc94a;  /* score text */
-    --signal: #2a86c2;      /* learning-signal lines (validated) */
-    --good: #3fa34d;
-    --warn: #e5a03a;
-    --display: "Chakra Petch", "Arial Narrow", system-ui, sans-serif;
-    --text: "Inter", system-ui, sans-serif;
-    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
-    color-scheme: dark;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--text); }
-  .page { max-width: 1180px; margin: 0 auto; padding: 28px 16px 64px; display: grid; gap: 28px; }
-  .kicker { font-family: var(--mono); font-size: 0.8rem; letter-spacing: 0.12em; color: var(--reward-ink); text-transform: uppercase; }
-  h1 { font-family: var(--display); font-size: clamp(1.8rem, 4vw, 2.6rem); margin: 4px 0 0; line-height: 1.1; }
-  h2 { font-family: var(--display); font-size: 1.3rem; margin: 0; }
-  .head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 16px; }
-  .meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; color: var(--dim); font-size: 0.85rem; }
-  select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
-  .chip { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-family: var(--mono); font-size: 0.75rem; }
-  .chip i { width: 8px; height: 8px; border-radius: 99px; background: var(--muted); }
-  .chip.live i { background: var(--good); box-shadow: 0 0 0 3px rgba(63,163,77,0.2); }
-  .chip.done i { background: var(--reward-ink); }
-  .chip.stale i { background: var(--warn); }
-
-  .progress { display: grid; gap: 8px; }
-  .bar { height: 10px; border-radius: 99px; background: var(--panel); border: 1px solid var(--line); overflow: hidden; }
-  .bar > span { display: block; height: 100%; background: var(--reward); border-radius: 99px; transition: width 0.6s ease; }
-  .bar-label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-family: var(--mono); font-size: 0.8rem; color: var(--dim); font-variant-numeric: tabular-nums; }
-
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
-  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 4px; }
-  .tile b { font-family: var(--display); font-size: 2rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
-  .tile b.score { color: var(--reward-ink); }
-  .tile span { color: var(--dim); font-size: 0.85rem; }
-
-  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 16px 10px; display: grid; gap: 6px; min-width: 0; position: relative; }
-  .card h3 { margin: 0; font-size: 0.98rem; font-weight: 600; }
-  .card p { margin: 0; color: var(--dim); font-size: 0.82rem; }
-  .card svg { width: 100%; height: 190px; display: block; overflow: visible; }
-  .empty { color: var(--muted); font-size: 0.85rem; padding: 40px 0; text-align: center; }
-  .tip { position: absolute; pointer-events: none; background: #0b0f14; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 0.8rem; white-space: nowrap; }
-  .tip strong { display: block; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
-  .tip span { color: var(--dim); font-family: var(--mono); font-size: 0.72rem; }
-
-  .videos { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
-  .vid { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-  .vid video { width: 100%; display: block; aspect-ratio: 3 / 2; background: #000; }
-  .vid div { display: flex; justify-content: space-between; padding: 8px 12px; font-family: var(--mono); font-size: 0.78rem; color: var(--dim); font-variant-numeric: tabular-nums; }
-  .vid div b { color: var(--reward-ink); font-weight: 500; }
-  .note { color: var(--muted); font-size: 0.8rem; }
-  #single { display: grid; gap: 28px; }
-  #single[hidden] { display: none; }
-  .compare { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
-  .table-scroll { overflow-x: auto; }
-  .pick { border: 0; padding: 0; margin: 0; }
-  .pick legend { color: var(--dim); font-size: 0.8rem; margin-bottom: 8px; padding: 0; }
-  .pick div { display: flex; flex-wrap: wrap; gap: 8px; }
-  .pick label { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; font-family: var(--mono); font-size: 0.85rem; cursor: pointer; }
-  .pick label:has(input:checked) { border-color: var(--dim); }
-  .pick label:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }
-  .pick input { accent-color: var(--signal); margin: 0; }
-  .pick .key { margin: 0; }
-  .compare table { justify-self: start; border-collapse: collapse; min-width: 420px; font-variant-numeric: tabular-nums; }
-  .compare th, .compare td { text-align: left; padding: 8px 16px 8px 0; border-bottom: 1px solid var(--line); }
-  .compare th { color: var(--dim); font-weight: 500; font-size: 0.8rem; }
-  .compare td { font-family: var(--mono); font-size: 0.9rem; }
-  .compare .key { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 8px; vertical-align: middle; }
-  .tip strong { display: flex; align-items: center; gap: 4px; }
-  .tip strong span { color: var(--dim); font-family: var(--text); font-size: 0.75rem; font-weight: 400; }
-  @media (prefers-reduced-motion: reduce) { .bar > span { transition: none; } }
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 <main class="page">
@@ -98,6 +15,7 @@
     <div>
       <div class="kicker">BULSHY.FM · Build #1</div>
       <h1>Car racing training</h1>
+      <nav class="nav" aria-label="Pages"><a href="./" aria-current="page">Training</a><a href="bench.html">Benchmark</a></nav>
     </div>
     <div class="meta">
       <label for="run">Run</label>

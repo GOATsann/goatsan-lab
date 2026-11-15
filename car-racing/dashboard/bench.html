@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Car Racing Benchmark</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .page { grid-template-columns: minmax(0, 1fr); }  /* the wide table scrolls; it must not widen the page */
+  .lede { color: var(--dim); max-width: 70ch; margin: 0; }
+  .lede code { font-family: var(--mono); font-size: 0.85em; color: var(--ink); }
+  .table-scroll { overflow-x: auto; }
+  table.results { border-collapse: collapse; width: 100%; min-width: 760px; font-variant-numeric: tabular-nums; }
+  .results th, .results td { text-align: right; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .results th:first-child, .results td:first-child { text-align: left; padding-left: 0; }
+  .results th { color: var(--dim); font-weight: 500; font-size: 0.8rem; }
+  .results td { font-family: var(--mono); font-size: 0.9rem; }
+  .results td.mean { color: var(--reward-ink); }
+  .results td small { color: var(--muted); font-size: 0.78rem; }
+  .key { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 8px; vertical-align: middle; }
+  .wide { grid-column: 1 / -1; }
+  .card svg.tall { height: auto; }
+  .h2h { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--dim); font-size: 0.85rem; }
+  .verdict { font-family: var(--mono); font-size: 0.85rem; color: var(--ink); }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="head">
+    <div>
+      <div class="kicker">BULSHY.FM · Build #1</div>
+      <h1>Benchmark</h1>
+      <nav class="nav" aria-label="Pages"><a href="./">Training</a><a href="bench.html" aria-current="page">Benchmark</a></nav>
+    </div>
+    <div class="meta"><span id="updated"></span></div>
+  </header>
+
+  <p class="lede" id="lede">Every final model drives the same tracks with deterministic actions, scored by the game's own return.
+    The training rewards play no part here. Solved = a mean of 900.</p>
+
+  <section aria-label="Results">
+    <div class="table-scroll">
+      <table class="results">
+        <thead><tr>
+          <th>Run</th><th>Mean <small>± 95% CI</small></th><th>Median</th><th>Worst</th><th>Std</th>
+          <th>≥ 900</th><th>Laps finished</th><th>Tiles visited</th><th>Wrong way</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="charts">
+    <article class="card wide" id="strip-card">
+      <h3>Return on every track</h3>
+      <p>One dot per track. The bar marks the mean and its 95% confidence interval.</p>
+    </article>
+    <article class="card wide" id="h2h-card">
+      <h3>Head to head, track by track</h3>
+      <p>Each dot is one track. Above the diagonal = the second run scored higher on that track.</p>
+      <div class="h2h">
+        <select id="h2h-a" aria-label="First run"></select><span>vs</span><select id="h2h-b" aria-label="Second run"></select>
+      </div>
+      <div class="verdict" id="verdict"></div>
+    </article>
+  </section>
+</main>
+
+<script>
+const RUN_COLORS = ["#187eb3", "#a26109", "#b24df7", "#10af2f", "#dc0e76"];  // same validated set as Compare
+const svgNS = "http://www.w3.org/2000/svg";
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+const std = a => { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / Math.max(1, a.length - 1)); };
+const median = a => { const s = [...a].sort((x, y) => x - y), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; };
+const pct = v => (v * 100).toFixed(0) + "%";
+let runs = [];   // [{ name, color, rows, ret }]
+
+function svgIn(card, W, H) {
+  card.querySelectorAll("svg, .tip, .empty").forEach(e => e.remove());
+  const svg = document.createElementNS(svgNS, "svg"); svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.classList.add("tall");
+  const add = (tag, attrs, text) => { const el = document.createElementNS(svgNS, tag); for (const k in attrs) el.setAttribute(k, attrs[k]); if (text !== undefined) el.textContent = text; svg.appendChild(el); return el; };
+  const tip = document.createElement("div"); tip.className = "tip"; tip.hidden = true;
+  return { svg, add, tip };
+}
+function showTip(card, svg, tip, px, py, W, H, lines) {
+  tip.replaceChildren(...lines.map((t, i) => { const e = document.createElement(i ? "span" : "strong"); e.textContent = t; if (i) e.style.display = "block"; return e; }));
+  tip.hidden = false;
+  const r = svg.getBoundingClientRect(), c = card.getBoundingClientRect();
+  const x = r.left - c.left + px * r.width / W, y = r.top - c.top + py * r.height / H;
+  tip.style.left = Math.max(8, Math.min(x + 12, c.width - tip.offsetWidth - 8)) + "px";
+  tip.style.top = Math.max(8, y - tip.offsetHeight - 10) + "px";
+}
+function ticks(lo, hi, n = 5) {
+  const span = hi - lo, raw = span / n, mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => span / s <= n);
+  const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(6)); return out;
+}
+
+function renderTable() {
+  const body = document.getElementById("rows"); body.replaceChildren();
+  for (const r of runs) {
+    const n = r.ret.length, m = mean(r.ret), sd = std(r.ret), ci = 1.96 * sd / Math.sqrt(n);
+    const tr = document.createElement("tr");
+    const c0 = document.createElement("td"); const k = document.createElement("i"); k.className = "key"; k.style.background = r.color; c0.append(k, document.createTextNode(r.name));
+    const cm = document.createElement("td"); cm.className = "mean"; cm.append(m.toFixed(1) + " "); const sm = document.createElement("small"); sm.textContent = "± " + ci.toFixed(1); cm.append(sm);
+    tr.append(c0, cm);
+    for (const v of [median(r.ret).toFixed(1), Math.min(...r.ret).toFixed(1), sd.toFixed(1), pct(mean(r.ret.map(x => x >= 900 ? 1 : 0))),
+                     pct(mean(r.rows.map(x => x.lap))), pct(mean(r.rows.map(x => x.tiles))), pct(mean(r.rows.map(x => x.wrong_way)))]) {
+      const td = document.createElement("td"); td.textContent = v; tr.appendChild(td);
+    }
+    body.appendChild(tr);
+  }
+}
+
+function renderStrip() {
+  const card = document.getElementById("strip-card");
+  const W = Math.max(300, card.clientWidth - 32), rowH = 46, L = Math.min(150, 20 + 7 * Math.max(...runs.map(r => r.name.length))), R = 12, T = 18, B = 26;
+  const H = T + rowH * runs.length + B;
+  const { svg, add, tip } = svgIn(card, W, H);
+  const all = runs.flatMap(r => r.ret), x0 = Math.min(0, Math.floor(Math.min(...all) / 100) * 100), x1 = 1000;
+  const X = v => L + (v - x0) / (x1 - x0) * (W - L - R);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Return per track: " + runs.map(r => `${r.name} mean ${mean(r.ret).toFixed(0)}`).join(", "));
+  for (const t of ticks(x0, x1)) {
+    add("line", { x1: X(t), x2: X(t), y1: T - 6, y2: H - B, stroke: css("--grid") });
+    add("text", { x: X(t), y: H - 8, "text-anchor": "middle", fill: css("--muted"), "font-size": 11, "font-family": "JetBrains Mono" }, t);
+  }
+  add("line", { x1: X(900), x2: X(900), y1: T - 10, y2: H - B, stroke: css("--reward-ink"), "stroke-dasharray": "4 4", opacity: 0.7 });
+  add("text", { x: X(900), y: T - 12 + 4, "text-anchor": "middle", fill: css("--reward-ink"), "font-size": 11 }, "solved");
+  const dots = [];
+  runs.forEach((r, i) => {
+    const cy = T + rowH * i + rowH / 2;
+    add("text", { x: L - 10, y: cy + 4, "text-anchor": "end", fill: css("--ink"), "font-size": 12 }, r.name);
+    r.rows.forEach((row, j) => {
+      const jitter = (((row.seed * 2654435761) % 1000) / 1000 - 0.5) * (rowH - 18);  // fixed per track, so redraws don't shuffle
+      const d = { x: X(row.return), y: cy + jitter, r, row };
+      add("circle", { cx: d.x, cy: d.y, r: 3.2, fill: r.color, opacity: 0.7 });
+      dots.push(d);
+    });
+    const m = mean(r.ret), ci = 1.96 * std(r.ret) / Math.sqrt(r.ret.length);
+    add("rect", { x: X(m - ci), y: cy - 9, width: Math.max(2, X(m + ci) - X(m - ci)), height: 18, fill: css("--ink"), opacity: 0.12, rx: 3 });
+    add("line", { x1: X(m), x2: X(m), y1: cy - 13, y2: cy + 13, stroke: css("--ink"), "stroke-width": 2.5, "stroke-linecap": "round" });
+  });
+  const ring = add("circle", { r: 6, fill: "none", stroke: css("--ink"), "stroke-width": 1.5, opacity: 0 });
+  const hit = add("rect", { x: 0, y: 0, width: W, height: H, fill: "transparent" });
+  hit.addEventListener("pointermove", e => {
+    const b = svg.getBoundingClientRect(), px = (e.clientX - b.left) * W / b.width, py = (e.clientY - b.top) * H / b.height;
+    const d = dots.reduce((best, d) => (d.x - px) ** 2 + (d.y - py) ** 2 < (best.x - px) ** 2 + (best.y - py) ** 2 ? d : best, dots[0]);
+    if ((d.x - px) ** 2 + (d.y - py) ** 2 > 400) { ring.setAttribute("opacity", 0); tip.hidden = true; return; }
+    ring.setAttribute("cx", d.x); ring.setAttribute("cy", d.y); ring.setAttribute("opacity", 1);
+    showTip(card, svg, tip, d.x, d.y, W, H, [d.row.return.toFixed(1), `${d.r.name} · track ${d.row.seed}`, `${pct(d.row.tiles)} tiles · ${d.row.lap ? "lap finished" : "no lap"} · ${d.row.frames} frames`]);
+  });
+  hit.addEventListener("pointerleave", () => { ring.setAttribute("opacity", 0); tip.hidden = true; });
+  card.append(svg, tip);
+}
+
+function renderH2H() {
+  const card = document.getElementById("h2h-card");
+  const a = runs.find(r => r.name === document.getElementById("h2h-a").value), b = runs.find(r => r.name === document.getElementById("h2h-b").value);
+  const verdict = document.getElementById("verdict");
+  if (!a || !b || a === b) { card.querySelectorAll("svg, .tip").forEach(e => e.remove()); verdict.textContent = "Pick two different runs."; return; }
+  const bySeed = new Map(b.rows.map(r => [r.seed, r]));
+  const pairs = a.rows.filter(r => bySeed.has(r.seed)).map(r => ({ seed: r.seed, a: r.return, b: bySeed.get(r.seed).return }));
+  const diff = pairs.map(p => p.b - p.a), dm = mean(diff), dci = 1.96 * std(diff) / Math.sqrt(diff.length);
+  const wins = diff.filter(d => d > 0).length, ties = diff.filter(d => d === 0).length;
+  verdict.textContent = `${b.name} − ${a.name}: ${dm >= 0 ? "+" : ""}${dm.toFixed(1)} ± ${dci.toFixed(1)} per track (paired 95% CI) · ${b.name} higher on ${wins} of ${pairs.length} tracks${ties ? `, ${ties} ties` : ""}`;
+  const size = Math.min(Math.max(280, card.clientWidth - 32), 520), W = size, H = size, L = 44, R = 12, T = 12, B = 30;
+  const { svg, add, tip } = svgIn(card, W, H);
+  svg.style.maxWidth = size + "px";
+  const vals = pairs.flatMap(p => [p.a, p.b]), lo = Math.min(0, Math.floor(Math.min(...vals) / 100) * 100), hi = 1000;
+  const X = v => L + (v - lo) / (hi - lo) * (W - L - R), Y = v => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+  svg.setAttribute("role", "img"); svg.setAttribute("aria-label", verdict.textContent);
+  for (const t of ticks(lo, hi)) {
+    add("line", { x1: L, x2: W - R, y1: Y(t), y2: Y(t), stroke: css("--grid") });
+    add("line", { x1: X(t), x2: X(t), y1: T, y2: H - B, stroke: css("--grid") });
+    add("text", { x: L - 6, y: Y(t) + 4, "text-anchor": "end", fill: css("--muted"), "font-size": 11, "font-family": "JetBrains Mono" }, t);
+    add("text", { x: X(t), y: H - 10, "text-anchor": "middle", fill: css("--muted"), "font-size": 11, "font-family": "JetBrains Mono" }, t);
+  }
+  add("line", { x1: X(lo), y1: Y(lo), x2: X(hi), y2: Y(hi), stroke: css("--dim"), "stroke-dasharray": "4 4", opacity: 0.6 });
+  add("text", { x: X(hi) - 4, y: Y(lo) + -6, "text-anchor": "end", fill: css("--dim"), "font-size": 11 }, `→ ${a.name}`);
+  add("text", { x: X(lo) + 6, y: Y(hi) + 12, fill: css("--dim"), "font-size": 11 }, `↑ ${b.name}`);
+  const dots = pairs.map(p => { const d = { x: X(p.a), y: Y(p.b), p }; add("circle", { cx: d.x, cy: d.y, r: 4, fill: p.b > p.a ? b.color : a.color, stroke: css("--panel"), "stroke-width": 1.5, opacity: 0.85 }); return d; });
+  const ring = add("circle", { r: 7, fill: "none", stroke: css("--ink"), "stroke-width": 1.5, opacity: 0 });
+  const hit = add("rect", { x: 0, y: 0, width: W, height: H, fill: "transparent" });
+  hit.addEventListener("pointermove", e => {
+    const bb = svg.getBoundingClientRect(), px = (e.clientX - bb.left) * W / bb.width, py = (e.clientY - bb.top) * H / bb.height;
+    const d = dots.reduce((best, d) => (d.x - px) ** 2 + (d.y - py) ** 2 < (best.x - px) ** 2 + (best.y - py) ** 2 ? d : best, dots[0]);
+    if ((d.x - px) ** 2 + (d.y - py) ** 2 > 400) { ring.setAttribute("opacity", 0); tip.hidden = true; return; }
+    ring.setAttribute("cx", d.x); ring.setAttribute("cy", d.y); ring.setAttribute("opacity", 1);
+    showTip(card, svg, tip, d.x, d.y, W, H, [`track ${d.p.seed}`, `${a.name} ${d.p.a.toFixed(1)}`, `${b.name} ${d.p.b.toFixed(1)}`]);
+  });
+  hit.addEventListener("pointerleave", () => { ring.setAttribute("opacity", 0); tip.hidden = true; });
+  card.append(svg, tip);
+}
+
+function render() { if (!runs.length) return; renderTable(); renderStrip(); renderH2H(); }
+
+async function load() {
+  let data;
+  try { data = await (await fetch("data.json?t=" + Date.now(), { cache: "no-store" })).json(); } catch { return; }
+  document.getElementById("updated").textContent = "updated " + new Date(data.updated.replace(" ", "T")).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  runs = Object.entries(data.runs).filter(([, r]) => r.bench && r.bench.length).slice(0, RUN_COLORS.length)
+    .map(([name, r], i) => ({ name, color: RUN_COLORS[i], rows: r.bench, ret: r.bench.map(x => x.return) }))
+    .sort((a, b) => mean(b.ret) - mean(a.ret));  // best first, everywhere (colours were fixed above, by run order)
+  if (!runs.length) {
+    document.getElementById("rows").innerHTML = "";
+    const e = document.createElement("tr"), td = document.createElement("td"); td.colSpan = 9; td.className = "empty";
+    td.textContent = "No benchmark yet. Run bench.py, then the export."; e.appendChild(td); document.getElementById("rows").appendChild(e);
+    return;
+  }
+  const n = runs[0].rows.length, seeds = runs[0].rows.map(r => r.seed);
+  document.getElementById("lede").textContent = `Every final model drives the same ${n} tracks (seeds ${Math.min(...seeds)}–${Math.max(...seeds)}) with deterministic actions, scored by the game's own return. The training rewards play no part here. Solved = a mean of 900.`;
+  for (const [id, pick] of [["h2h-a", runs.find(r => r.name === "baseline") || runs[0]], ["h2h-b", runs[0]]]) {
+    const sel = document.getElementById(id), keep = sel.value;
+    sel.replaceChildren(...runs.map(r => { const o = document.createElement("option"); o.value = o.textContent = r.name; return o; }));
+    sel.value = runs.some(r => r.name === keep) ? keep : pick.name;
+  }
+  render();
+}
+document.getElementById("h2h-a").addEventListener("change", renderH2H);
+document.getElementById("h2h-b").addEventListener("change", renderH2H);
+let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 150); });
+load();
+</script>
+</body>
+</html>
