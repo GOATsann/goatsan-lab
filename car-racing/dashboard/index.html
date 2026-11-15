@@ -60,7 +60,7 @@
   .card p { margin: 0; color: var(--dim); font-size: 0.82rem; }
   .card svg { width: 100%; height: 190px; display: block; overflow: visible; }
   .empty { color: var(--muted); font-size: 0.85rem; padding: 40px 0; text-align: center; }
-  .tip { position: absolute; pointer-events: none; background: #0b0f14; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 0.8rem; white-space: nowrap; transform: translate(-50%, -110%); }
+  .tip { position: absolute; pointer-events: none; background: #0b0f14; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 0.8rem; white-space: nowrap; }
   .tip strong { display: block; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
   .tip span { color: var(--dim); font-family: var(--mono); font-size: 0.72rem; }
 
@@ -70,6 +70,16 @@
   .vid div { display: flex; justify-content: space-between; padding: 8px 12px; font-family: var(--mono); font-size: 0.78rem; color: var(--dim); font-variant-numeric: tabular-nums; }
   .vid div b { color: var(--reward-ink); font-weight: 500; }
   .note { color: var(--muted); font-size: 0.8rem; }
+  #single { display: grid; gap: 28px; }
+  #single[hidden] { display: none; }
+  .compare { overflow-x: auto; }
+  .compare table { border-collapse: collapse; min-width: 420px; font-variant-numeric: tabular-nums; }
+  .compare th, .compare td { text-align: left; padding: 8px 16px 8px 0; border-bottom: 1px solid var(--line); }
+  .compare th { color: var(--dim); font-weight: 500; font-size: 0.8rem; }
+  .compare td { font-family: var(--mono); font-size: 0.9rem; }
+  .compare .key { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 8px; vertical-align: middle; }
+  .tip strong { display: flex; align-items: center; gap: 4px; }
+  .tip strong span { color: var(--dim); font-family: var(--text); font-size: 0.75rem; font-weight: 400; }
   @media (prefers-reduced-motion: reduce) { .bar > span { transition: none; } }
 </style>
 </head>
@@ -88,6 +98,7 @@
     </div>
   </header>
 
+  <div id="single">
   <section class="progress" aria-label="Training progress">
     <div class="bar"><span id="bar" style="width:0%"></span></div>
     <div class="bar-label"><span id="steps">0 steps</span><span id="eta"></span></div>
@@ -99,12 +110,20 @@
     <div class="tile"><span>Coach accuracy</span><b id="t-coach">–</b><span>1.00 = predicts the points perfectly</span></div>
     <div class="tile"><span>Driver's randomness</span><b id="t-explore">–</b><span>shrinks as it gets confident</span></div>
   </section>
+  </div>
+
+  <section id="legend" class="compare" hidden aria-label="Runs compared">
+    <table>
+      <thead><tr><th>Run</th><th>Steps</th><th>Latest test race</th><th>Best test race</th></tr></thead>
+      <tbody id="compare-rows"></tbody>
+    </table>
+  </section>
 
   <section class="charts" id="charts" aria-label="Charts"></section>
 
   <section style="display:grid;gap:12px" aria-label="Progress races">
     <h2>Watch it learn</h2>
-    <p class="note">One test race on the same track every 100,000 steps. Newest first.</p>
+    <p class="note" id="videos-note">One test race on the same track every 100,000 steps. Newest first.</p>
     <div class="videos" id="videos"></div>
   </section>
 </main>
@@ -121,6 +140,9 @@ const CHARTS = [
   { key: "driver_loss", title: "Driver loss", desc: "The clipped policy loss. Noisy by nature; watch the trend.", color: "--signal", fmt: v => v.toFixed(3) },
   { key: "advantage_size", title: "Advantage size", desc: "Average size of the raw advantage: how surprised the coach still is.", color: "--signal", min: 0, fmt: v => v.toFixed(2) },
 ];
+// Compare mode: one fixed colour per run, in run order (validated for colour-blind separation on this surface).
+const RUN_COLORS = ["#2a86c2", "#c4622d", "#9b6fd6"];
+const COMPARE = "__compare__";
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const fmtSteps = s => s >= 1e6 ? (s / 1e6).toFixed(2) + "M" : s >= 1e3 ? Math.round(s / 1e3) + "k" : String(s);
 let data = null, runName = null;
@@ -132,16 +154,19 @@ function niceTicks(lo, hi, n = 4) {
   return ticks;
 }
 
-function drawChart(card, cfg, points) {
+// series: [{ name, color, points: [[step, value], ...] }]
+function drawChart(card, cfg, series, compare = false) {
   const svgNS = "http://www.w3.org/2000/svg";
   card.querySelectorAll("svg, .empty, .tip").forEach(e => e.remove());
-  if (!points || points.length < 2) {
+  series = series.filter(sr => sr.points && sr.points.length >= 1);
+  if (!series.some(sr => sr.points.length >= 2)) {
     const e = document.createElement("div"); e.className = "empty";
-    e.textContent = cfg.key === "advantage_size" ? "Logged from the next training run onward." : "Waiting for data…";
+    e.textContent = cfg.key === "advantage_size" ? "Logged from the grass run onward." : "Waiting for data…";
     card.appendChild(e); return;
   }
-  const W = Math.max(280, card.clientWidth - 32), H = 190, L = 44, R = 10, T = 10, B = 24;
-  const xs = points.map(p => p[0]), ys = points.map(p => p[1]);
+  const multi = compare;  // in Compare, every run is named on the chart and in the hover readout
+  const W = Math.max(280, card.clientWidth - 32), H = 190, L = 44, R = multi ? 70 : 10, T = 10, B = 24;
+  const all = series.flatMap(sr => sr.points), xs = all.map(p => p[0]), ys = all.map(p => p[1]);
   const x0 = 0, x1 = Math.max(Math.max(...xs), 1);
   let y0 = cfg.min ?? Math.min(...ys), y1 = cfg.max ?? Math.max(...ys);
   if (cfg.target && Math.max(...ys) > cfg.target * 0.6) y1 = Math.max(y1, cfg.target);
@@ -149,7 +174,8 @@ function drawChart(card, cfg, points) {
   const pad = (y1 - y0) * 0.06; if (cfg.min === undefined) y0 -= pad; if (cfg.max === undefined) y1 += pad;
   const X = v => L + (v - x0) / (x1 - x0) * (W - L - R), Y = v => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
   const svg = document.createElementNS(svgNS, "svg"); svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  svg.setAttribute("role", "img"); svg.setAttribute("aria-label", `${cfg.title}: latest ${cfg.fmt(ys.at(-1))}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", cfg.title + ": " + series.map(sr => `${sr.name} latest ${cfg.fmt(sr.points.at(-1)[1])}`).join(", "));
   const add = (tag, attrs) => { const el = document.createElementNS(svgNS, tag); for (const k in attrs) el.setAttribute(k, attrs[k]); svg.appendChild(el); return el; };
   for (const t of niceTicks(y0, y1)) {
     add("line", { x1: L, x2: W - R, y1: Y(t), y2: Y(t), stroke: css("--grid") });
@@ -162,53 +188,56 @@ function drawChart(card, cfg, points) {
     add("line", { x1: L, x2: W - R, y1: Y(cfg.target), y2: Y(cfg.target), stroke: css("--reward-ink"), "stroke-dasharray": "4 4", opacity: 0.6 });
     const t = add("text", { x: W - R, y: Y(cfg.target) - 5, "text-anchor": "end", fill: css("--reward-ink"), "font-size": 11 }); t.textContent = "solved";
   }
-  const color = css(cfg.color);
-  add("path", { d: points.map((p, i) => (i ? "L" : "M") + X(p[0]).toFixed(1) + " " + Y(p[1]).toFixed(1)).join(""), fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" });
-  if (points.length <= 20) for (const p of points) add("circle", { cx: X(p[0]), cy: Y(p[1]), r: 4, fill: color, stroke: css("--panel"), "stroke-width": 2 });
-  const last = points.at(-1); add("circle", { cx: X(last[0]), cy: Y(last[1]), r: 5, fill: color, stroke: css("--panel"), "stroke-width": 2 });
-  // hover: crosshair snaps to the nearest step
+  const labelYs = [];
+  for (const sr of series) {
+    const color = sr.color, pts = sr.points;
+    add("path", { d: pts.map((p, i) => (i ? "L" : "M") + X(p[0]).toFixed(1) + " " + Y(p[1]).toFixed(1)).join(""), fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" });
+    if (pts.length <= 20) for (const p of pts) add("circle", { cx: X(p[0]), cy: Y(p[1]), r: 4, fill: color, stroke: css("--panel"), "stroke-width": 2 });
+    const last = pts.at(-1); add("circle", { cx: X(last[0]), cy: Y(last[1]), r: 5, fill: color, stroke: css("--panel"), "stroke-width": 2 });
+    if (multi) {  // direct label at the line's end, nudged so labels don't collide
+      let ly = Y(last[1]) + 4; while (labelYs.some(y => Math.abs(y - ly) < 13)) ly += 13; labelYs.push(ly);
+      const t = add("text", { x: X(last[0]) + 9, y: ly, fill: css("--ink"), "font-size": 11 }); t.textContent = sr.name;
+    }
+  }
+  // hover: crosshair snaps to the nearest step; the readout lists every run
   const hair = add("line", { y1: T, y2: H - B, stroke: css("--dim"), "stroke-width": 1, opacity: 0 });
-  const dot = add("circle", { r: 5, fill: color, stroke: css("--ink"), "stroke-width": 1.5, opacity: 0 });
+  const dots = series.map(sr => add("circle", { r: 5, fill: sr.color, stroke: css("--ink"), "stroke-width": 1.5, opacity: 0 }));
   const hit = add("rect", { x: L, y: 0, width: W - L - R, height: H, fill: "transparent" });
-  const tip = document.createElement("div"); tip.className = "tip"; tip.hidden = true;
-  const tv = document.createElement("strong"), ts = document.createElement("span"); tip.append(tv, ts); card.appendChild(tip);
-  const show = evt => {
+  const tip = document.createElement("div"); tip.className = "tip"; tip.hidden = true; card.appendChild(tip);
+  const nearest = (pts, sx) => pts.reduce((b, p) => Math.abs(X(p[0]) - sx) < Math.abs(X(b[0]) - sx) ? p : b, pts[0]);
+  hit.addEventListener("pointermove", evt => {
     const r = svg.getBoundingClientRect(), sx = (evt.clientX - r.left) * (W / r.width);
-    let best = points[0]; for (const p of points) if (Math.abs(X(p[0]) - sx) < Math.abs(X(best[0]) - sx)) best = p;
-    hair.setAttribute("x1", X(best[0])); hair.setAttribute("x2", X(best[0])); hair.setAttribute("opacity", 0.6);
-    dot.setAttribute("cx", X(best[0])); dot.setAttribute("cy", Y(best[1])); dot.setAttribute("opacity", 1);
-    tv.textContent = cfg.fmt(best[1]); ts.textContent = fmtSteps(best[0]) + " steps";
-    tip.hidden = false; tip.style.left = (svg.offsetLeft + X(best[0]) * r.width / W) + "px"; tip.style.top = (svg.offsetTop + Y(best[1]) * r.height / H) + "px";
-  };
-  hit.addEventListener("pointermove", show);
-  hit.addEventListener("pointerleave", () => { tip.hidden = true; hair.setAttribute("opacity", 0); dot.setAttribute("opacity", 0); });
+    const hits = series.map(sr => nearest(sr.points, sx));
+    const at = hits.reduce((b, p) => Math.abs(X(p[0]) - sx) < Math.abs(X(b[0]) - sx) ? p : b, hits[0]);
+    hair.setAttribute("x1", X(at[0])); hair.setAttribute("x2", X(at[0])); hair.setAttribute("opacity", 0.6);
+    tip.replaceChildren();
+    series.forEach((sr, i) => {
+      const p = hits[i];
+      // a run that hasn't reached this step yet has nothing to say here
+      if (Math.abs(X(p[0]) - X(at[0])) > 12) { dots[i].setAttribute("opacity", 0); return; }
+      dots[i].setAttribute("cx", X(p[0])); dots[i].setAttribute("cy", Y(p[1])); dots[i].setAttribute("opacity", 1);
+      const row = document.createElement("strong");
+      if (multi) { const key = document.createElement("i"); key.style.cssText = `display:inline-block;width:12px;height:2px;margin-right:6px;vertical-align:middle;background:${sr.color}`; row.appendChild(key); }
+      row.appendChild(document.createTextNode(cfg.fmt(p[1]) + (multi ? " " : "")));
+      if (multi) { const n = document.createElement("span"); n.textContent = sr.name; row.appendChild(n); }
+      tip.appendChild(row);
+    });
+    const st = document.createElement("span"); st.textContent = fmtSteps(at[0]) + " steps"; tip.appendChild(st);
+    // place the readout over the plot, beside the crosshair, kept inside the card
+    tip.hidden = false;
+    const c = card.getBoundingClientRect(), hx = r.left - c.left + X(at[0]) * r.width / W;
+    const left = hx + 12 + tip.offsetWidth < c.width - 8 ? hx + 12 : hx - 12 - tip.offsetWidth;
+    tip.style.left = Math.max(8, left) + "px"; tip.style.top = (r.top - c.top + 4) + "px";
+  });
+  hit.addEventListener("pointerleave", () => { tip.hidden = true; hair.setAttribute("opacity", 0); dots.forEach(d => d.setAttribute("opacity", 0)); });
   card.appendChild(svg);
 }
 
-function render() {
-  if (!data) return;
-  const run = data.runs[runName]; if (!run) return;
-  const races = run.races, s = run.series;
-  const steps = Math.max(0, ...(s.practice_score || []).map(p => p[0]), ...races.map(r => r.steps));
-  document.getElementById("bar").style.width = Math.min(100, steps / data.target_steps * 100).toFixed(1) + "%";
-  document.getElementById("steps").textContent = `${steps.toLocaleString()} / ${data.target_steps.toLocaleString()} steps`;
-  const fps = (s.fps || []).at(-1)?.[1];
-  const left = fps ? (data.target_steps - steps) / fps / 60 : null;
-  document.getElementById("eta").textContent = steps >= data.target_steps ? "finished" : fps ? `${Math.round(fps)} steps/s · about ${left > 90 ? (left / 60).toFixed(1) + " h" : Math.round(left) + " min"} left` : "";
-  const updatedAt = new Date(data.updated.replace(" ", "T"));
-  const ageMin = (Date.now() - updatedAt) / 60000;
-  const status = document.getElementById("status"), done = steps >= data.target_steps;
-  status.className = "chip " + (done ? "done" : ageMin > 25 ? "stale" : "live");
-  status.querySelector("span").textContent = done ? "finished" : ageMin > 25 ? "no new data" : "training";
-  document.getElementById("updated").textContent = "updated " + updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const latest = races.at(-1), best = races.reduce((b, r) => (b && b.score > r.score ? b : r), null);
-  document.getElementById("t-latest").textContent = latest ? latest.score.toFixed(0) : "–";
-  document.getElementById("t-latest-at").textContent = latest ? `at ${fmtSteps(latest.steps)} steps, ${latest.minutes.toFixed(0)} min in` : "";
-  document.getElementById("t-best").textContent = best ? best.score.toFixed(0) : "–";
-  const coach = (s.coach_accuracy || []).at(-1)?.[1], explore = (s.exploration || []).at(-1)?.[1];
-  document.getElementById("t-coach").textContent = coach !== undefined ? coach.toFixed(2) : "–";
-  document.getElementById("t-explore").textContent = explore !== undefined ? explore.toFixed(3) : "–";
+function seriesFor(run, cfg) {
+  return cfg.key === "races" ? run.races.map(r => [r.steps, r.score]) : run.series[cfg.key];
+}
 
+function ensureCards() {
   const charts = document.getElementById("charts");
   for (const cfg of CHARTS) {
     if (charts.querySelector(`[data-key="${cfg.key}"]`)) continue;
@@ -217,24 +246,89 @@ function render() {
     const p = document.createElement("p"); p.textContent = cfg.desc;
     card.append(h, p); charts.appendChild(card);
   }
-  // Draw only once every card is in the grid, so each knows its real width.
+  return charts;
+}
+
+function renderCompare() {
+  const names = Object.keys(data.runs).slice(0, RUN_COLORS.length);
+  document.getElementById("single").hidden = true;
+  const legend = document.getElementById("legend"); legend.hidden = false;
+  const rows = document.getElementById("compare-rows"); rows.replaceChildren();
+  names.forEach((n, i) => {
+    const run = data.runs[n], races = run.races;
+    const steps = Math.max(0, ...(run.series.practice_score || []).map(p => p[0]), ...races.map(r => r.steps));
+    const best = races.reduce((b, r) => (b && b.score > r.score ? b : r), null);
+    const tr = document.createElement("tr");
+    const c0 = document.createElement("td"); const key = document.createElement("i"); key.className = "key"; key.style.background = RUN_COLORS[i]; c0.append(key, document.createTextNode(n));
+    const cells = [fmtSteps(steps), races.at(-1) ? races.at(-1).score.toFixed(0) : "–", best ? best.score.toFixed(0) : "–"];
+    tr.appendChild(c0); for (const c of cells) { const td = document.createElement("td"); td.textContent = c; tr.appendChild(td); }
+    rows.appendChild(tr);
+  });
+  const charts = ensureCards();
   for (const cfg of CHARTS) {
     const card = charts.querySelector(`[data-key="${cfg.key}"]`);
-    const pts = cfg.key === "races" ? races.map(r => [r.steps, r.score]) : s[cfg.key];
-    drawChart(card, cfg, pts);
+    drawChart(card, cfg, names.map((n, i) => ({ name: n, color: RUN_COLORS[i], points: seriesFor(data.runs[n], cfg) })), true);
   }
+  const box = document.getElementById("videos"); box.replaceChildren();
+  document.getElementById("videos-note").textContent = "The latest test race of each run, on the same track.";
+  names.forEach((n, i) => { const v = data.runs[n].videos.at(-1); if (v) box.appendChild(videoCard(v, `${n} · ${fmtSteps(v.steps)}`, scoreOf(data.runs[n], v.steps), RUN_COLORS[i])); });
+}
 
-  const box = document.getElementById("videos"), scoreAt = Object.fromEntries(races.map(r => [r.steps, r.score]));
+function scoreOf(run, steps) { const r = run.races.find(x => x.steps === steps); return r ? r.score : undefined; }
+
+function videoCard(v, label, score, color) {
+  const card = document.createElement("figure"); card.className = "vid"; card.dataset.steps = v.steps; card.style.margin = 0;
+  if (color) card.style.borderColor = color;
+  const video = document.createElement("video"); video.src = v.src; video.controls = true; video.muted = true; video.loop = true; video.playsInline = true; video.preload = "metadata";
+  const cap = document.createElement("div"); const a = document.createElement("span"); a.textContent = label;
+  const b = document.createElement("b"); b.textContent = score !== undefined ? "score " + score.toFixed(0) : "";
+  cap.append(a, b); card.append(video, cap); return card;
+}
+
+function render() {
+  if (!data) return;
+  updatedChip();
+  if (runName === COMPARE) return renderCompare();
+  document.getElementById("single").hidden = false; document.getElementById("legend").hidden = true;
+  document.getElementById("videos-note").textContent = "One test race on the same track every 100,000 steps. Newest first.";
+  const run = data.runs[runName]; if (!run) return;
+  const races = run.races, s = run.series;
+  const steps = Math.max(0, ...(s.practice_score || []).map(p => p[0]), ...races.map(r => r.steps));
+  document.getElementById("bar").style.width = Math.min(100, steps / data.target_steps * 100).toFixed(1) + "%";
+  document.getElementById("steps").textContent = `${steps.toLocaleString()} / ${data.target_steps.toLocaleString()} steps`;
+  const fps = (s.fps || []).at(-1)?.[1];
+  const left = fps ? (data.target_steps - steps) / fps / 60 : null;
+  document.getElementById("eta").textContent = steps >= data.target_steps ? "finished" : fps ? `${Math.round(fps)} steps/s · about ${left > 90 ? (left / 60).toFixed(1) + " h" : Math.round(left) + " min"} left` : "";
+  const latest = races.at(-1), best = races.reduce((b, r) => (b && b.score > r.score ? b : r), null);
+  document.getElementById("t-latest").textContent = latest ? latest.score.toFixed(0) : "–";
+  document.getElementById("t-latest-at").textContent = latest ? `at ${fmtSteps(latest.steps)} steps, ${latest.minutes.toFixed(0)} min in` : "";
+  document.getElementById("t-best").textContent = best ? best.score.toFixed(0) : "–";
+  const coach = (s.coach_accuracy || []).at(-1)?.[1], explore = (s.exploration || []).at(-1)?.[1];
+  document.getElementById("t-coach").textContent = coach !== undefined ? coach.toFixed(2) : "–";
+  document.getElementById("t-explore").textContent = explore !== undefined ? explore.toFixed(3) : "–";
+  const charts = ensureCards();
+  for (const cfg of CHARTS) {
+    const card = charts.querySelector(`[data-key="${cfg.key}"]`);
+    drawChart(card, cfg, [{ name: runName, color: css(cfg.color), points: seriesFor(run, cfg) }]);
+  }
+  const box = document.getElementById("videos");
+  if (box.dataset.run !== runName) { box.replaceChildren(); box.dataset.run = runName; }
   for (const v of [...run.videos].reverse()) {
     if (box.querySelector(`[data-steps="${v.steps}"]`)) continue;
-    const card = document.createElement("figure"); card.className = "vid"; card.dataset.steps = v.steps; card.style.margin = 0;
-    const video = document.createElement("video"); video.src = v.src; video.controls = true; video.muted = true; video.loop = true; video.playsInline = true; video.preload = "metadata";
-    const cap = document.createElement("div"); const a = document.createElement("span"); a.textContent = fmtSteps(v.steps) + " steps";
-    const b = document.createElement("b"); b.textContent = scoreAt[v.steps] !== undefined ? "score " + scoreAt[v.steps].toFixed(0) : "";
-    cap.append(a, b); card.append(video, cap);
+    const card = videoCard(v, fmtSteps(v.steps) + " steps", scoreOf(run, v.steps));
     const after = [...box.children].find(c => +c.dataset.steps < v.steps);
     box.insertBefore(card, after || null);
   }
+}
+
+function updatedChip() {
+  const updatedAt = new Date(data.updated.replace(" ", "T")), ageMin = (Date.now() - updatedAt) / 60000;
+  const status = document.getElementById("status");
+  const runs = runName === COMPARE ? Object.values(data.runs) : [data.runs[runName]].filter(Boolean);
+  const done = runs.length && runs.every(r => Math.max(0, ...(r.series.practice_score || []).map(p => p[0])) >= data.target_steps);
+  status.className = "chip " + (done ? "done" : ageMin > 25 ? "stale" : "live");
+  status.querySelector("span").textContent = done ? "finished" : ageMin > 25 ? "no new data" : "training";
+  document.getElementById("updated").textContent = "updated " + updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 async function load() {
@@ -243,8 +337,9 @@ async function load() {
     data = await r.json();
   } catch { document.getElementById("status").querySelector("span").textContent = "no data yet"; return; }
   const sel = document.getElementById("run"), names = Object.keys(data.runs);
-  if (sel.options.length !== names.length) {
-    sel.replaceChildren(...names.map(n => { const o = document.createElement("option"); o.value = n; o.textContent = n; return o; }));
+  const want = [...names, ...(names.length > 1 ? [COMPARE] : [])];
+  if ([...sel.options].map(o => o.value).join() !== want.join()) {
+    sel.replaceChildren(...want.map(n => { const o = document.createElement("option"); o.value = n; o.textContent = n === COMPARE ? "Compare runs" : n; return o; }));
     runName ??= names.includes("baseline") ? "baseline" : names[0];
     sel.value = runName;
   }

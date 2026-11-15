@@ -12,7 +12,6 @@ Settings follow RL Zoo's tuned PPO config for CarRacing.
 """
 
 import gymnasium as gym
-import numpy as np
 from gymnasium.wrappers import GrayscaleObservation, ResizeObservation
 
 
@@ -41,7 +40,7 @@ class ShapedReward(gym.Wrapper):
     """Our own scoring rules on top of the game's (off in the baseline).
 
     - grass_penalty: points lost per step while the car is on the grass.
-      "On grass" is read from the screen: the pixels under the car are green.
+      "On grass" comes from the game itself: no wheel touches a road tile.
 
     Keep the game's reward in info["game_reward"] so runs stay comparable.
     """
@@ -53,23 +52,26 @@ class ShapedReward(gym.Wrapper):
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
         info["game_reward"] = reward
-        if self.grass_penalty and _on_grass(obs):
+        if self.grass_penalty and on_grass(self.env):
             reward -= self.grass_penalty
         return obs, reward, terminated, truncated, info
 
 
-def _on_grass(frame: np.ndarray) -> bool:
-    # The car is drawn at a fixed spot near the bottom middle of the 96x96 frame.
-    patch = frame[66:78, 44:52].astype(np.int16)
-    r, g, b = patch[..., 0].mean(), patch[..., 1].mean(), patch[..., 2].mean()
-    return g > 150 and g > r + 40 and g > b + 40
+def on_grass(env: gym.Env) -> bool:
+    """True when none of the car's four wheels is touching a road tile.
+
+    (Reading the screen for green pixels was unreliable: the red car covers the
+    spot right under it.)
+    """
+    car = env.unwrapped.car
+    return car is not None and all(len(wheel.tiles) == 0 for wheel in car.wheels)
 
 
 def make_env(render_mode: str | None = None, grass_penalty: float = 0.0) -> gym.Env:
     """One CarRacing game, wrapped the way the AI sees it."""
     env = gym.make("CarRacing-v3", render_mode=render_mode)
     if grass_penalty:
-        env = ShapedReward(env, grass_penalty=grass_penalty)  # needs the colour frame
+        env = ShapedReward(env, grass_penalty=grass_penalty)  # reads the car state each game frame
     env = FrameSkip(env, skip=2)
     env = ResizeObservation(env, (64, 64))
     env = GrayscaleObservation(env, keep_dim=True)
