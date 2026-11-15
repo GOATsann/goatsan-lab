@@ -47,7 +47,7 @@
       <table class="results">
         <thead><tr>
           <th>Run</th><th>Mean <small>± 95% CI</small></th><th>Median</th><th>Worst</th><th>Std</th>
-          <th>≥ 900</th><th>Laps finished</th><th>Tiles visited</th><th>Wrong way</th>
+          <th>≥ 900</th><th>Laps finished</th><th>Timed out</th><th>Tiles visited</th><th>Lap pace <small>median</small></th><th>Wrong way</th>
         </tr></thead>
         <tbody id="rows"></tbody>
       </table>
@@ -58,6 +58,10 @@
     <article class="card wide" id="strip-card">
       <h2 class="card-title">Return on every track</h2>
       <p>One dot per track. The bar marks the mean and its 95% confidence interval.</p>
+    </article>
+    <article class="card wide" id="pace-card">
+      <h2 class="card-title">Lap pace on every track</h2>
+      <p>Frames a full lap would take at the pace each model drove: frames ÷ share of tiles visited. Right of the line = too slow to finish inside the 1000-frame limit.</p>
     </article>
     <article class="card wide" id="h2h-card">
       <h2 class="card-title">Head to head, track by track</h2>
@@ -79,6 +83,9 @@ const std = a => { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v
 const median = a => { const s = [...a].sort((x, y) => x - y), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; };
 const pct = v => (v * 100).toFixed(0) + "%";
 let runs = [];   // [{ name, color, rows, ret }]
+const LIMIT = 1000, PACE_CAP = 2500;  // frames; paces above the cap are drawn at the cap
+const pace = row => row.tiles > 0 ? row.frames / row.tiles : Infinity;   // frames for a full lap at this pace
+const timedOut = row => !row.lap && row.frames >= LIMIT;
 
 function svgIn(card, W, H) {
   card.querySelectorAll("svg, .tip, .empty").forEach(e => e.remove());
@@ -110,41 +117,48 @@ function renderTable() {
     const cm = document.createElement("td"); cm.className = "mean"; cm.append(m.toFixed(1) + " "); const sm = document.createElement("small"); sm.textContent = "± " + ci.toFixed(1); cm.append(sm);
     tr.append(c0, cm);
     for (const v of [median(r.ret).toFixed(1), Math.min(...r.ret).toFixed(1), sd.toFixed(1), pct(mean(r.ret.map(x => x >= 900 ? 1 : 0))),
-                     pct(mean(r.rows.map(x => x.lap))), pct(mean(r.rows.map(x => x.tiles))), pct(mean(r.rows.map(x => x.wrong_way)))]) {
+                     pct(mean(r.rows.map(x => x.lap))), pct(mean(r.rows.map(x => timedOut(x) ? 1 : 0))), pct(mean(r.rows.map(x => x.tiles))),
+                     Math.round(median(r.rows.map(pace))) + " fr", pct(mean(r.rows.map(x => x.wrong_way)))]) {
       const td = document.createElement("td"); td.textContent = v; tr.appendChild(td);
     }
     body.appendChild(tr);
   }
 }
 
-function renderStrip() {
-  const card = document.getElementById("strip-card");
+// One row per run, one dot per track. cfg: { id, value(row), lo, hi, ref, refLabel, fmt, label, tipLines(row, r) }
+function renderStrip(cfg) {
+  const card = document.getElementById(cfg.id);
   const W = Math.max(300, card.clientWidth - 32), rowH = 46, L = Math.min(150, 20 + 7 * Math.max(...runs.map(r => r.name.length))), R = 12, T = 18, B = 26;
   const H = T + rowH * runs.length + B;
   const { svg, add, tip } = svgIn(card, W, H);
-  const all = runs.flatMap(r => r.ret), x0 = Math.min(0, Math.floor(Math.min(...all) / 100) * 100), x1 = 1000;
+  const x0 = cfg.lo, x1 = cfg.hi, val = row => Math.max(x0, Math.min(x1, cfg.value(row)));
   const X = v => L + (v - x0) / (x1 - x0) * (W - L - R);
   svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", "Return per track: " + runs.map(r => `${r.name} mean ${mean(r.ret).toFixed(0)}`).join(", "));
+  svg.setAttribute("aria-label", cfg.label + ": " + runs.map(r => `${r.name} median ${cfg.fmt(median(r.rows.map(cfg.value)))}`).join(", "));
   for (const t of ticks(x0, x1)) {
     add("line", { x1: X(t), x2: X(t), y1: T - 6, y2: H - B, stroke: css("--grid") });
     add("text", { x: X(t), y: H - 8, "text-anchor": "middle", fill: css("--muted"), "font-size": 11, "font-family": "JetBrains Mono" }, t);
   }
-  add("line", { x1: X(900), x2: X(900), y1: T - 10, y2: H - B, stroke: css("--reward-ink"), "stroke-dasharray": "4 4", opacity: 0.7 });
-  add("text", { x: X(900), y: T - 12 + 4, "text-anchor": "middle", fill: css("--reward-ink"), "font-size": 11 }, "solved");
+  add("line", { x1: X(cfg.ref), x2: X(cfg.ref), y1: T - 10, y2: H - B, stroke: css("--reward-ink"), "stroke-dasharray": "4 4", opacity: 0.7 });
+  add("text", { x: X(cfg.ref), y: T - 12 + 4, "text-anchor": "middle", fill: css("--reward-ink"), "font-size": 11 }, cfg.refLabel);
   const dots = [];
   runs.forEach((r, i) => {
     const cy = T + rowH * i + rowH / 2;
     add("text", { x: L - 10, y: cy + 4, "text-anchor": "end", fill: css("--ink"), "font-size": 12 }, r.name);
     r.rows.forEach((row, j) => {
       const jitter = (((row.seed * 2654435761) % 1000) / 1000 - 0.5) * (rowH - 18);  // fixed per track, so redraws don't shuffle
-      const d = { x: X(row.return), y: cy + jitter, r, row };
+      const d = { x: X(val(row)), y: cy + jitter, r, row };
       add("circle", { cx: d.x, cy: d.y, r: 3.2, fill: r.color, opacity: 0.7 });
       dots.push(d);
     });
-    const m = mean(r.ret), ci = 1.96 * std(r.ret) / Math.sqrt(r.ret.length);
-    add("rect", { x: X(m - ci), y: cy - 9, width: Math.max(2, X(m + ci) - X(m - ci)), height: 18, fill: css("--ink"), opacity: 0.12, rx: 3 });
-    add("line", { x1: X(m), x2: X(m), y1: cy - 13, y2: cy + 13, stroke: css("--ink"), "stroke-width": 2.5, "stroke-linecap": "round" });
+    if (cfg.ci) {  // mean and its 95% CI
+      const m = mean(r.ret), ci = 1.96 * std(r.ret) / Math.sqrt(r.ret.length);
+      add("rect", { x: X(m - ci), y: cy - 9, width: Math.max(2, X(m + ci) - X(m - ci)), height: 18, fill: css("--ink"), opacity: 0.12, rx: 3 });
+      add("line", { x1: X(m), x2: X(m), y1: cy - 13, y2: cy + 13, stroke: css("--ink"), "stroke-width": 2.5, "stroke-linecap": "round" });
+    } else {       // median (robust to the uncapped paces of early crashes)
+      const m = Math.min(x1, median(r.rows.map(cfg.value)));
+      add("line", { x1: X(m), x2: X(m), y1: cy - 13, y2: cy + 13, stroke: css("--ink"), "stroke-width": 2.5, "stroke-linecap": "round" });
+    }
   });
   const ring = add("circle", { r: 6, fill: "none", stroke: css("--ink"), "stroke-width": 1.5, opacity: 0 });
   const hit = add("rect", { x: 0, y: 0, width: W, height: H, fill: "transparent" });
@@ -153,7 +167,7 @@ function renderStrip() {
     const d = dots.reduce((best, d) => (d.x - px) ** 2 + (d.y - py) ** 2 < (best.x - px) ** 2 + (best.y - py) ** 2 ? d : best, dots[0]);
     if ((d.x - px) ** 2 + (d.y - py) ** 2 > 400) { ring.setAttribute("opacity", 0); tip.hidden = true; return; }
     ring.setAttribute("cx", d.x); ring.setAttribute("cy", d.y); ring.setAttribute("opacity", 1);
-    showTip(card, svg, tip, d.x, d.y, W, H, [d.row.return.toFixed(1), `${d.r.name} · track ${d.row.seed}`, `${pct(d.row.tiles)} tiles · ${d.row.lap ? "lap finished" : "no lap"} · ${d.row.frames} frames`]);
+    showTip(card, svg, tip, d.x, d.y, W, H, cfg.tipLines(d.row, d.r));
   });
   hit.addEventListener("pointerleave", () => { ring.setAttribute("opacity", 0); tip.hidden = true; });
   card.append(svg, tip);
@@ -198,7 +212,20 @@ function renderH2H() {
   card.append(svg, tip);
 }
 
-function render() { if (!runs.length) return; renderTable(); renderStrip(); renderH2H(); }
+const endOf = row => row.lap ? "lap finished" : timedOut(row) ? "timed out" : "left the map";
+function render() {
+  if (!runs.length) return;
+  renderTable();
+  const all = runs.flatMap(r => r.ret);
+  renderStrip({ id: "strip-card", label: "Return per track", value: row => row.return, lo: Math.min(0, Math.floor(Math.min(...all) / 100) * 100), hi: 1000,
+    ref: 900, refLabel: "solved", ci: true, fmt: v => v.toFixed(0),
+    tipLines: (row, r) => [row.return.toFixed(1), `${r.name} · track ${row.seed}`, `${pct(row.tiles)} tiles · ${endOf(row)} · ${row.frames} frames`] });
+  renderStrip({ id: "pace-card", label: "Lap pace per track (frames)", value: pace, lo: Math.max(0, Math.floor(Math.min(...runs.flatMap(r => r.rows.map(pace))) / 250) * 250 - 250), hi: PACE_CAP,
+    ref: LIMIT, refLabel: "time limit", ci: false, fmt: v => Math.round(v) + " frames",
+    tipLines: (row, r) => [(isFinite(pace(row)) ? Math.round(pace(row)) : "∞") + " frames per lap" + (pace(row) > PACE_CAP ? " (off scale)" : ""),
+                            `${r.name} · track ${row.seed}`, `${pct(row.tiles)} tiles in ${row.frames} frames · ${endOf(row)}`] });
+  renderH2H();
+}
 
 async function load() {
   let data;
@@ -209,7 +236,7 @@ async function load() {
     .sort((a, b) => mean(b.ret) - mean(a.ret));  // best first, everywhere (colours were fixed above, by run order)
   if (!runs.length) {
     document.getElementById("rows").innerHTML = "";
-    const e = document.createElement("tr"), td = document.createElement("td"); td.colSpan = 9; td.className = "empty";
+    const e = document.createElement("tr"), td = document.createElement("td"); td.colSpan = 11; td.className = "empty";
     td.textContent = "No benchmark yet. Run bench.py, then the export."; e.appendChild(td); document.getElementById("rows").appendChild(e);
     return;
   }
