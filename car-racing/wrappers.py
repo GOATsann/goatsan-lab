@@ -54,18 +54,24 @@ class ShapedReward(gym.Wrapper):
       penalty at the road's edge.
     - speed_bonus: earned (at most) for speed along the track, on the road only,
       so spinning or cutting across the grass earns nothing.
+    - steer_penalty: lost per unit of steering change from one decision to the next
+      (steering goes from -1 to +1, so a full left-to-right flip costs 2x this).
+      Against wobbling. The AI repeats each decision for 2 frames, so the change is
+      charged once, on the first of the two frames.
 
     Keep the game's reward in info["game_reward"] so runs stay comparable, and
     info["wrong_way"] (car pointing against the track) so we can count it.
     """
 
-    def __init__(self, env: gym.Env, grass_penalty: float = 0.0, band_penalty: float = 0.0, speed_bonus: float = 0.0):
+    def __init__(self, env: gym.Env, grass_penalty: float = 0.0, band_penalty: float = 0.0, speed_bonus: float = 0.0, steer_penalty: float = 0.0):
         super().__init__(env)
         self.grass_penalty, self.band_penalty, self.speed_bonus = grass_penalty, band_penalty, speed_bonus
+        self.steer_penalty = steer_penalty
 
     def reset(self, **kwargs):
         out = self.env.reset(**kwargs)
         self.geo = TrackGeometry(self.env.unwrapped.track)
+        self.last_steer = 0.0
         return out
 
     def step(self, action):
@@ -81,6 +87,10 @@ class ShapedReward(gym.Wrapper):
             reward -= self.band_penalty * band_excess(side, band)
         if self.speed_bonus and not grass:
             reward += self.speed_bonus * min(max(along / TOP_SPEED, 0.0), 1.0)
+        steer = float(np.clip(action[0], -1.0, 1.0))
+        if self.steer_penalty:
+            reward -= self.steer_penalty * abs(steer - self.last_steer)
+        self.last_steer = steer
         return obs, reward, terminated, truncated, info
 
 
@@ -129,16 +139,16 @@ def on_grass(env: gym.Env) -> bool:
     return car is not None and all(len(wheel.tiles) == 0 for wheel in car.wheels)
 
 
-def make_env(render_mode: str | None = None, grass_penalty: float = 0.0, band_penalty: float = 0.0, speed_bonus: float = 0.0, measure: bool = False) -> gym.Env:
+def make_env(render_mode: str | None = None, grass_penalty: float = 0.0, band_penalty: float = 0.0, speed_bonus: float = 0.0, steer_penalty: float = 0.0, measure: bool = False) -> gym.Env:
     """One CarRacing game, wrapped the way the AI sees it.
 
     measure=True adds the ShapedReward wrapper with no shaping, just to record
     info["wrong_way"] (used by test races, which always score the game's way).
     """
     env = gym.make("CarRacing-v3", render_mode=render_mode)
-    if grass_penalty or band_penalty or speed_bonus or measure:
+    if grass_penalty or band_penalty or speed_bonus or steer_penalty or measure:
         # reads the car state each game frame
-        env = ShapedReward(env, grass_penalty=grass_penalty, band_penalty=band_penalty, speed_bonus=speed_bonus)
+        env = ShapedReward(env, grass_penalty=grass_penalty, band_penalty=band_penalty, speed_bonus=speed_bonus, steer_penalty=steer_penalty)
     env = FrameSkip(env, skip=2)
     env = ResizeObservation(env, (64, 64))
     env = GrayscaleObservation(env, keep_dim=True)

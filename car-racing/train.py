@@ -3,6 +3,7 @@
     .venv/bin/python train.py --run-name baseline                 # the game's own reward
     .venv/bin/python train.py --run-name grass --grass-penalty 0.1 # our shaped reward
     .venv/bin/python train.py --run-name band-speed --grass-penalty 0.1 --band-penalty 0.05 --speed-bonus 0.05
+    .venv/bin/python train.py --run-name band-speed-steer --grass-penalty 0.1 --band-penalty 0.05 --speed-bonus 0.05 --steer-penalty 0.1
     .venv/bin/python train.py --run-name baseline --resume runs/baseline/checkpoints/ppo_400000_steps.zip
 
 Every --checkpoint-every steps it saves the model and records one test race on a
@@ -124,6 +125,7 @@ def main() -> None:
     p.add_argument("--grass-penalty", type=float, default=0.0, help="per frame on the grass; 0 = off")
     p.add_argument("--band-penalty", type=float, default=0.0, help="per frame at most, for leaving the centre band; 0 = off")
     p.add_argument("--speed-bonus", type=float, default=0.0, help="per frame at most, for speed along the track; 0 = off")
+    p.add_argument("--steer-penalty", type=float, default=0.0, help="per unit of steering change between decisions; 0 = off")
     p.add_argument("--resume", type=Path, default=None, help="a checkpoint .zip to continue from")
     args = p.parse_args()
 
@@ -137,7 +139,7 @@ def main() -> None:
         make_env,
         n_envs=args.envs,
         vec_env_cls=SubprocVecEnv,
-        env_kwargs={"grass_penalty": args.grass_penalty, "band_penalty": args.band_penalty, "speed_bonus": args.speed_bonus},
+        env_kwargs={"grass_penalty": args.grass_penalty, "band_penalty": args.band_penalty, "speed_bonus": args.speed_bonus, "steer_penalty": args.steer_penalty},
     )
     env = VecFrameStack(env, n_stack=2)  # "the last 2 frames", so it can see motion
     env = VecNormalize(env, norm_obs=False, norm_reward=True)  # keeps reward sizes steady for learning
