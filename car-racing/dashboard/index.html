@@ -72,7 +72,8 @@
   .note { color: var(--muted); font-size: 0.8rem; }
   #single { display: grid; gap: 28px; }
   #single[hidden] { display: none; }
-  .compare { overflow-x: auto; display: grid; gap: 14px; }
+  .compare { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .table-scroll { overflow-x: auto; }
   .pick { border: 0; padding: 0; margin: 0; }
   .pick legend { color: var(--dim); font-size: 0.8rem; margin-bottom: 8px; padding: 0; }
   .pick div { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -121,11 +122,11 @@
   </div>
 
   <section id="legend" class="compare" hidden aria-label="Runs compared">
-    <fieldset class="pick"><legend>Pick up to 3 runs</legend><div id="pick"></div></fieldset>
-    <table>
+    <fieldset class="pick"><legend>Pick up to 5 runs</legend><div id="pick"></div></fieldset>
+    <div class="table-scroll"><table>
       <thead><tr><th>Run</th><th>Steps</th><th>Latest test race</th><th>Best test race</th></tr></thead>
       <tbody id="compare-rows"></tbody>
-    </table>
+    </table></div>
   </section>
 
   <section class="charts" id="charts" aria-label="Charts"></section>
@@ -149,8 +150,9 @@ const CHARTS = [
   { key: "driver_loss", title: "Driver loss", desc: "The clipped policy loss. Noisy by nature; watch the trend.", color: "--signal", fmt: v => v.toFixed(3) },
   { key: "advantage_size", title: "Advantage size", desc: "Average size of the raw advantage: how surprised the coach still is.", color: "--signal", min: 0, fmt: v => v.toFixed(2) },
 ];
-// Compare mode: one fixed colour per run, in run order (validated for colour-blind separation on this surface).
-const RUN_COLORS = ["#2a86c2", "#c4622d", "#9b6fd6"];
+// Compare mode colours. Any of them can sit side by side, so every PAIR is validated (dataviz
+// validate_palette.js --pairs all, dark, surface #141a22): CVD ΔE >= 8.5, normal-vision ΔE >= 21.
+const RUN_COLORS = ["#187eb3", "#a26109", "#b24df7", "#10af2f", "#dc0e76"];
 const COMPARE = "__compare__";
 const PICK_KEY = "car-racing-dash:compare";
 let picked = null;            // run names in Compare, max RUN_COLORS.length
@@ -202,7 +204,9 @@ function drawChart(card, cfg, series, compare = false) {
     card.appendChild(e); return;
   }
   const multi = compare;  // in Compare, every run is named on the chart and in the hover readout
-  const W = Math.max(280, card.clientWidth - 32), H = 190, L = 44, R = multi ? 70 : 10, T = 10, B = 24;
+  // Compare: run names sit in a column right of the plot, wide enough for the longest name
+  const W = Math.max(280, card.clientWidth - 32), H = 190, L = 44, T = 10, B = 24;
+  const R = multi ? Math.min(Math.round(W * 0.34), 22 + 6.4 * Math.max(...series.map(sr => sr.name.length))) : 10;
   const all = series.flatMap(sr => sr.points), xs = all.map(p => p[0]), ys = all.map(p => p[1]);
   const x0 = 0, x1 = Math.max(Math.max(...xs), 1);
   let y0 = cfg.min ?? Math.min(...ys), y1 = cfg.max ?? Math.max(...ys);
@@ -225,15 +229,23 @@ function drawChart(card, cfg, series, compare = false) {
     add("line", { x1: L, x2: W - R, y1: Y(cfg.target), y2: Y(cfg.target), stroke: css("--reward-ink"), "stroke-dasharray": "4 4", opacity: 0.6 });
     const t = add("text", { x: W - R, y: Y(cfg.target) - 5, "text-anchor": "end", fill: css("--reward-ink"), "font-size": 11 }); t.textContent = "solved";
   }
-  const labelYs = [];
   for (const sr of series) {
     const color = sr.color, pts = sr.points;
     add("path", { d: pts.map((p, i) => (i ? "L" : "M") + X(p[0]).toFixed(1) + " " + Y(p[1]).toFixed(1)).join(""), fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" });
     if (pts.length <= 20) for (const p of pts) add("circle", { cx: X(p[0]), cy: Y(p[1]), r: 4, fill: color, stroke: css("--panel"), "stroke-width": 2 });
     const last = pts.at(-1); add("circle", { cx: X(last[0]), cy: Y(last[1]), r: 5, fill: color, stroke: css("--panel"), "stroke-width": 2 });
-    if (multi) {  // direct label at the line's end, nudged so labels don't collide
-      let ly = Y(last[1]) + 4; while (labelYs.some(y => Math.abs(y - ly) < 13)) ly += 13; labelYs.push(ly);
-      const t = add("text", { x: X(last[0]) + 9, y: ly, fill: css("--ink"), "font-size": 11 }); t.textContent = sr.name;
+  }
+  if (multi) {
+    const gap = 13, top = T + 4, bottom = H - B;
+    const labs = series.map(sr => { const p = sr.points.at(-1); return { sr, x: X(p[0]), y: Y(p[1]), ly: Y(p[1]) }; }).sort((a, b) => a.y - b.y);
+    labs.forEach((l, i) => { l.ly = Math.max(l.ly, top, i ? labs[i - 1].ly + gap : top); });   // push down to clear the one above
+    for (let i = labs.length - 1; i >= 0; i--) {                                                // then pull up from the bottom edge
+      const limit = i === labs.length - 1 ? bottom : labs[i + 1].ly - gap; if (labs[i].ly > limit) labs[i].ly = limit;
+    }
+    const lx = W - R + 10;
+    for (const l of labs) {
+      add("path", { d: `M${(l.x + 6).toFixed(1)} ${l.y.toFixed(1)} L${lx - 4} ${l.ly.toFixed(1)}`, stroke: l.sr.color, "stroke-width": 1, opacity: 0.55, fill: "none" });
+      const t = add("text", { x: lx, y: l.ly + 4, fill: css("--ink"), "font-size": 11 }); t.textContent = l.sr.name;
     }
   }
   // hover: crosshair snaps to the nearest step; the readout lists every run
