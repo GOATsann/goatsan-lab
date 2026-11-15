@@ -1,7 +1,8 @@
 """Train a PPO agent to drive Gymnasium's CarRacing from pixels.
 
     .venv/bin/python train.py --run-name baseline                 # the game's own reward
-    .venv/bin/python train.py --run-name grass --grass-penalty 0.5 # our shaped reward
+    .venv/bin/python train.py --run-name grass --grass-penalty 0.1 # our shaped reward
+    .venv/bin/python train.py --run-name band-speed --grass-penalty 0.1 --band-penalty 0.05 --speed-bonus 0.05
     .venv/bin/python train.py --run-name baseline --resume runs/baseline/checkpoints/ppo_400000_steps.zip
 
 Every --checkpoint-every steps it saves the model and records one test race on a
@@ -33,19 +34,21 @@ def linear(start: float):
     return lambda progress_left: progress_left * start
 
 
-def test_race(model: PPO, video_path: Path | None) -> float:
-    """Drive one race on the fixed track; return the game's own score.
+def test_race(model: PPO, video_path: Path | None) -> tuple[float, float]:
+    """Drive one race on the fixed track.
 
-    Test races always use the game's reward, so shaped runs stay comparable.
+    Returns the game's own score (test races never use our shaping, so every run
+    is scored the same way) and the share of decisions spent pointing the wrong way.
     """
-    env = VecFrameStack(DummyVecEnv([lambda: make_env("rgb_array")]), n_stack=2)
+    env = VecFrameStack(DummyVecEnv([lambda: make_env("rgb_array", measure=True)]), n_stack=2)
     env.seed(EVAL_SEED)
     obs = env.reset()
-    frames, score, done = [], 0.0, False
+    frames, score, done, wrong, n = [], 0.0, False, 0, 0
     while not done:
         action, _ = model.predict(obs, deterministic=True)
         obs, reward, dones, infos = env.step(action)
-        score += float(reward[0])
+        score += float(reward[0])  # no shaping here: this is the game's own score
+        wrong += bool(infos[0].get("wrong_way")); n += 1
         if video_path is not None:
             frames.append(env.venv.envs[0].render())
         done = bool(dones[0])
@@ -54,7 +57,7 @@ def test_race(model: PPO, video_path: Path | None) -> float:
         video_path.parent.mkdir(parents=True, exist_ok=True)
         # One decision per 2 game frames at 50 fps = 25 decisions a second.
         ImageSequenceClip(frames, fps=25).write_videofile(str(video_path), logger=None)
-    return score
+    return score, wrong / max(n, 1)
 
 
 class AdvantageStats(BaseCallback):
@@ -85,17 +88,18 @@ class ProgressRaces(BaseCallback):
 
     def _race(self) -> None:
         steps = self.num_timesteps
-        score = test_race(self.model, self.video_dir / f"step_{steps:08d}.mp4")
+        score, wrong_way = test_race(self.model, self.video_dir / f"step_{steps:08d}.mp4")
         minutes = (time.time() - self.started) / 60
         self.logger.record("eval/test_race_score", score)
+        self.logger.record("eval/wrong_way_share", wrong_way)
         log = self.run_dir / "progress.csv"
         new = not log.exists()
         with log.open("a", newline="") as f:
             w = csv.writer(f)
             if new:
-                w.writerow(["steps", "minutes", "test_race_score"])
-            w.writerow([steps, round(minutes, 1), round(score, 1)])
-        print(f"[race] steps={steps:,} minutes={minutes:.0f} score={score:.0f}", flush=True)
+                w.writerow(["steps", "minutes", "test_race_score", "wrong_way_share"])
+            w.writerow([steps, round(minutes, 1), round(score, 1), round(wrong_way, 3)])
+        print(f"[race] steps={steps:,} minutes={minutes:.0f} score={score:.0f} wrong_way={wrong_way:.1%}", flush=True)
 
     def _on_training_start(self) -> None:
         self.next_at = self.num_timesteps  # a race before any learning: the "before" video
@@ -117,7 +121,9 @@ def main() -> None:
     p.add_argument("--envs", type=int, default=4, help="games running at once (keep the Mac cool: 4)")
     p.add_argument("--threads", type=int, default=4, help="CPU threads for the neural network")
     p.add_argument("--checkpoint-every", type=float, default=1e5)
-    p.add_argument("--grass-penalty", type=float, default=0.0, help="0 = the game's own reward")
+    p.add_argument("--grass-penalty", type=float, default=0.0, help="per frame on the grass; 0 = off")
+    p.add_argument("--band-penalty", type=float, default=0.0, help="per frame at most, for leaving the centre band; 0 = off")
+    p.add_argument("--speed-bonus", type=float, default=0.0, help="per frame at most, for speed along the track; 0 = off")
     p.add_argument("--resume", type=Path, default=None, help="a checkpoint .zip to continue from")
     args = p.parse_args()
 
@@ -131,7 +137,7 @@ def main() -> None:
         make_env,
         n_envs=args.envs,
         vec_env_cls=SubprocVecEnv,
-        env_kwargs={"grass_penalty": args.grass_penalty},
+        env_kwargs={"grass_penalty": args.grass_penalty, "band_penalty": args.band_penalty, "speed_bonus": args.speed_bonus},
     )
     env = VecFrameStack(env, n_stack=2)  # "the last 2 frames", so it can see motion
     env = VecNormalize(env, norm_obs=False, norm_reward=True)  # keeps reward sizes steady for learning
