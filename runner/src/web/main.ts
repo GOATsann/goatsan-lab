@@ -19,7 +19,10 @@ const params = new URLSearchParams(location.search);
 const fixedSeed = params.has("seed") ? Number(params.get("seed")) : null;
 const newSeed = () => fixedSeed ?? Math.floor(Math.random() * 1e9); // UI only: the core never uses Math.random
 
-let game = new Game(newSeed());
+// start level: Easy / Normal / Hard (the difficulty ramp builds on top)
+let level = (Number(store.get("level") ?? 1) || 0) as 0 | 1 | 2;
+if (![0, 1, 2].includes(level)) level = 1;
+let game = new Game(newSeed(), { level });
 const renderer = new Renderer(canvas, { seed: game.seed });
 const input = new Input(canvas);
 const hud = mountHud(document.body);
@@ -63,10 +66,9 @@ const STEP = 1000 / TICK_HZ;
 
 function start(): void {
   if (running) return;
-  if (game.dead || game.tick > 0) game = new Game(newSeed());
+  if (game.dead || game.tick > 0 || game.options.level !== level) game = new Game(newSeed(), { level });
   input.clear();
   running = true;
-  hud.blackoutDone = false;
   $("overlay").hidden = true;
   hud.label(playerName());
   last = performance.now();
@@ -74,6 +76,16 @@ function start(): void {
 }
 input.onStart = () => { if ($("overlay").hidden === false && document.activeElement === nameInput) return; start(); };
 $("play").addEventListener("click", start);
+const levelButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-level]")];
+function showLevel(): void {
+  for (const b of levelButtons) b.setAttribute("aria-checked", String(Number(b.dataset.level) === level));
+}
+for (const b of levelButtons) b.addEventListener("click", () => {
+  level = Number(b.dataset.level) as 0 | 1 | 2;
+  store.set("level", String(level));
+  showLevel();
+});
+showLevel();
 
 function resize(): void {
   renderer.resize(window.innerWidth, window.innerHeight);
@@ -94,9 +106,8 @@ function frame(now: number): void {
       $("title").textContent = `${game.score} points`;
       $("sub").textContent = `${game.meters} m, ${game.coins} coins · ${caught ? "the Blackout caught you" : `hit a ${game.deathCause.replace(" front", "")}`}`;
       $("play").textContent = "Run again";
-      // caught: ~1 s of full blackout, then it fades out and the card appears
-      setTimeout(() => { hud.blackoutDone = true; }, caught ? 1000 : 0);
-      setTimeout(() => { $("overlay").hidden = false; }, caught ? 1300 : 600);
+      // caught: the ghost circles you and the stars spin for a moment, then the card
+      setTimeout(() => { $("overlay").hidden = false; }, caught ? 1800 : 700);
     }
   }
   last = now;

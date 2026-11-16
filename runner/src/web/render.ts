@@ -9,6 +9,7 @@ import * as C from "../core/config";
 import type { Game, Obstacle, Pickup } from "../core/game";
 import { DEFAULT_CHARACTERS, placeholderCharacter, type CharacterView } from "./character";
 import { City } from "./city";
+import { Effects } from "./effects";
 import { Ghost } from "./ghost";
 import { gravelTexture, hazardTexture, lightPoolTexture, signTexture, skyTexture } from "./textures";
 
@@ -55,6 +56,7 @@ export class Renderer {
   private bed: THREE.Mesh;
   private city: City;
   private ghost = new Ghost();
+  private effects = new Effects();
   private lastTime = performance.now();
   private mat: Record<string, THREE.Material>;
   private key: THREE.SpotLight;
@@ -148,7 +150,7 @@ export class Renderer {
     }
 
     this.city = new City(opts.seed ?? 1);
-    this.scene.add(this.city.group, this.ghost.object);
+    this.scene.add(this.city.group, this.ghost.object, this.ghost.stars, this.effects.group);
     this.character = opts.character ?? placeholderCharacter(DEFAULT_CHARACTERS[0]);
     this.scene.add(this.character.object);
 
@@ -214,7 +216,8 @@ export class Renderer {
     this.sleepers.position.z = trackM % SLEEPER;
     this.city.update(trackM);
     this.city.setDim(Ghost.closeness(g));
-    this.ghost.update(g, step);
+    this.ghost.update(g, step, this.camera.aspect < 0.75 ? 4.8 : 6.5);
+    this.effects.update(g, step);
     this.pools.forEach((p, i) => {
       p.position.x = i % 2 ? 4.2 : -4.2;
       p.position.z = -((i * 18 - (trackM % 36) + 360) % 216) + 20;
@@ -227,16 +230,20 @@ export class Renderer {
     this.rim.target.position.set(px, py + 1.1, 0);
 
     this.character.object.position.set(g.x * M, g.y * M, 0);
+    const sq = this.effects.squash; // stretch on take-off
+    this.character.object.scale.set(1 / Math.sqrt(sq), sq, 1 / Math.sqrt(sq));
     this.character.update(g, step);
     // no blinking after a stumble: the runner stays visible; the stumble clip and the ghost show the hit
 
-    // chase camera: behind and above, following the runner smoothly
-    const cx = g.x * M * 0.6, cy = 3.2 + g.y * M * 0.85;
+    // chase camera: behind and above, following the runner smoothly. On tall screens (phones,
+    // vertical video) it sits closer and lower, so the runner is bigger without hiding the track ahead.
+    const portrait = this.camera.aspect < 0.75;
+    const cx = g.x * M * 0.6, cy = (portrait ? 2.6 : 3.2) + g.y * M * 0.85;
     const k = 1 - Math.pow(0.0005, step);
     this.camera.position.x += (cx - this.camera.position.x) * k;
     this.camera.position.y += (cy - this.camera.position.y) * k;
-    this.camera.position.z = 6.5;
-    this.camera.lookAt(g.x * M * 0.4, 1.3 + g.y * M * 0.85, -8);
+    this.camera.position.z = portrait ? 4.8 : 6.5;
+    this.camera.lookAt(g.x * M * 0.4, (portrait ? 1.1 : 1.3) + g.y * M * 0.85, -8);
     if (this.composer) this.composer.render(step);
     else this.gl.render(this.scene, this.camera);
   }

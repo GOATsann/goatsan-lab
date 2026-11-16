@@ -6,6 +6,13 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import * as C from "../core/config";
 import type { Game } from "../core/game";
 
+/** Air time of a normal jump, from the core's physics (gravity halves near the apex). */
+const JUMP_SECONDS = (() => {
+  let vy = C.JUMP_V, y = 0, t = 0;
+  do { vy -= Math.abs(vy) < C.HANG_V ? C.HANG_GRAVITY : C.GRAVITY; y += vy; t++; } while (y > 0);
+  return t / C.TICK_HZ;
+})();
+
 export interface CharacterInfo {
   id: string;
   name: string;
@@ -198,6 +205,8 @@ class GlbCharacter implements CharacterView {
     }
     const run = this.clips.get("run");
     if (run && g) run.timeScale = g.currentSpeed / C.START_SPEED;
+    const jump = this.clips.get("jump");
+    if (jump) jump.timeScale = 0.6 / JUMP_SECONDS; // the clip is 0.6 s; the jump now lasts ~0.76 s
     this.mixer.update(dt);
   }
 }

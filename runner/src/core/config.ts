@@ -26,7 +26,7 @@ export const EASY_FADE = 0.5; // per heat unit: easy pieces get rarer...
 export const EASY_FADE_MAX = 0.85; // ...down to 15% of their weight
 export const HARD_BOOST = 1.2; // per heat unit: a level-L piece is (1 + 1.2 L heat) times as likely
 
-// Jump: ~0.76 s in the air, ~1.47 m high, with a short hang at the top (gravity halves near the apex)
+// Jump: ~0.75 s in the air, ~1.39 m high (clears the 1 m barrier), with a short hang at the top
 export const GRAVITY = 8; // mm/tick²
 export const HANG_V = 32; // below this vertical speed (up or down)...
 export const HANG_GRAVITY = 4; // ...gravity is this (the hang)

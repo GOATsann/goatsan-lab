@@ -74,7 +74,7 @@ Rules v4: difficulty ("heat") rises for the whole run with no ceiling: start lev
 normal 0.3, hard 0.6) + a smooth ramp of +1 over the first 3 minutes + 0.25 every 2 minutes after
 that. Speed = 10 m/s + 8.4 m/s per heat unit. Higher heat also shortens the empty run-up before each
 track piece (up to 60%) and makes hard pieces more likely; two new hard pieces. The jump is longer:
-about 0.76 s in the air with a short hang at the top (about 1.47 m high). New state value `heat`
+about 0.75 s in the air with a short hang at the top (about 1.39 m high). New state value `heat`
 (heat / 2); `speed` is now (speed - 10 m/s) / 16.8 m/s and keeps growing past 1. Event `level` is the
 episode's start level (constant). All numbers are named constants in `src/core/config.ts`.
 

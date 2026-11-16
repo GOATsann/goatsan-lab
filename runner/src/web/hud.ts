@@ -5,7 +5,6 @@ import type { Game } from "../core/game";
 export function mountHud(root: HTMLElement, label = "") {
   root.insertAdjacentHTML("beforeend", `
     <div class="danger" data-danger></div>
-    <div class="lightsout" data-lightsout></div>
     <div class="hud"><div><small>score</small><b data-score>0</b></div>
       <div style="text-align:right"><small data-meta></small><small data-seed></small><small data-label></small></div></div>
     <div class="powers" data-powers></div>
@@ -14,11 +13,9 @@ export function mountHud(root: HTMLElement, label = "") {
   q("label").textContent = label;
   return {
     update(g: Game): void {
-      // the chaser: never hides the track. A red pulse only at the screen edges, plus an icon.
-      // The full blackout is only the "caught" moment (the page fades it back out).
+      // the chaser never hides the track: a red pulse only at the screen edges, plus an icon
       const near = g.dead ? 0 : Math.max(0, Math.min(1, 1 - (g.chaserGap - C.CHASER_CLOSE) / 20000));
       q("danger").style.opacity = String(near);
-      q("lightsout").classList.toggle("on", g.dead && g.deathCause === "caught" && !this.blackoutDone);
       const chaser = q("chaser");
       chaser.hidden = g.dead || g.chaserTicks === 0;
       if (!chaser.hidden) {
@@ -37,7 +34,5 @@ export function mountHud(root: HTMLElement, label = "") {
       q("powers").replaceChildren(...p.map((t) => Object.assign(document.createElement("span"), { textContent: t })));
     },
     label(text: string): void { q("label").textContent = text; },
-    /** set after the ~1 s caught blackout, so it fades out to the game-over card */
-    blackoutDone: false,
   };
 }
