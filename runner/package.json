@@ -13,7 +13,9 @@
     "server": "tsx src/headless/server.ts",
     "parity": "tsx test/parity/make-replays.ts && node test/parity/browsers.mjs",
     "publish-model": "tsx src/headless/publish-model.ts",
-    "parity-policy": "node test/parity/policy.mjs"
+    "parity-policy": "node test/parity/policy.mjs",
+    "fetch-models": "tsx src/headless/fetch-models.ts",
+    "prebuild": "tsx src/headless/fetch-models.ts"
   },
   "devDependencies": {
     "@types/node": "^22.19.1",

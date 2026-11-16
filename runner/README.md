@@ -27,9 +27,11 @@ npm run parity       # same replays give the same result in Node, Chromium, Fire
 
 Optional music: put an MP3 at `public/audio/music.mp3` (not included, see [ASSETS.md](ASSETS.md)).
 
-The trained AI opponents are not in this repo either. Race the AI loads them from
-`public/models/policy-{easy,normal,hard}.onnx` (with a `.json` next to each); without them it uses a
-built-in stand-in bot. To use your own, train one (see `train/`) and run
+The trained AI opponents are not in this repo either. They live on Hugging Face
+([TheOnlyGoatsan/lights-out-surfer-ppo](https://huggingface.co/TheOnlyGoatsan/lights-out-surfer-ppo)),
+and `npm run build` downloads them into `public/models/` first, pinned to the revision and checksums in
+[models.lock.json](models.lock.json) (or run `npm run fetch-models`). Without them, Race the AI uses a
+built-in stand-in bot. To try your own, train one (see `train/`) and run
 `npm run publish-model -- <run> [checkpoint steps] --as easy|normal|hard`.
 
 ## How it's built
