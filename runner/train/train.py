@@ -33,7 +33,9 @@ PROGRESS_SEED = 7  # the same track for every progress race, so they compare
 MAX_TICKS = 36_000  # 10 minutes of game time per episode
 # Game options sent in every handshake (rules v3+). The chaser stays hidden from the AI, like from a
 # player who does not look back; benchmarks use the same options as training (from meta.json).
-GAME_OPTIONS = {"powerups": True, "stumbles_to_catch": 2, "observe_chaser": False}
+GAME_OPTIONS = {"powerups": True, "stumbles_to_catch": 2, "observe_chaser": False, "level": "random"}
+# Progress races always start on Normal, so they compare across the run (training draws a random level).
+PROGRESS_OPTIONS = GAME_OPTIONS | {"level": "normal"}
 
 
 class GameServers:
@@ -97,6 +99,9 @@ class Logging(BaseCallback):
             for key in ("score", "meters", "ticks", "moves_per_100m", "reversals_per_100m", "pointless_per_100m",
                         "jumps", "rolls", "laneChanges"):
                 self.logger.record(f"episode/{key}", float(np.mean([e[key] for e in self.ends])))
+            for level in sorted({e["level"] for e in self.ends} - {""}):
+                mine = [e for e in self.ends if e["level"] == level]
+                self.logger.record(f"episode/score_{level}", float(np.mean([e["score"] for e in mine])))
             causes = Counter(e["death_cause"] or "time limit" for e in self.ends)
             for cause, n in causes.items():
                 self.logger.record(f"death/{cause}", n / len(self.ends))
@@ -109,7 +114,7 @@ class ProgressRaces(BaseCallback):
     def __init__(self, every: int, port: int, run_dir: Path, norm: VecNormalize):
         super().__init__()
         self.every, self.run_dir, self.norm = every, run_dir, norm
-        self.env = RunnerVecEnv(port, n_envs=1, seed_base=10**9, max_ticks=MAX_TICKS, options=GAME_OPTIONS)
+        self.env = RunnerVecEnv(port, n_envs=1, seed_base=10**9, max_ticks=MAX_TICKS, options=PROGRESS_OPTIONS)
         self.next_at = 0
         self.started = time.time()
         (run_dir / "replays").mkdir(parents=True, exist_ok=True)

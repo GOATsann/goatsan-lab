@@ -1,4 +1,4 @@
-"""Benchmark a trained runner model on the same fixed seeds every time, scored by the game's own score.
+"""Benchmark a trained runner model on the same fixed seeds every time (once per start level), scored by the game's own score.
 
     cd runner && ../car-racing/.venv/bin/python train/bench.py r1-distance
 
@@ -41,55 +41,65 @@ def main() -> None:
     seeds = list(range(args.seed_start, args.seed_start + args.episodes))
 
     started = time.time()
+    meta = json.loads((run_dir / "meta.json").read_text())
+    options = meta.get("game_options", GAME_OPTIONS)  # the rules the model was trained on
     servers = GameServers(1, args.port, run_dir / "logs")
+    rows, replays = [], {}
     try:
-        meta = json.loads((run_dir / "meta.json").read_text())
-        options = meta.get("game_options", GAME_OPTIONS)  # the rules the model was trained on
-        env = RunnerVecEnv(servers.ports[0], n_envs=len(seeds), seed_base=10**9, max_ticks=MAX_TICKS, options=options)
-        if env.version != meta["game_version"]:
-            raise SystemExit(f"model trained on game version {meta['game_version']}, server is version {env.version}")
-        obs = np.stack([env.set_seed(i, s) for i, s in enumerate(seeds)])
-        results: dict[int, dict] = {}
-        replays: dict[int, dict] = {}
-        while len(results) < len(seeds):
-            actions, _ = model.predict(obs, deterministic=True)
-            obs, _, done, infos = env.step(actions)
-            for i in np.flatnonzero(done):
-                if i not in results:  # later episodes in this game slot are the seed stream: ignore them
-                    results[i] = infos[i]["episode_end"]
-                    replays[i] = env.replay(int(i))
-        env.close()
+        # v4+: every seed once per start level (the level of each pass is fixed, not random)
+        probe = RunnerVecEnv(servers.ports[0], n_envs=1, seed_base=10**9, max_ticks=MAX_TICKS, options=options)
+        levels = probe.level_names or [""]
+        if probe.version != meta["game_version"]:
+            raise SystemExit(f"model trained on game version {meta['game_version']}, server is version {probe.version}")
+        probe.close()
+        servers.stop()
+        for level in levels:
+            servers = GameServers(1, args.port, run_dir / "logs")  # one connection per server process
+            opts = options | ({"level": level} if level else {})
+            env = RunnerVecEnv(servers.ports[0], n_envs=len(seeds), seed_base=10**9, max_ticks=MAX_TICKS, options=opts)
+            obs = np.stack([env.set_seed(i, s) for i, s in enumerate(seeds)])
+            results: dict[int, dict] = {}
+            while len(results) < len(seeds):
+                actions, _ = model.predict(obs, deterministic=True)
+                obs, _, done, infos = env.step(actions)
+                for i in np.flatnonzero(done):
+                    if i not in results:  # later episodes in this game slot are the seed stream: ignore them
+                        results[i] = infos[i]["episode_end"]
+                        replays[(level, seeds[i])] = env.replay(int(i))
+            env.close()
+            servers.stop()
+            for i, s in enumerate(seeds):
+                e = results[i]
+                assert e["seed"] == s and e.get("level", "") == level, (e["seed"], s, e.get("level"), level)
+                rows.append({"level": level, "seed": s, "score": e["score"], "meters": e["meters"],
+                             "coin_score": e["score"] - e["meters"], "seconds": round(e["ticks"] / 60, 2),
+                             "death_cause": e["death_cause"] or "time limit",
+                             "moves_per_100m": round(e["moves_per_100m"], 2), "reversals_per_100m": round(e["reversals_per_100m"], 2),
+                             "pointless_per_100m": round(e["pointless_per_100m"], 2), "jumps": e["jumps"], "rolls": e["rolls"],
+                             "lane_changes": e["laneChanges"]})
     finally:
         servers.stop()
 
-    rows = []
-    for i, s in enumerate(seeds):
-        e = results[i]
-        assert e["seed"] == s, (e["seed"], s)
-        rows.append({"seed": s, "score": e["score"], "meters": e["meters"], "coin_score": e["score"] - e["meters"],
-                     "seconds": round(e["ticks"] / 60, 2), "death_cause": e["death_cause"] or "time limit",
-                     "moves_per_100m": round(e["moves_per_100m"], 2), "reversals_per_100m": round(e["reversals_per_100m"], 2),
-                     "pointless_per_100m": round(e["pointless_per_100m"], 2), "jumps": e["jumps"], "rolls": e["rolls"],
-                     "lane_changes": e["laneChanges"]})
     with out.open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()
         w.writerows(rows)
 
-    order = sorted(range(len(rows)), key=lambda i: rows[i]["score"])
-    keep = {"worst": order[0], "median": order[len(order) // 2], "best": order[-1]}
     (run_dir / "bench-replays").mkdir(exist_ok=True)
-    for label, i in keep.items():
-        (run_dir / "bench-replays" / f"{label}-seed{rows[i]['seed']}.json").write_text(json.dumps(replays[i]))
-
-    score = np.array([r["score"] for r in rows])
-    causes = {}
-    for r in rows:
-        causes[r["death_cause"]] = causes.get(r["death_cause"], 0) + 1
-    print(f"{args.run}: mean {score.mean():.1f} ± {1.96 * score.std(ddof=1) / np.sqrt(len(score)):.1f} (95% CI)  "
-          f"median {np.median(score):.0f}  worst {score.min():.0f}  best {score.max():.0f}")
-    print("deaths:", ", ".join(f"{c} {n}" for c, n in sorted(causes.items(), key=lambda kv: -kv[1])))
-    print(f"{len(rows)} seeds in {(time.time() - started) / 60:.1f} min -> {out}")
+    for level in dict.fromkeys(r["level"] for r in rows):
+        mine = sorted((r for r in rows if r["level"] == level), key=lambda r: r["score"])
+        tag = f"{level}-" if level else ""
+        for label, r in {"worst": mine[0], "median": mine[len(mine) // 2], "best": mine[-1]}.items():
+            (run_dir / "bench-replays" / f"{tag}{label}-seed{r['seed']}.json").write_text(json.dumps(replays[(level, r["seed"])]))
+        score = np.array([r["score"] for r in mine])
+        causes = {}
+        for r in mine:
+            causes[r["death_cause"]] = causes.get(r["death_cause"], 0) + 1
+        print(f"{args.run} {level or ''}: mean {score.mean():.1f} ± {1.96 * score.std(ddof=1) / np.sqrt(len(score)):.1f} (95% CI)  "
+              f"median {np.median(score):.0f}  worst {score.min():.0f}  best {score.max():.0f}  "
+              f"survived 10 min {np.mean([r['death_cause'] == 'time limit' for r in mine]):.0%}")
+        print("  deaths:", ", ".join(f"{c} {n}" for c, n in sorted(causes.items(), key=lambda kv: -kv[1])))
+    print(f"{len(rows)} episodes in {(time.time() - started) / 60:.1f} min -> {out}")
 
 
 if __name__ == "__main__":

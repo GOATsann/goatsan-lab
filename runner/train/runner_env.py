@@ -22,7 +22,7 @@ CMD_CLOSE, CMD_RESET, CMD_STEP, CMD_REPLAY, CMD_SEED = 0, 1, 2, 3, 4
 NOTHING, LEFT, RIGHT, JUMP, ROLL = 0, 1, 2, 3, 4
 
 # The step reply carries these as episode totals so far: they are reported, never rewarded.
-TOTALS = {"score", "meters", "ticks"}
+TOTALS = {"score", "meters", "ticks", "level"}  # level: an episode constant (rules v4+)
 # Reward terms computed here rather than sent by the game.
 DERIVED = {
     "meters",               # metres moved this decision (from the game's "distance", in mm)
@@ -87,6 +87,7 @@ class RunnerVecEnv(VecEnv):
         self.obs_size: int = hello["obs_size"]
         self.fields: list[str] = hello["event_fields"]
         self.death_causes: list[str] = hello["death_causes"]
+        self.level_names: list[str] = hello.get("level_names", [])
         self.reward = reward if reward is not None else load_reward()
         rewardable = (set(self.fields) - TOTALS - {"distance"}) | DERIVED
         unknown = set(self.reward) - rewardable
@@ -171,6 +172,7 @@ class RunnerVecEnv(VecEnv):
                 info["episode_end"] = {
                     "seed": int(seeds[i]), "score": float(events[i, f["score"]]), "meters": meters_total,
                     "ticks": int(events[i, f["ticks"]]), "death_cause": self.death_causes[cause[i]] if terminated[i] else "",
+                    "level": self.level_names[int(events[i, f["level"]])] if "level" in f else "",
                     **c, "moves_per_100m": c["moves"] * per100, "reversals_per_100m": c["reversals"] * per100,
                     "pointless_per_100m": c["pointless"] * per100,
                 }
