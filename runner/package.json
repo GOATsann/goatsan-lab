@@ -1,0 +1,24 @@
+{
+  "name": "runner",
+  "private": true,
+  "version": "0.1.0",
+  "description": "An endless runner with its own RL agent (BULSHY.FM build). Name is a placeholder.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5180",
+    "build": "vite build",
+    "test": "vitest run",
+    "speed": "tsx src/headless/speed.ts",
+    "server": "tsx src/headless/server.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.1",
+    "@types/three": "^0.181.0",
+    "three": "^0.181.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.2",
+    "vitest": "^4.0.8"
+  }
+}
