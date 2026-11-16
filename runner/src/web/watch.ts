@@ -1,7 +1,8 @@
 // Watch the AI: the trained policy plays alone, full screen, in real time (local demo page).
-//   /watch.html?ai=hard&level=2&seed=1042   (seed fixed = the same run every time; otherwise a new track each run)
-// It restarts by itself after the crash scene. "Hide" (or H) hides the panel and the move indicator
-// for filming; a tap or H brings them back.
+//   /watch.html?level=2&seed=1042   (seed fixed = the same run every time; otherwise a new track each run)
+// The AI is the same opponent as in Race the AI for that level. No player controls: the AI plays.
+// It restarts by itself after the crash scene. "Hide" (or H) hides the panel for filming; a tap or
+// H brings it back.
 import { DECISION_TICKS, TICK_HZ } from "../core/config";
 import { Game, NOOP, type Action } from "../core/game";
 import { Rng } from "../core/rng";
@@ -15,8 +16,7 @@ import { mountSoundControls } from "./sound-controls";
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
 const LEVELS = ["easy", "normal", "hard"] as const;
-let aiName = (LEVELS as readonly string[]).includes(params.get("ai") ?? "") ? (params.get("ai") as (typeof LEVELS)[number]) : "hard";
-let level = Math.max(0, Math.min(2, Number(params.get("level") ?? LEVELS.indexOf(aiName)) || 0)) as 0 | 1 | 2;
+let level = Math.max(0, Math.min(2, Number(params.get("level") ?? 2) || 0)) as 0 | 1 | 2;
 const fixedSeed = params.has("seed") ? Number(params.get("seed")) : null;
 
 const canvas = document.createElement("canvas");
@@ -36,11 +36,10 @@ let ready: { tick: number; action: Action } | null = null, thinking = false;
 let runs = 0, best = 0, lastAction: Action = NOOP, restartAt = 0;
 (window as unknown as { watch: () => unknown }).watch = () => ({ game, runs, best, driver: driver?.label, lastAction }); // for tests
 
-$<HTMLSelectElement>("ai").value = aiName;
 $<HTMLSelectElement>("level").value = String(level);
-$("ai").addEventListener("change", async (e) => { aiName = (e.target as HTMLSelectElement).value as typeof aiName; driver = await loadAi(aiName); newRun(); });
-$("level").addEventListener("change", (e) => { level = Number((e.target as HTMLSelectElement).value) as 0 | 1 | 2; newRun(); });
-const setHidden = (h: boolean) => { $("panel").hidden = h; $("move").hidden = h; };
+// one choice: the level sets the track and the AI opponent, exactly as in Race the AI
+$("level").addEventListener("change", async (e) => { level = Number((e.target as HTMLSelectElement).value) as 0 | 1 | 2; driver = await loadAi(LEVELS[level]); newRun(); });
+const setHidden = (h: boolean) => { $("panel").hidden = h; };
 addEventListener("keydown", (e) => { if (e.key === "h" || e.key === "H") setHidden(!$("panel").hidden); });
 $("hide").addEventListener("click", (e) => { e.stopPropagation(); setHidden(true); });
 canvas.addEventListener("click", () => setHidden(false));
@@ -86,7 +85,6 @@ function frame(now: number): void {
     if (!restartAt) restartAt = now + 3500; // let the crash scene play
     else if (now >= restartAt) newRun();
   }
-  for (const s of document.querySelectorAll<HTMLElement>("#move span")) s.classList.toggle("on", Number(s.dataset.a) === lastAction && game.tick % DECISION_TICKS < 3 && !game.dead);
   renderer.draw(game);
   hud.update(game);
   sfx.update(game);
@@ -94,7 +92,7 @@ function frame(now: number): void {
 }
 
 (async () => {
-  driver = await loadAi(aiName);
+  driver = await loadAi(LEVELS[level]);
   const chars = await loadCharacters();
   renderer.setCharacter(await makeCharacter(chars[new Rng(fixedSeed ?? Date.now()).int(chars.length)]));
   newRun();
