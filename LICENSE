@@ -22,7 +22,10 @@ SOFTWARE.
 
 ---
 
-The code is MIT (above). The art made for these projects (the Kai and Nova models in
-runner/public/characters/, the explainer images) is licensed under Creative Commons
-Attribution 4.0 (CC-BY 4.0): https://creativecommons.org/licenses/by/4.0/
+The code is MIT (above). The art in this repo made for these projects (the explainer images)
+is licensed under Creative Commons Attribution 4.0 (CC-BY 4.0):
+https://creativecommons.org/licenses/by/4.0/
+The Kai and Nova character models are not in this repo and not under these licences; they ship
+only with the live game. Images that show them (runner/public/og.png and the app icons) are all
+rights reserved.
 Third-party assets are listed in each project's ASSETS.md with their own licences.

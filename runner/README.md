@@ -45,4 +45,4 @@ built-in stand-in bot. To try your own, train one (see `train/`) and run
   the trained policy running in the browser with onnxruntime-web.
 - The plan for the whole build is in [PLAN.md](PLAN.md).
 
-Code: MIT. Kai and Nova models: CC-BY 4.0. See the [licence](../LICENSE) and [ASSETS.md](ASSETS.md).
+Code: MIT. The Kai and Nova models are not included: without them the game uses its built-in capsule couriers. To use your own characters, see [ASSETS.md](ASSETS.md). Licence: [LICENSE](../LICENSE).

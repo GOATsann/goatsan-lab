@@ -10,4 +10,4 @@ by [@_goatsan](https://www.instagram.com/_goatsan/). Everything here is free to 
 
 All my free builds: [theonlygoatsan.com/free](https://www.theonlygoatsan.com/free)
 
-Code: MIT. Art made for these projects: CC-BY 4.0. See [LICENSE](LICENSE).
+Code: MIT. Art in this repo made for these projects: CC-BY 4.0. The Kai and Nova character models are not included. See [LICENSE](LICENSE).
