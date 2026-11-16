@@ -1,6 +1,7 @@
 // Render replays to mp4 with the real game renderer, frame by frame (exactly what happened).
 //   npx tsx src/headless/render-replay.ts run1/progress_0100000.json [more.json ...] --outdir videos/run1
-//     [--fps 30] [--size 720x1280] [--label "AI · run 1"] [--tail 1.5]
+//     [--fps 30] [--size 720x1280] [--label "AI · run 1"] [--tail 1.5] [--character boy|girl|seed]
+// --character seed (default) picks the runner from the track seed, so AI videos alternate.
 // Needs Playwright's Chromium (npx playwright install chromium) and ffmpeg on PATH.
 import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -23,6 +24,7 @@ const [w, h] = opt("size", "720x1280").split("x").map(Number);
 const label = opt("label", "");
 const tail = Number(opt("tail", "1.5"));
 const outdir = opt("outdir", ".");
+const character = opt("character", "seed");
 const inputs = args;
 if (!inputs.length) throw new Error("give one or more replay .json files");
 const ticksPerFrame = TICK_HZ / fps;
@@ -44,6 +46,8 @@ for (const file of inputs) {
   const ff = spawn("ffmpeg", ["-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", String(fps), "-i", "-",
     "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", "-movflags", "+faststart", out], { stdio: ["pipe", "inherit", "inherit"] });
   const t0 = performance.now();
+  const who = character === "seed" ? (replay.seed % 2 ? "girl" : "boy") : character;
+  await page.evaluate((id) => (window as any).replayApi.character(id), who);
   await page.evaluate(([r, l]) => (window as any).replayApi.load(r, l), [replay, label || `track ${replay.seed}`]);
   let frames = 0, extra = Math.round(tail * fps), done = false;
   while (!done || extra-- > 0) {

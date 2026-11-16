@@ -1,9 +1,11 @@
 // The score display, shared by the game page and the replay/video page.
+import * as C from "../core/config";
 import { TICK_HZ } from "../core/config";
 import type { Game } from "../core/game";
 
 export function mountHud(root: HTMLElement, label = "") {
   root.insertAdjacentHTML("beforeend", `
+    <div class="lightsout" data-lightsout></div>
     <div class="hud"><div><small>score</small><b data-score>0</b></div>
       <div style="text-align:right"><small data-meta></small><small data-seed></small><small data-label></small></div></div>
     <div class="powers" data-powers></div>`);
@@ -11,6 +13,11 @@ export function mountHud(root: HTMLElement, label = "") {
   q("label").textContent = label;
   return {
     update(g: Game): void {
+      // the chaser: a blackout closing in from behind and the edges. The only truly dark thing.
+      const near = g.chaserTicks > 0
+        ? 0.55 + 0.4 * Math.min(1, g.stumbleCount / Math.max(1, g.options.stumblesToCatch - 1))
+        : Math.max(0, 1 - (g.chaserGap - C.CHASER_CLOSE) / 25000) * 0.5;
+      q("lightsout").style.opacity = String(g.dead && g.deathCause === "caught" ? 1 : near);
       q("score").textContent = String(g.score);
       q("meta").textContent = `${g.meters} m · ${g.coins} coins`;
       q("seed").textContent = `track ${g.seed}`;

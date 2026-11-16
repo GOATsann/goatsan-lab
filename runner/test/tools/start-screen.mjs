@@ -1,0 +1,25 @@
+// Start screen + a few seconds of play on a phone-size screen: node test/tools/start-screen.mjs <outdir>
+import { chromium } from "playwright";
+const out = process.argv[2];
+const b = await chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
+const p = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+const errs = []; p.on("pageerror", (e) => errs.push(e.message)); p.on("console", (m) => m.type() === "error" && errs.push(m.text()));
+await p.goto("http://localhost:5180/?seed=7");
+await p.waitForTimeout(4000);
+await p.screenshot({ path: `${out}/start-kai.png` });
+await p.click("#next"); await p.waitForTimeout(2500);
+await p.fill("#name", "Ike");
+await p.screenshot({ path: `${out}/start-nova.png` });
+const picked = await p.textContent("#charName");
+await p.click("#play"); await p.waitForTimeout(2500);
+await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(300);
+await p.keyboard.press("ArrowUp"); await p.waitForTimeout(250);
+await p.screenshot({ path: `${out}/play-jump.png` });
+await p.waitForTimeout(1500);
+await p.keyboard.press("ArrowDown"); await p.waitForTimeout(200);
+await p.screenshot({ path: `${out}/play-roll.png` });
+const st = await p.evaluate(() => { const g = window.game(); return { tick: g.tick, m: g.meters, dead: g.dead, cause: g.deathCause, label: document.querySelector("[data-label]").textContent }; });
+await p.reload(); await p.waitForTimeout(3000);
+const remembered = { name: await p.inputValue("#name"), runner: await p.textContent("#charName") };
+console.log(JSON.stringify({ picked, st, remembered, errors: errs.length ? errs : "none" }));
+await b.close();

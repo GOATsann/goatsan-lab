@@ -12,16 +12,23 @@ export const NOOP = 0, LEFT = 1, RIGHT = 2, JUMP = 3, ROLL = 4;
 export type Action = 0 | 1 | 2 | 3 | 4;
 export const ACTION_NAMES = ["nothing", "left", "right", "jump", "roll"] as const;
 
-export const VERSION = 1; // bump when the rules change: old replays no longer match
+export const VERSION = 3; // bump when the rules change: old replays no longer match
 
 /** Every way a run can end. Index 0 = still alive. The batch server sends the index. */
-export const DEATH_CAUSES = [
-  "", "low front", "high front", "train front", "oncoming train",
-  "low side, twice", "high side, twice", "train side, twice",
-] as const;
+export const DEATH_CAUSES = ["", "train front", "oncoming train", "caught"] as const;
 
 export type ObstacleKind = "low" | "high" | "train" | "ramp";
-export type PickupKind = "coin" | "magnet" | "spring" | "double";
+export type PickupKind = "coin" | "magnet" | "spring" | "double" | "shield";
+export const POWER_KINDS: PickupKind[] = ["magnet", "spring", "double", "shield"];
+
+/** Rule switches. They are part of every replay. */
+export interface GameOptions {
+  /** false = no power-ups on the track (same track otherwise; for clean benchmarks) */
+  powerups: boolean;
+  /** stumbles in a row (while the chaser is close) that end the run; 2 = the second one catches you */
+  stumblesToCatch: number;
+}
+export const DEFAULT_OPTIONS: GameOptions = { powerups: true, stumblesToCatch: 2 };
 
 export interface Obstacle {
   id: number;
@@ -31,6 +38,7 @@ export interface Obstacle {
   z1: number; // far end
   moving: boolean;
   awake: boolean;
+  broken: boolean; // a barrier you stumbled through
 }
 
 export interface Pickup {
@@ -51,12 +59,13 @@ export interface Events {
   rolls: number;
   laneChanges: number;
   stumbles: number;
+  shieldsUsed: number;
   died: number; // 0 or 1
   deathCause: string;
 }
 
 export const emptyEvents = (): Events => ({
-  distance: 0, coins: 0, powerups: 0, jumps: 0, rolls: 0, laneChanges: 0, stumbles: 0, died: 0, deathCause: "",
+  distance: 0, coins: 0, powerups: 0, jumps: 0, rolls: 0, laneChanges: 0, stumbles: 0, shieldsUsed: 0, died: 0, deathCause: "",
 });
 
 export const laneX = (lane: number) => (lane - 1) * C.LANE_WIDTH;
@@ -64,6 +73,7 @@ export const laneX = (lane: number) => (lane - 1) * C.LANE_WIDTH;
 export interface Replay {
   version: number;
   seed: number;
+  options: GameOptions;
   endTick: number;
   /** sparse list of [tick, action]; every other tick is "nothing" */
   actions: [number, Action][];
@@ -71,6 +81,7 @@ export interface Replay {
 
 export class Game {
   readonly seed: number;
+  readonly options: GameOptions;
   private rng: Rng;
   tick = 0;
 
@@ -83,12 +94,21 @@ export class Game {
   grounded = true;
   rollTicks = 0;
   rollQueued = false;
-  stumbleTicks = 0;
+  rollCooldown = 0;
   bounceIgnore = -1; // obstacle we just bounced off; ignored while we slide back
-  speed = C.START_SPEED;
+  speed = C.START_SPEED; // base speed; slower for a moment after a stumble
+  slowTicks = 0;
   magnetTicks = 0;
   springTicks = 0;
   doubleTicks = 0;
+  shieldTicks = 0;
+  graceTicks = 0; // no collisions right after a shield breaks
+  passThrough = -1; // a train the shield let us run through; ignored until it is behind us
+
+  // the chaser
+  chaserTicks = 0; // > 0: close behind you
+  chaserGap = C.CHASER_FAR; // mm behind the runner
+  stumbleCount = 0; // stumbles while the chaser has been close
 
   // result
   coins = 0;
@@ -103,8 +123,9 @@ export class Game {
   private log: [number, Action][] = [];
   events: Events = emptyEvents();
 
-  constructor(seed: number) {
+  constructor(seed: number, options: Partial<GameOptions> = {}) {
     this.seed = seed >>> 0;
+    this.options = { ...DEFAULT_OPTIONS, ...options };
     this.rng = new Rng(this.seed);
     this.buildTrack();
   }
@@ -121,6 +142,11 @@ export class Game {
     return this.rollTicks > 0;
   }
 
+  /** Speed this tick: the base speed, or 60% of it right after a stumble. */
+  get currentSpeed(): number {
+    return this.slowTicks > 0 ? Math.floor((this.speed * C.STUMBLE_SLOW_PCT) / 100) : this.speed;
+  }
+
   /** Advance one tick (1/60 s). `action` applies at this tick; use NOOP otherwise. */
   step(action: Action = NOOP): void {
     if (this.dead) return;
@@ -132,11 +158,16 @@ export class Game {
     if (this.x < tx) this.x = Math.min(tx, this.x + C.LANE_STEP);
     else if (this.x > tx) this.x = Math.max(tx, this.x - C.LANE_STEP);
     if (this.bounceIgnore >= 0 && this.x === tx) this.bounceIgnore = -1;
+    if (this.passThrough >= 0) {
+      const o = this.obstacles.find((ob) => ob.id === this.passThrough);
+      if (!o || o.z1 < this.z - C.PLAYER_LEN) this.passThrough = -1;
+    }
 
     // forward
     const prevZ = this.z;
-    this.z += this.speed;
-    this.events.distance += this.speed;
+    const v = this.currentSpeed;
+    this.z += v;
+    this.events.distance += v;
     for (const o of this.obstacles) {
       if (!o.moving) continue;
       if (!o.awake && o.z0 - this.z < C.MOVING_TRAIN_WAKE) o.awake = true;
@@ -161,13 +192,22 @@ export class Game {
     } else {
       this.grounded = false;
     }
-    if (this.rollTicks > 0) this.rollTicks--;
+    if (this.rollTicks > 0) {
+      this.rollTicks--;
+      if (this.rollTicks === 0) this.rollCooldown = C.ROLL_COOLDOWN;
+    } else if (this.rollCooldown > 0) this.rollCooldown--;
 
     this.collide(prevZ);
     if (!this.dead) this.pickUp();
 
     // timers
-    if (this.stumbleTicks > 0) this.stumbleTicks--;
+    if (this.slowTicks > 0) this.slowTicks--;
+    if (this.graceTicks > 0) this.graceTicks--;
+    if (this.chaserTicks > 0) {
+      this.chaserTicks--;
+      if (this.chaserTicks === 0) this.stumbleCount = 0; // ran clean long enough
+    } else if (this.chaserGap < C.CHASER_FAR) this.chaserGap = Math.min(C.CHASER_FAR, this.chaserGap + C.CHASER_DROP);
+    if (this.shieldTicks > 0) this.shieldTicks--;
     if (this.magnetTicks > 0) this.magnetTicks--;
     if (this.springTicks > 0) this.springTicks--;
     if (this.doubleTicks > 0) this.doubleTicks--;
@@ -184,12 +224,12 @@ export class Game {
   }
 
   replay(): Replay {
-    return { version: VERSION, seed: this.seed, endTick: this.tick, actions: this.log.slice() };
+    return { version: VERSION, seed: this.seed, options: { ...this.options }, endTick: this.tick, actions: this.log.slice() };
   }
 
   static fromReplay(r: Replay, upToTick = r.endTick): Game {
     if (r.version !== VERSION) throw new Error(`replay is for rules v${r.version}, this core is v${VERSION}`);
-    const g = new Game(r.seed);
+    const g = new Game(r.seed, r.options);
     let i = 0;
     while (g.tick < upToTick && !g.dead) {
       let a: Action = NOOP;
@@ -221,11 +261,12 @@ export class Game {
         h = Math.imul(h, 0x01000193) >>> 0;
       }
     };
-    for (const v of [this.tick, this.z, this.x, this.y, this.vy, this.lane, this.rollTicks, this.speed,
-      this.coins, this.coinScore, this.dead ? 1 : 0, this.stumbleTicks, this.magnetTicks, this.springTicks,
-      this.doubleTicks, this.nextChunkZ]) mix(v);
+    for (const v of [this.tick, this.z, this.x, this.y, this.vy, this.lane, this.rollTicks, this.rollCooldown, this.speed,
+      this.coins, this.coinScore, this.dead ? 1 : 0, this.slowTicks, this.magnetTicks, this.springTicks,
+      this.doubleTicks, this.shieldTicks, this.graceTicks, this.passThrough, this.chaserTicks, this.chaserGap, this.stumbleCount,
+      this.nextChunkZ, this.options.powerups ? 1 : 0, this.options.stumblesToCatch]) mix(v);
     for (const s of this.rng.s) mix(s);
-    for (const o of this.obstacles) { mix(o.id); mix(o.z0); mix(o.lane); }
+    for (const o of this.obstacles) { mix(o.id); mix(o.z0); mix(o.lane); mix(o.broken ? 1 : 0); }
     for (const p of this.pickups) { mix(p.id); mix(p.taken ? 1 : 0); }
     return h >>> 0;
   }
@@ -247,6 +288,8 @@ export class Game {
         this.events.jumps++;
       }
     } else if (a === ROLL) {
+      // a roll is a fixed 0.6 s move: pressing roll again while rolling does nothing (no endless roll)
+      if (this.rolling || this.rollCooldown > 0) return;
       if (this.grounded) this.rollTicks = C.ROLL_TICKS;
       else {
         this.vy = Math.min(this.vy, C.FAST_DROP_V);
@@ -272,10 +315,11 @@ export class Game {
   }
 
   private collide(prevZ: number): void {
+    if (this.graceTicks > 0) return;
     const h = this.rolling ? C.PLAYER_ROLL_H : C.PLAYER_H;
     const pz0 = this.z - C.PLAYER_LEN / 2, pz1 = this.z + C.PLAYER_LEN / 2;
     for (const o of this.obstacles) {
-      if (o.kind === "ramp" || o.id === this.bounceIgnore) continue;
+      if (o.kind === "ramp" || o.broken || o.id === this.bounceIgnore || o.id === this.passThrough) continue;
       if (!this.overlapsX(o.lane, C.OBSTACLE_W / 2)) continue;
       if (pz1 <= o.z0 || pz0 >= o.z1) continue;
       const [y0, y1] = o.kind === "low" ? [C.LOW_BARRIER.y0, C.LOW_BARRIER.y1]
@@ -286,17 +330,36 @@ export class Game {
       // Already level with it last tick? Then we came in from the side (a lane change into it).
       const mv = o.moving && o.awake ? C.MOVING_TRAIN_SPEED : 0;
       const wasLevel = prevZ + C.PLAYER_LEN / 2 > o.z0 + mv && prevZ - C.PLAYER_LEN / 2 < o.z1 + mv;
-      if (wasLevel && this.x !== laneX(this.lane)) {
-        this.events.stumbles++;
-        if (this.stumbleTicks > 0) return this.die(`${o.kind} side, twice`);
-        this.stumbleTicks = C.STUMBLE_TICKS;
-        this.bounceIgnore = o.id;
-        // bounce back to the lane next to it, on the side we came from
-        this.lane = o.lane + (this.x < laneX(o.lane) ? -1 : 1);
-        continue;
+      const side = wasLevel && this.x !== laneX(this.lane);
+
+      if (this.shieldTicks > 0) {
+        // the shield takes the hit: pass through this one, no stumble
+        this.shieldTicks = 0;
+        this.graceTicks = C.SHIELD_GRACE;
+        this.events.shieldsUsed++;
+        if (o.kind !== "train") o.broken = true;
+        else this.passThrough = o.id;
+        return;
       }
-      return this.die(o.moving ? "oncoming train" : `${o.kind} front`);
+      if (side) {
+        // bounce back to the lane next to it, on the side we came from
+        this.bounceIgnore = o.id;
+        this.lane = o.lane + (this.x < laneX(o.lane) ? -1 : 1);
+        return this.stumble();
+      }
+      if (o.kind === "train") return this.die(o.moving ? "oncoming train" : "train front");
+      o.broken = true; // crash through the barrier
+      return this.stumble();
     }
+  }
+
+  private stumble(): void {
+    this.events.stumbles++;
+    this.slowTicks = C.STUMBLE_SLOW_TICKS;
+    this.stumbleCount = this.chaserTicks > 0 ? this.stumbleCount + 1 : 1;
+    this.chaserTicks = C.CHASER_TICKS;
+    this.chaserGap = C.CHASER_CLOSE;
+    if (this.stumbleCount >= this.options.stumblesToCatch) this.die("caught");
   }
 
   private die(cause: string): void {
@@ -327,6 +390,7 @@ export class Game {
         if (p.kind === "magnet") this.magnetTicks = C.POWER_TICKS;
         if (p.kind === "spring") this.springTicks = C.POWER_TICKS;
         if (p.kind === "double") this.doubleTicks = C.POWER_TICKS;
+        if (p.kind === "shield") this.shieldTicks = C.SHIELD_TICKS;
       }
     }
   }
@@ -351,12 +415,13 @@ export class Game {
   private place(kind: ItemKind, lane: number, z: number, onRoof: boolean, lift: number): void {
     const id = this.nextId++;
     switch (kind) {
-      case "low": this.obstacles.push({ id, kind, lane, z0: z, z1: z + C.LOW_BARRIER.len, moving: false, awake: false }); break;
-      case "high": this.obstacles.push({ id, kind, lane, z0: z, z1: z + C.HIGH_BARRIER.len, moving: false, awake: false }); break;
-      case "train": this.obstacles.push({ id, kind, lane, z0: z, z1: z + C.TRAIN.len, moving: false, awake: false }); break;
-      case "movingTrain": this.obstacles.push({ id, kind: "train", lane, z0: z, z1: z + C.TRAIN.len, moving: true, awake: false }); break;
-      case "ramp": this.obstacles.push({ id, kind, lane, z0: z, z1: z + C.RAMP_LEN, moving: false, awake: false }); break;
+      case "low": this.obstacles.push({ id, kind, lane, z0: z, z1: z + C.LOW_BARRIER.len, moving: false, awake: false, broken: false }); break;
+      case "high": this.obstacles.push({ id, kind, lane, z0: z, z1: z + C.HIGH_BARRIER.len, moving: false, awake: false, broken: false }); break;
+      case "train": this.obstacles.push({ id, kind, lane, z0: z, z1: z + C.TRAIN.len, moving: false, awake: false, broken: false }); break;
+      case "movingTrain": this.obstacles.push({ id, kind: "train", lane, z0: z, z1: z + C.TRAIN.len, moving: true, awake: false, broken: false }); break;
+      case "ramp": this.obstacles.push({ id, kind, lane, z0: z, z1: z + C.RAMP_LEN, moving: false, awake: false, broken: false }); break;
       default: {
+        if (kind !== "coin" && !this.options.powerups) break; // same track, minus the power-ups
         const y = (onRoof ? C.TRAIN.height : 0) + C.COIN_HEIGHT + lift;
         this.pickups.push({ id, kind, lane, z, y, taken: false });
       }
@@ -372,7 +437,7 @@ export class ReplayPlayer {
   private i = 0;
   constructor(readonly replay: Replay) {
     if (replay.version !== VERSION) throw new Error(`replay is for rules v${replay.version}, this core is v${VERSION}`);
-    this.game = new Game(replay.seed);
+    this.game = new Game(replay.seed, replay.options);
   }
   get done(): boolean {
     return this.game.dead || this.game.tick >= this.replay.endTick;

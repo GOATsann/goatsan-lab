@@ -2,12 +2,14 @@
 // or played in real time when opened with ?src=<replay.json url>.
 import { TICK_HZ } from "../core/config";
 import { ReplayPlayer, type Replay } from "../core/game";
+import { loadCharacters, makeCharacter } from "./character";
 import { mountHud } from "./hud";
 import { Renderer } from "./render";
 
 const canvas = document.createElement("canvas");
 document.body.prepend(canvas);
 const renderer = new Renderer(canvas);
+(window as unknown as { renderer: Renderer }).renderer = renderer; // debugging
 const hud = mountHud(document.body);
 let player: ReplayPlayer | null = null;
 
@@ -18,6 +20,11 @@ window.addEventListener("resize", resize);
 resize();
 
 const api = {
+  /** Swap in a runner model (by id, e.g. "boy"). Await before rendering frames. */
+  async character(id: string): Promise<void> {
+    const info = (await loadCharacters()).find((c) => c.id === id);
+    if (info) renderer.setCharacter(await makeCharacter(info));
+  },
   load(replay: Replay, label = ""): void {
     player = new ReplayPlayer(replay);
     hud.label(label);
@@ -28,7 +35,7 @@ const api = {
   frame(ticks: number): boolean {
     if (!player) return true;
     for (let i = 0; i < ticks; i++) player.step();
-    renderer.draw(player.game);
+    renderer.draw(player.game, ticks / TICK_HZ); // fixed animation time: videos look the same every render
     hud.update(player.game);
     return player.done;
   },

@@ -10,6 +10,7 @@ export class Input {
       const a = KEYS[e.key];
       if (a !== undefined) {
         e.preventDefault();
+        if (e.repeat) return; // a held key is one press, not a stream of them
         this.queue.push(a);
       } else if (e.key === " " || e.key === "Enter") {
         e.preventDefault();

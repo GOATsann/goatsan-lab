@@ -5,7 +5,7 @@
 // Lanes here are "slots" a, b, c (0, 1, 2) that get mapped to real lanes by a random permutation.
 // z is in mm from the start of the chunk.
 
-export type ItemKind = "low" | "high" | "train" | "movingTrain" | "ramp" | "coin" | "magnet" | "spring" | "double";
+export type ItemKind = "low" | "high" | "train" | "movingTrain" | "ramp" | "coin" | "magnet" | "spring" | "double" | "shield";
 
 export interface ChunkItem {
   kind: ItemKind;
@@ -88,6 +88,13 @@ export const CHUNKS: Chunk[] = [
     minMeters: 200,
     weight: 1,
     items: [{ kind: "double", slot: 2, z: 15000 }, ...coinLine(2, 18000, 4)],
+  },
+  {
+    name: "shield",
+    len: 30000,
+    minMeters: 500,
+    weight: 1,
+    items: [{ kind: "shield", slot: 1, z: 15000 }, ...coinLine(0, 12000, 4)],
   },
   {
     name: "two trains",

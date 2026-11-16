@@ -19,6 +19,7 @@ export const JUMP_V = 162; // → about 1.46 m high, 0.6 s in the air
 export const SPRING_JUMP_V = 230; // with spring shoes → about 2.9 m
 export const FAST_DROP_V = -240; // roll in the air = drop fast
 export const ROLL_TICKS = 36; // 0.6 s
+export const ROLL_COOLDOWN = 12; // stand at least 0.2 s between rolls (no endless roll)
 
 export const PLAYER_W = 800;
 export const PLAYER_LEN = 600;
@@ -34,11 +35,22 @@ export const RAMP_LEN = 8000; // rises from the ground to the train roof
 export const MOVING_TRAIN_SPEED = 120; // mm/tick toward the player
 export const MOVING_TRAIN_WAKE = 60000; // starts moving when the player is this close
 
+// Stumbles and the chaser ("lights-out": a blackout rolling down the street behind you).
+// A side hit or a barrier hit is a stumble: you break through, slow down, and the chaser closes in.
+// Stumble again while it is close and it catches you. Head-on into a train still ends the run.
+export const STUMBLE_SLOW_TICKS = 60; // 1 s at 60% speed
+export const STUMBLE_SLOW_PCT = 60;
+export const CHASER_TICKS = 300; // the chaser stays close for 5 s after a stumble
+export const CHASER_CLOSE = 3000; // mm behind the runner right after a stumble
+export const CHASER_FAR = 40000; // where it drops back to when you run clean
+export const CHASER_DROP = 60; // mm per tick it falls back
+export const SHIELD_TICKS = 1800; // a shield lasts 30 s or until it absorbs one hit
+export const SHIELD_GRACE = 45; // ticks of no collisions after the shield breaks
+
 export const COIN_REACH = 700; // pickup box half-size
 export const COIN_HEIGHT = 700; // above the surface
 export const MAGNET_REACH = 30000; // magnet pulls coins this far ahead, any lane
 export const POWER_TICKS = 600; // power-ups last 10 s
-export const STUMBLE_TICKS = 300; // a second side hit within 5 s ends the run
 
 export const VIEW_DISTANCE = 96000; // how far ahead the track exists (and the AI may look)
 export const RUNWAY = 40000; // empty start

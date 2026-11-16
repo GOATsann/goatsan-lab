@@ -4,11 +4,11 @@ import { Game, NOOP, type Action } from "./game";
 
 const ACTIONS: Action[] = [0, 1, 2, 3, 4];
 
-/** Survive `decisions` more decisions doing nothing after `first`? */
+/** Survive `decisions` more decisions doing nothing after `first`, with no stumble? */
 function survives(g: Game, first: Action, decisions: number): boolean {
   const c = g.clone();
-  c.decide(first);
-  for (let i = 0; i < decisions && !c.dead; i++) c.decide(NOOP);
+  if (c.decide(first).stumbles) return false;
+  for (let i = 0; i < decisions && !c.dead; i++) if (c.decide(NOOP).stumbles) return false;
   return !c.dead;
 }
 
@@ -20,11 +20,10 @@ function safe(g: Game, depth: number, horizon: number): Action | -1 {
   if (depth === 0) return -1;
   for (const a of ACTIONS) {
     const c = g.clone();
-    c.decide(a);
-    if (c.dead) continue;
+    if (c.decide(a).stumbles || c.dead) continue;
     for (let wait = 0; wait < 6 && !c.dead; wait++) {
       if (safe(c, depth - 1, horizon) !== -1) return a;
-      c.decide(NOOP);
+      if (c.decide(NOOP).stumbles) break;
     }
   }
   return -1;

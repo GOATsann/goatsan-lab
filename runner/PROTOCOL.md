@@ -17,8 +17,13 @@ here first. Server: `src/headless/server.ts`.
 Python -> server:
 
 ```json
-{ "n_envs": 64, "seed_base": 1000000, "max_ticks": 36000 }
+{ "n_envs": 64, "seed_base": 1000000, "max_ticks": 36000,
+  "powerups": true, "stumbles_to_catch": 2, "observe_chaser": false }
 ```
+
+- `powerups`, `stumbles_to_catch`, `observe_chaser` are optional (defaults shown). `powerups: false`
+  gives the same tracks without power-ups (for clean benchmarks). `observe_chaser: false` keeps the
+  chaser's two state values at 0, so the AI cannot see it.
 
 - `seed_base`: env `i`'s k-th episode uses seed `seed_base + k * n_envs + i` (deterministic, no
   overlap between envs). Benchmark seeds (1000-1099) stay out of the training range.
@@ -28,18 +33,37 @@ Server -> Python:
 
 ```json
 {
-  "version": 1,
-  "obs_size": 782,
+  "version": 3,
+  "obs_size": 1073,
   "n_actions": 5,
   "decision_ticks": 4,
   "event_fields": ["distance", "coins", "powerups", "jumps", "rolls", "laneChanges", "stumbles", "died",
-                   "score", "meters", "ticks"],
-  "death_causes": ["", "low front", "high front", "train front", "oncoming train",
-                   "low side, twice", "high side, twice", "train side, twice"]
+                   "score", "meters", "ticks", "shieldsUsed"],
+  "death_causes": ["", "train front", "oncoming train", "caught"],
+  "rules": { "powerups": true, "stumblesToCatch": 2 },
+  "observe_chaser": false,
+  "obs_layout": {
+    "lanes": 3, "rows": 32, "row_len_mm": 3000, "first_row_offset_mm": -3000,
+    "channels": ["low", "high", "trainFront", "trainBody", "ramp", "coin", "moving",
+                 "magnet", "spring", "double", "shield"],
+    "grid_order": "lane,row,channel",
+    "state": ["lane0", "lane1", "lane2", "x", "y", "vy", "grounded", "rolling", "onRoof", "speed",
+              "slowed", "magnet", "spring", "double", "shield", "chaserNear", "stumbleCount"]
+  }
 }
 ```
 
 `version` is `Game.VERSION`; Python stores it with every run, and refuses replays of another version.
+Grid index = `(lane * rows + row) * channels + channel`; the state values follow the grid.
+
+Rules v2 (stumbles and the chaser): running into a barrier or changing lanes into the side of
+anything is a **stumble** (you break through or bounce back, slow to 60% for 1 s, and the chaser closes
+in for 5 s). A stumble while the chaser is still close adds up; reaching `stumbles_to_catch` = **caught**
+(game over). Running clean for 5 s resets it. Head-on into a train still ends the run. A **shield**
+power-up absorbs one hit of any kind (event `shieldsUsed`). Replays store the rule options.
+
+Rules v3: a roll is a fixed 0.6 s move. Roll pressed while rolling does nothing, and after a roll the
+runner stands for at least 0.2 s before it can roll again (no endless roll, for humans or the AI).
 
 ## Commands
 
@@ -76,8 +100,8 @@ Python: `u8 4`, `u16 env`, `u32 seed`. Resets that env to exactly this seed (out
 Reply: `f32 obs[obs_size]` (that env's first observation). The next steps continue normally; after it
 finishes, the env goes back to its seed stream.
 
-Death causes come from `DEATH_CAUSES` in `src/core/game.ts` ("front" = ran into it; "side, twice" = a
-second lane change into something within 5 s; "oncoming train" = hit by a moving train).
+Death causes come from `DEATH_CAUSES` in `src/core/game.ts`: "train front" (ran into a standing train),
+"oncoming train" (hit by a moving one), "caught" (by the chaser, after too many stumbles in a row).
 
 ### 0 = close
 

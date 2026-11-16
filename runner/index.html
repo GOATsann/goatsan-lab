@@ -3,15 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Untitled Runner</title>
+<title>Lights-Out Surfer</title>
 <link rel="stylesheet" href="/src/web/styles/game.css">
 </head>
 <body>
 <div class="overlay" id="overlay">
-  <h1 id="title">Untitled Runner</h1>
+  <h1 id="title">Lights-Out Surfer</h1>
   <p id="sub">Make it home before lights-out.</p>
-  <p><kbd>←</kbd> <kbd>→</kbd> change lane · <kbd>↑</kbd> jump · <kbd>↓</kbd> roll · or swipe</p>
-  <p><kbd>Space</kbd> or tap to run</p>
+  <div class="picker" id="picker">
+    <button class="arrow" id="prev" aria-label="Previous runner">‹</button>
+    <div class="who"><b id="charName">Kai</b><small>your runner</small></div>
+    <button class="arrow" id="next" aria-label="Next runner">›</button>
+  </div>
+  <label class="name">Your name<input id="name" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Player"></label>
+  <div class="buttons">
+    <button class="primary" id="play">Run</button>
+    <button id="race" hidden>Race the AI</button>
+  </div>
+  <p class="hint"><kbd>←</kbd> <kbd>→</kbd> change lane · <kbd>↑</kbd> jump · <kbd>↓</kbd> roll · or swipe</p>
 </div>
 <script type="module" src="/src/web/main.ts"></script>
 </body>
