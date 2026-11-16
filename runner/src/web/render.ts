@@ -58,6 +58,8 @@ export class Renderer {
   private ghost = new Ghost();
   private effects = new Effects();
   private lastTime = performance.now();
+  private endShift = 0; // 0..1: after a crash the view slides up, so the runner sits above the card
+  private size = { w: 1, h: 1 };
   private mat: Record<string, THREE.Material>;
   private key: THREE.SpotLight;
   private rim: THREE.SpotLight;
@@ -164,6 +166,9 @@ export class Renderer {
     this.camera.position.set(0, 3.2, 6.5);
   }
 
+  /** Slide the view up after a crash (the game page shows a card over the lower part). */
+  endShiftOn = false;
+
   setCharacter(view: CharacterView): void {
     this.scene.remove(this.character.object);
     this.character = view;
@@ -172,6 +177,7 @@ export class Renderer {
 
   resize(w: number, h: number): void {
     this.gl.setSize(w, h); // also sets the CSS size; without it, high-DPI phones show only a corner
+    this.size = { w, h };
     this.composer?.setSize(w, h);
     this.camera.aspect = w / h;
     // keep the 3 lanes in view on tall screens (phones, vertical video): fix the horizontal angle
@@ -244,6 +250,10 @@ export class Renderer {
     this.camera.position.y += (cy - this.camera.position.y) * k;
     this.camera.position.z = portrait ? 4.8 : 6.5;
     this.camera.lookAt(g.x * M * 0.4, (portrait ? 1.1 : 1.3) + g.y * M * 0.85, -8);
+    // end of run: ease the picture up (a view offset, no camera move), so the crash scene shows above the card
+    this.endShift += ((g.dead && this.endShiftOn ? 1 : 0) - this.endShift) * Math.min(1, step * 3);
+    if (this.endShift > 0.001) this.camera.setViewOffset(this.size.w, this.size.h, 0, this.endShift * 0.3 * this.size.h, this.size.w, this.size.h);
+    else this.camera.clearViewOffset();
     if (this.composer) this.composer.render(step);
     else this.gl.render(this.scene, this.camera);
   }

@@ -1,6 +1,6 @@
 // "The Blackout": the chaser. A small pale sheet ghost with dark eyes and a dark outline (no glow).
-// It follows in the runner's lane, a moment late, reaching forward with sheet-hands that grab as it
-// closes in. When it catches you it circles you while dizzy stars spin over your head.
+// It hovers behind the runner, a moment late on lane changes, reaching forward with sheet-hands that
+// grab as it closes in. At the end of every run it swoops in and circles you while dizzy stars spin.
 // Visual only: the rules live in the core (chaserTicks, chaserGap, stumbleCount).
 import * as THREE from "three";
 import * as C from "../core/config";
@@ -14,11 +14,12 @@ export class Ghost {
   private t = 0;
   private x = 0; // lags behind the runner's lane changes
   private caughtT = -1;
+  private from = new THREE.Vector3(); // where the end-of-run swoop starts
 
   constructor() {
     const geo = sheetGeometry();
     // pale but matte: readable without glowing under the bloom
-    const body = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xb4b9d0, roughness: 0.95 }));
+    const body = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x8f94ad, roughness: 1 }));
     const outline = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x0a0b18, side: THREE.BackSide }));
     outline.scale.setScalar(1.07);
     outline.position.y = -0.02;
@@ -67,18 +68,24 @@ export class Ghost {
   update(g: Game, dt: number, camZ = 6.5): void {
     this.t += dt;
     const rx = g.x / 1000, ry = g.y / 1000;
-    const caught = g.dead && g.deathCause === "caught";
-    if (!caught) this.caughtT = -1;
 
-    if (caught) {
-      // circle the runner, then hover beside them; dizzy stars over the head
-      if (this.caughtT < 0) this.caughtT = 0;
+    if (g.dead) {
+      // every run end: the ghost swoops in and circles the runner; dizzy stars spin over the head.
+      // It keeps going (slower after two fast loops) for as long as the card is up.
+      if (this.caughtT < 0) {
+        this.caughtT = 0;
+        this.from.copy(this.object.visible ? this.object.position : new THREE.Vector3(rx, 3, camZ + 2));
+      }
       this.caughtT += dt;
-      const a = Math.min(this.caughtT, 1.6) * 2 * Math.PI * 1.25 + Math.PI / 2;
+      const fast = 1.6, wFast = (2 * Math.PI * 2) / fast, wSlow = 1.3;
+      const a = Math.PI / 2 + (this.caughtT < fast ? this.caughtT * wFast : fast * wFast + (this.caughtT - fast) * wSlow);
+      const orbit = new THREE.Vector3(rx + Math.cos(a) * 1.4, ry + 1.25 + Math.sin(this.t * 3) * 0.1, Math.sin(a) * 1.4);
+      const swoop = Math.min(1, this.caughtT / 0.5);
+      this.object.position.lerpVectors(this.from, orbit, 1 - (1 - swoop) ** 3);
       this.object.visible = true;
-      this.object.position.set(rx + Math.cos(a) * 1.3, ry + 0.9 + Math.sin(this.t * 3) * 0.08, Math.sin(a) * 1.3);
-      this.object.scale.setScalar(0.6);
+      this.object.scale.setScalar(0.8);
       this.sheet.rotation.set(0, -a - Math.PI / 2, 0);
+      this.hands.forEach((h, i) => { h.rotation.x = -0.6 + Math.sin(this.t * 8 + i * Math.PI) * 0.3; });
       this.stars.visible = true;
       this.stars.position.set(rx, ry + 0.75, 0.2);
       this.stars.children.forEach((s) => {
@@ -88,6 +95,7 @@ export class Ghost {
       });
       return;
     }
+    this.caughtT = -1;
     this.stars.visible = false;
 
     const near = Ghost.closeness(g);
@@ -96,13 +104,15 @@ export class Ghost {
       this.x = rx;
       return;
     }
-    // same lane as the runner, a moment late; behind and low, so it never hides the runner
-    this.x += (rx - this.x) * Math.min(1, dt * 5);
+    // hovering behind the runner, ~1 m off the ground, offset toward the edge of the frame so it
+    // never covers the runner or the track ahead; it follows lane changes a moment late
+    const side = rx > 0.5 ? -1.2 : 1.2;
+    this.x += (rx + side - this.x) * Math.min(1, dt * 4);
     const gapM = g.chaserGap / 1000;
-    this.object.position.set(this.x, 0.3 + ry * 0.9 + Math.sin(this.t * 2.6) * 0.08, Math.min(camZ - 3, 1.2 + gapM * 0.25));
-    this.object.scale.setScalar(0.32 + near * 0.16);
+    this.object.position.set(this.x, 1.0 + ry * 0.9 + Math.sin(this.t * 2.2) * 0.12, Math.min(camZ - 3, 1.0 + gapM * 0.25));
+    this.object.scale.setScalar(0.45 + near * 0.22);
     // lean in and grab: arms reach further and clutch faster the closer it is
-    this.sheet.rotation.set(-0.25 * near, Math.sin(this.t * 1.3) * 0.15, Math.sin(this.t * 2.2) * 0.05);
+    this.sheet.rotation.set(-0.25 * near, Math.sin(this.t * 1.3) * 0.15 - side * 0.15, Math.sin(this.t * 2.2) * 0.05);
     this.hands.forEach((h, i) => {
       const grab = Math.sin(this.t * (6 + 6 * near) + i * Math.PI);
       h.rotation.x = -0.4 - 0.5 * near + grab * 0.35 * near;

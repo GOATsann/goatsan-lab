@@ -4,6 +4,7 @@ import { TICK_HZ } from "../core/config";
 import { Game } from "../core/game";
 import { loadCharacters, makeCharacter, type CharacterInfo, type CharacterView } from "./character";
 import { Sfx } from "./audio";
+import { mountSoundControls } from "./sound-controls";
 import { mountHud } from "./hud";
 import { Input } from "./input";
 import { Renderer } from "./render";
@@ -25,6 +26,7 @@ let level = (Number(store.get("level") ?? 1) || 0) as 0 | 1 | 2;
 if (![0, 1, 2].includes(level)) level = 1;
 let game = new Game(newSeed(), { level });
 const renderer = new Renderer(canvas, { seed: game.seed });
+renderer.endShiftOn = true;
 const input = new Input(canvas);
 const hud = mountHud(document.body, "", { debug: params.has("debug") });
 document.title = BRAND.gameName;
@@ -60,37 +62,10 @@ loadCharacters().then((list) => {
   showCharacter(saved >= 0 ? saved : 0);
 });
 
-// ---- sound: starts on the first tap or key (browser rule); M or the button toggles it
+// ---- sound: effects and music are separate switches (remembered); M = master mute
 const sfx = new Sfx();
 (window as unknown as { sfx: Sfx }).sfx = sfx; // for tests
-const soundBtn = $("sound");
-function showSound(): void {
-  soundBtn.textContent = sfx.muted ? "Sound off" : "Sound on";
-  soundBtn.setAttribute("aria-pressed", String(!sfx.muted));
-}
-sfx.setMuted(store.get("muted") === "1");
-showSound();
-const unlock = () => sfx.unlock();
-window.addEventListener("pointerdown", unlock);
-window.addEventListener("keydown", unlock);
-function toggleSound(): void {
-  sfx.unlock();
-  sfx.setMuted(!sfx.muted);
-  store.set("muted", sfx.muted ? "1" : "0");
-  showSound();
-}
-soundBtn.addEventListener("click", toggleSound);
-const musicBtn = $("music");
-sfx.setMusic(store.get("music") !== "0");
-const showMusic = () => { musicBtn.textContent = sfx.musicOn ? "Music on" : "Music off"; musicBtn.setAttribute("aria-pressed", String(sfx.musicOn)); };
-showMusic();
-musicBtn.addEventListener("click", () => {
-  sfx.unlock();
-  sfx.setMusic(!sfx.musicOn);
-  store.set("music", sfx.musicOn ? "1" : "0");
-  showMusic();
-});
-window.addEventListener("keydown", (e) => { if ((e.key === "m" || e.key === "M") && document.activeElement !== nameInput) toggleSound(); });
+mountSoundControls(sfx, () => document.activeElement === nameInput);
 
 // ---- game loop
 let running = false;
@@ -102,6 +77,7 @@ function start(): void {
   if (game.dead || game.tick > 0 || game.options.level !== level) game = new Game(newSeed(), { level });
   input.clear();
   running = true;
+  $("overlay").classList.remove("compact");
   $("overlay").hidden = true;
   hud.label(playerName());
   sfx.reset(game);
@@ -110,6 +86,7 @@ function start(): void {
 }
 input.onStart = () => { if ($("overlay").hidden === false && document.activeElement === nameInput) return; start(); };
 $("play").addEventListener("click", start);
+$("more").addEventListener("click", () => $("overlay").classList.remove("compact"));
 // Race the AI: same track and level for both; the race page reads runner, name and level from storage
 $("race").hidden = false;
 $("race").addEventListener("click", () => { store.set("name", nameInput.value.trim()); location.href = "/race.html"; });
@@ -143,8 +120,9 @@ function frame(now: number): void {
       $("title").textContent = `${game.score} points`;
       $("sub").textContent = `${game.meters} m, ${game.coins} coins · ${caught ? "the Blackout caught you" : `hit a ${game.deathCause.replace(" front", "")}`}`;
       $("play").textContent = "Run again";
-      // caught: the ghost circles you and the stars spin for a moment, then the card
-      setTimeout(() => { $("overlay").hidden = false; }, caught ? 1800 : 700);
+      $("overlay").classList.add("compact"); // just the result and the two buttons; settings fold away
+      // every run end: the ghost circles you and the stars spin for a moment, then the card
+      setTimeout(() => { $("overlay").hidden = false; }, 1900);
     }
   }
   last = now;

@@ -5,6 +5,7 @@ import { Game, NOOP, type Action } from "../core/game";
 import { Rng } from "../core/rng";
 import { loadAi, type AiDriver } from "./ai";
 import { Sfx } from "./audio";
+import { mountSoundControls } from "./sound-controls";
 import { loadCharacters, makeCharacter } from "./character";
 import { Input } from "./input";
 import { Renderer } from "./render";
@@ -22,10 +23,7 @@ const youR = new Renderer($<HTMLCanvasElement>("youCanvas"), { bloom: !phone });
 const aiR = new Renderer($<HTMLCanvasElement>("aiCanvas"), { bloom: !phone });
 const input = new Input($("youHalf")); // swipes only on your half; keys anywhere
 const sfx = new Sfx();
-sfx.setMuted(store.get("muted") === "1");
-sfx.setMusic(store.get("music") !== "0");
-window.addEventListener("pointerdown", () => sfx.unlock());
-window.addEventListener("keydown", () => sfx.unlock());
+mountSoundControls(sfx);
 
 let you: Game, ai: Game, driver: AiDriver | null = null;
 let phase: "loading" | "count" | "race" | "done" = "loading";
@@ -120,7 +118,7 @@ function finish(winner: "you" | "ai" | "tie"): void {
   phase = "done";
   $("title").textContent = winner === "you" ? "You win!" : winner === "ai" ? "The AI wins" : "A tie";
   $("sub").textContent = `${name} ${you.score} · AI ${ai.score} (${driver?.label ?? "AI"})`;
-  setTimeout(() => { $("overlay").hidden = false; }, 1500);
+  setTimeout(() => { $("overlay").hidden = false; }, 1900);
 }
 
 $("again").addEventListener("click", () => {

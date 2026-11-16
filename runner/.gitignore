@@ -2,3 +2,4 @@ node_modules/
 dist/
 runs/
 videos/
+public/audio/music.mp3

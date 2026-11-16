@@ -28,9 +28,10 @@ export class Sfx {
     this.master = this.ctx.createGain();
     this.master.gain.value = this.muted ? 0 : 0.5;
     this.master.connect(this.ctx.destination);
+    // music has its own path to the speakers: the Sound switch (effects) never mutes it
     this.musicGain = this.ctx.createGain();
     this.musicGain.gain.value = this.musicOn ? MUSIC_LEVEL : 0;
-    this.musicGain.connect(this.master);
+    this.musicGain.connect(this.ctx.destination);
     void this.startMusic();
   }
 
@@ -45,8 +46,12 @@ export class Sfx {
       const src = this.ctx.createBufferSource();
       src.buffer = buf;
       src.loop = true;
+      // loop only the sound, not the silence at the ends (it would leave a gap at every loop)
+      const [from, to] = trimSilence(buf);
+      src.loopStart = from;
+      src.loopEnd = to;
       src.connect(this.musicGain!);
-      src.start();
+      src.start(0, from);
     } catch (e) {
       console.warn("music not loaded", e);
     }
@@ -57,6 +62,7 @@ export class Sfx {
     if (this.musicGain && this.ctx) this.musicGain.gain.setTargetAtTime(on ? MUSIC_LEVEL : 0, this.ctx.currentTime, 0.05);
   }
 
+  /** Effects on/off (music is separate: setMusic). */
   setMuted(m: boolean): void {
     this.muted = m;
     if (this.master && this.ctx) this.master.gain.setTargetAtTime(m ? 0 : 0.5, this.ctx.currentTime, 0.02);
@@ -179,8 +185,17 @@ export class Sfx {
   }
 }
 
-/** Music sits under the effects (effects peak around 0.1-0.3 before the master gain). */
-const MUSIC_LEVEL = 0.18;
+/** Music sits under the effects (effects reach ~0.05-0.15 after their 0.5 gain). */
+const MUSIC_LEVEL = 0.09;
 
 /** Power-ups taken among the pickups still in the world (a rise = a new pickup). */
 const powers = (g: Game) => g.pickups.reduce((n, p) => n + (p.taken && p.kind !== "coin" ? 1 : 0), 0);
+
+/** Seconds where the sound starts and ends (ignoring near-silence at both ends). */
+function trimSilence(buf: AudioBuffer, threshold = 0.003): [number, number] {
+  const d = buf.getChannelData(0);
+  let a = 0, b = d.length - 1;
+  while (a < b && Math.abs(d[a]) < threshold) a++;
+  while (b > a && Math.abs(d[b]) < threshold) b--;
+  return [a / buf.sampleRate, (b + 1) / buf.sampleRate];
+}
