@@ -12,4 +12,11 @@ car-racing/videos/
 *script*.md
 
 # Dashboard data (made from runs/)
-car-racing/dashboard/data.json
+car-racing/dashboard/data*.json
+
+# Training logs copied from cloud machines
+car-racing/train*.log
+
+# Local secrets (Hugging Face token etc.)
+.env
+.env.*
