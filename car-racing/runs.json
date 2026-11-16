@@ -6,5 +6,5 @@
   "speed-0.2": {"number": 5, "change": "run 4 with speed bonus 0.2", "args": "--grass-penalty 0.1 --band-penalty 0.05 --speed-bonus 0.2 --steer-penalty 0.1"},
   "band-steer": {"number": 6, "change": "run 4 without the speed bonus", "args": "--grass-penalty 0.1 --band-penalty 0.05 --steer-penalty 0.1"},
   "band-speed-steer-4f": {"number": 7, "change": "run 4 with 4 stacked frames instead of 2", "args": "--grass-penalty 0.1 --band-penalty 0.05 --speed-bonus 0.05 --steer-penalty 0.1 --frames 4"},
-  "band-speed-steer-ent": {"number": 8, "change": "run 4 + entropy bonus 0.005 (keeps exploration from collapsing)", "args": "--grass-penalty 0.1 --band-penalty 0.05 --speed-bonus 0.05 --steer-penalty 0.1 --ent-coef 0.005"}
+  "band-speed-steer-ent": {"number": 8, "change": "run 4 + entropy bonus 0.005 (stopped at 0.8M: parked on the grass, no benchmark)", "args": "--grass-penalty 0.1 --band-penalty 0.05 --speed-bonus 0.05 --steer-penalty 0.1 --ent-coef 0.005"}
 }
