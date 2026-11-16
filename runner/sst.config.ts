@@ -10,7 +10,7 @@ export default $config({
       name: "lights-out-surfer",
       removal: input?.stage === "prod" ? "retain" : "remove",
       home: "aws",
-      providers: { aws: { region: "us-east-1", profile: process.env.AWS_PROFILE ?? "panda-dev" } },
+      providers: { aws: { region: "us-east-1", ...(process.env.AWS_PROFILE ? { profile: process.env.AWS_PROFILE } : {}) } },
     };
   },
   async run() {
