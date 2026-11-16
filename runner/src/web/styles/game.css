@@ -11,9 +11,17 @@
   .overlay h1 { margin: 0; font-size: 2.2rem; }
   .overlay p { margin: 0; color: #b9c0d4; }
   kbd { padding: 1px 6px; border: 1px solid #39405a; border-radius: 4px; font: inherit; font-size: 0.85em; }
-.lightsout { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.25s linear;
-  background: radial-gradient(ellipse 75% 60% at 50% 42%, transparent 35%, rgba(2, 2, 8, 0.85) 75%, #000 100%),
-              linear-gradient(to top, #000 0%, rgba(0, 0, 0, 0.7) 18%, transparent 45%); }
+.lightsout { position: fixed; inset: 0; pointer-events: none; background: #000; opacity: 0; transition: opacity 0.6s ease; }
+.lightsout.on { opacity: 1; transition: opacity 0.25s ease; }
+/* danger: only the outer edge of the screen, never the lanes or the centre */
+.danger { position: fixed; inset: 0; pointer-events: none; opacity: 0;
+  background: radial-gradient(ellipse 95% 90% at 50% 50%, transparent 78%, rgba(150, 10, 40, 0.55) 100%);
+  animation: pulse 0.9s ease-in-out infinite; }
+@keyframes pulse { 50% { filter: brightness(1.6); } }
+.chaser { position: fixed; top: 64px; left: 16px; display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 6px;
+  border-radius: 999px; background: rgba(8, 10, 30, 0.7); color: #ffd36a; font-size: 0.85rem; letter-spacing: 2px; pointer-events: none; }
+.chaser[hidden] { display: none; }
+.chaser svg { width: 22px; height: 22px; }
 .overlay { gap: 14px; background: linear-gradient(to bottom, rgba(10, 14, 40, 0.15), rgba(10, 14, 40, 0.75)); align-content: end; padding-bottom: 8vh; }
 .overlay .hint { color: #c9d0ea; font-size: 0.85rem; }
 .picker { display: flex; align-items: center; justify-content: center; gap: 16px; }
@@ -26,3 +34,17 @@
 .buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .buttons button { min-width: 140px; padding: 12px 20px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.4); background: rgba(255, 255, 255, 0.1); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
 .buttons .primary { background: var(--accent, #22e3f0); border-color: transparent; color: #071018; }
+
+/* start / game-over: one clear frosted card; the scene behind is dimmed evenly, never black */
+.overlay { background: rgba(6, 8, 24, 0.35); align-content: end; padding: 0 16px 6vh; }
+.card { box-sizing: border-box; width: min(380px, calc(100vw - 32px)); margin: 0 auto; display: grid; gap: 14px; justify-items: center; padding: 22px 20px 18px;
+  border-radius: 22px; background: rgba(14, 18, 44, 0.82); border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45); }
+.card h1 { font-size: 2rem; text-align: center; }
+.card p { color: #dfe4f7; text-align: center; }
+.arrow { width: 52px; height: 52px; background: rgba(255, 255, 255, 0.2); border: 2px solid rgba(255, 255, 255, 0.85); font-weight: 700; }
+.picker .who b { color: var(--accent, #22e3f0); }
+.name input { background: rgba(255, 255, 255, 0.95); color: #0b0f24; border: 2px solid var(--accent, #22e3f0); }
+.name input::placeholder { color: #6b7290; }
+.buttons .primary { background: var(--accent, #22e3f0); color: #061018; font-size: 1.1rem; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.15); }
+.overlay .hint { color: #b8c0dc; }

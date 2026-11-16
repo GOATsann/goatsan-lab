@@ -66,6 +66,7 @@ function start(): void {
   if (game.dead || game.tick > 0) game = new Game(newSeed());
   input.clear();
   running = true;
+  hud.blackoutDone = false;
   $("overlay").hidden = true;
   hud.label(playerName());
   last = performance.now();
@@ -89,10 +90,13 @@ function frame(now: number): void {
     }
     if (game.dead) {
       running = false;
+      const caught = game.deathCause === "caught";
       $("title").textContent = `${game.score} points`;
-      $("sub").textContent = `${game.meters} m, ${game.coins} coins · ${game.deathCause === "caught" ? "the lights went out" : game.deathCause}`;
+      $("sub").textContent = `${game.meters} m, ${game.coins} coins · ${caught ? "the Blackout caught you" : `hit a ${game.deathCause.replace(" front", "")}`}`;
       $("play").textContent = "Run again";
-      $("overlay").hidden = false;
+      // caught: ~1 s of full blackout, then it fades out and the card appears
+      setTimeout(() => { hud.blackoutDone = true; }, caught ? 1000 : 0);
+      setTimeout(() => { $("overlay").hidden = false; }, caught ? 1300 : 600);
     }
   }
   last = now;

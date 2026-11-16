@@ -22,6 +22,8 @@ export class City {
   readonly group = new THREE.Group();
   private blocks: Block[] = [];
   private lamps: { obj: THREE.Object3D; trackZ: number }[] = [];
+  private lampHeads: THREE.MeshBasicMaterial[] = [];
+  private dim = 0;
   private rng: Rng;
   private facades = [windowsTexture(1, true), windowsTexture(2, false), windowsTexture(3, true), windowsTexture(4, false)];
   private signTex = new Map<string, THREE.Texture>();
@@ -34,6 +36,14 @@ export class City {
     }
     for (let z = -10; z < SPAN; z += 18) this.addLamp(z);
     this.group.add(skyline(seed));
+  }
+
+  /** The chaser drains the city's lights (windows and lamp heads), never the track. 0..1 */
+  setDim(f: number): void {
+    if (Math.abs(f - this.dim) < 0.02) return;
+    this.dim = f;
+    for (const b of this.blocks) (b.mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.5 * (1 - 0.75 * f);
+    for (const m of this.lampHeads) m.color.setHex(0xc9a878).multiplyScalar(1 - 0.7 * f);
   }
 
   /** `trackZ` = how far the runner has gone, in metres. */
@@ -80,7 +90,7 @@ export class City {
       t.repeat.set(Math.max(1, Math.round(d / 6)), Math.max(1, Math.round(h / 12)));
       t.needsUpdate = true;
     }
-    Object.assign(m, { map, emissiveMap: em, emissive: new THREE.Color(0xffffff), emissiveIntensity: 0.5, roughness: 0.85, metalness: 0.1 });
+    Object.assign(m, { map, emissiveMap: em, emissive: new THREE.Color(0xffffff), emissiveIntensity: 0.5 * (1 - 0.75 * this.dim), roughness: 0.85, metalness: 0.1 });
     m.needsUpdate = true;
 
     if (b.sign) {
@@ -108,7 +118,9 @@ export class City {
     for (const side of [-1, 1]) {
       const p = pole.clone();
       p.position.set(side * 5.6, 3, 0);
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.12, 0.3), new THREE.MeshBasicMaterial({ color: 0xc9a878 }));
+      const headMat = new THREE.MeshBasicMaterial({ color: 0xc9a878 });
+      this.lampHeads.push(headMat);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.12, 0.3), headMat);
       head.position.set(side * 5.2, 6, 0);
       obj.add(p, head);
     }

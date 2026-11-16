@@ -9,6 +9,7 @@ import * as C from "../core/config";
 import type { Game, Obstacle, Pickup } from "../core/game";
 import { DEFAULT_CHARACTERS, placeholderCharacter, type CharacterView } from "./character";
 import { City } from "./city";
+import { Ghost } from "./ghost";
 import { gravelTexture, hazardTexture, lightPoolTexture, signTexture, skyTexture } from "./textures";
 
 const M = 1 / 1000; // mm -> m
@@ -53,6 +54,7 @@ export class Renderer {
   private sleepers: THREE.InstancedMesh;
   private bed: THREE.Mesh;
   private city: City;
+  private ghost = new Ghost();
   private lastTime = performance.now();
   private mat: Record<string, THREE.Material>;
   private key: THREE.SpotLight;
@@ -146,7 +148,7 @@ export class Renderer {
     }
 
     this.city = new City(opts.seed ?? 1);
-    this.scene.add(this.city.group);
+    this.scene.add(this.city.group, this.ghost.object);
     this.character = opts.character ?? placeholderCharacter(DEFAULT_CHARACTERS[0]);
     this.scene.add(this.character.object);
 
@@ -186,6 +188,8 @@ export class Renderer {
     for (const o of g.obstacles) {
       const dz = (o.z0 - g.z) * M;
       if (dz > C.VIEW_DISTANCE * M + 30 || (o.z1 - g.z) * M < -15) continue;
+      // barriers vanish once broken or behind the runner: they would sweep across the camera
+      if ((o.kind === "low" || o.kind === "high") && (o.broken || o.z1 < g.z - C.PLAYER_LEN)) continue;
       seen.add(o.id);
       const m = this.meshes.get(o.id) ?? this.addObstacle(o);
       m.position.z = -dz;
@@ -193,7 +197,7 @@ export class Renderer {
     for (const p of g.pickups) {
       if (p.taken) continue;
       const dz = (p.z - g.z) * M;
-      if (dz > C.VIEW_DISTANCE * M + 30 || dz < -5) continue;
+      if (dz > C.VIEW_DISTANCE * M + 30 || dz < -0.8) continue; // gone once behind the runner
       seen.add(p.id);
       const m = this.meshes.get(p.id) ?? this.addPickup(p);
       m.position.z = -dz;
@@ -209,6 +213,8 @@ export class Renderer {
     const trackM = g.z * M;
     this.sleepers.position.z = trackM % SLEEPER;
     this.city.update(trackM);
+    this.city.setDim(Ghost.closeness(g));
+    this.ghost.update(g, step);
     this.pools.forEach((p, i) => {
       p.position.x = i % 2 ? 4.2 : -4.2;
       p.position.z = -((i * 18 - (trackM % 36) + 360) % 216) + 20;
@@ -222,8 +228,7 @@ export class Renderer {
 
     this.character.object.position.set(g.x * M, g.y * M, 0);
     this.character.update(g, step);
-    const flash = g.slowTicks > 0 && (g.tick >> 2) % 2 === 1;
-    this.character.object.visible = !flash;
+    // no blinking after a stumble: the runner stays visible; the stumble clip and the ghost show the hit
 
     // chase camera: behind and above, following the runner smoothly
     const cx = g.x * M * 0.6, cy = 3.2 + g.y * M * 0.85;
