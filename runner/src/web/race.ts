@@ -18,7 +18,6 @@ const params = new URLSearchParams(location.search);
 const level = Math.max(0, Math.min(2, Number(store.get("level") ?? 1) || 0)) as 0 | 1 | 2;
 const name = (store.get("name") || "You").slice(0, 16);
 const phone = Math.min(window.innerWidth, window.innerHeight) < 700;
-const LEVEL_LABEL = ["Easy", "Normal", "Hard"] as const;
 
 const youR = new Renderer($<HTMLCanvasElement>("youCanvas"), { bloom: !phone });
 const aiR = new Renderer($<HTMLCanvasElement>("aiCanvas"), { bloom: !phone });
@@ -52,7 +51,7 @@ async function setup(): Promise<void> {
   $("youName").textContent = name;
   $("youRunner").textContent = mine.name;
   $("youDot").style.setProperty("--c", mine.colors.accent);
-  $("aiName").textContent = `AI · ${LEVEL_LABEL[level]}`;
+  $("aiName").textContent = "AI";
   $("aiRunner").textContent = theirs.name;
   $("aiDot").style.setProperty("--c", theirs.colors.accent);
   driver ??= await loadAi();
@@ -118,9 +117,8 @@ function result(): "you" | "ai" | "tie" | null {
 
 function finish(winner: "you" | "ai" | "tie"): void {
   phase = "done";
-  const who = `the ${LEVEL_LABEL[level]} AI`;
-  $("title").textContent = winner === "you" ? `You beat ${who}!` : winner === "ai" ? `The ${LEVEL_LABEL[level]} AI wins` : `A tie with ${who}`;
-  $("sub").textContent = `You scored ${you.score} and ${who} scored ${ai.score}.`;
+  $("title").textContent = winner === "you" ? "You beat the AI!" : winner === "ai" ? "The AI wins" : "A tie with the AI";
+  $("sub").textContent = `You scored ${you.score} and the AI scored ${ai.score}.`;
   setTimeout(() => { $("overlay").hidden = false; }, 1900);
 }
 

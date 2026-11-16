@@ -81,6 +81,7 @@
   background: rgba(8, 10, 30, 0.6); color: #fff; cursor: pointer; padding: 0; }
 .audioctl button svg { width: 20px; height: 20px; }
 .audioctl button[aria-pressed="false"] { color: #8a90aa; }
-.level-info { margin: -4px 0 0; color: #dfe4f7; font-size: 0.85rem; text-align: center; }
+.level-info { margin: -4px 0 0; padding: 4px 12px; border-radius: 999px; background: color-mix(in srgb, var(--accent, #22e3f0) 22%, transparent);
+  color: #fff; font-size: 0.85rem; font-weight: 600; text-align: center; }
 .overlay.compact .level-info { display: none; }
 .overlay .watch-link { display: inline-block; }
