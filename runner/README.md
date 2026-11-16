@@ -6,6 +6,11 @@ learning, that you can race in a split screen.
 
 **Play:** [surfer.theonlygoatsan.com](https://surfer.theonlygoatsan.com)
 
+> **New to this code?** Open this folder with an AI coding agent (Claude Code, Cursor, GitHub Copilot or
+> similar) and ask it to walk you through it. For example: *"Explain how src/core makes the game
+> deterministic, how the headless server feeds the Python training in train/, and how I play and train it
+> locally."*
+
 ## How to play
 
 - Change lanes with ← → (or A D), jump with ↑ (W), roll with ↓ (S). On a phone, swipe.

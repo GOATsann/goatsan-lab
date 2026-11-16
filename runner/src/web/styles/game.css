@@ -106,3 +106,10 @@
 .toast[hidden] { display: none; }
 .toast-btn { margin-left: 6px; padding: 4px 12px; border-radius: 999px; border: 0; background: var(--accent, #22e3f0); color: #061018; font: inherit; font-weight: 700; cursor: pointer; pointer-events: auto; }
 .toast { pointer-events: auto; }
+/* GitHub link: top-left of the menu cards only (never over the score HUD during a run) */
+.card { position: relative; }
+.gh { position: absolute; top: 8px; left: 8px; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%;
+  color: #dfe4f7; opacity: 0.85; }
+.gh:hover, .gh:focus-visible { opacity: 1; background: rgba(255, 255, 255, 0.1); }
+.gh-inline { display: inline-grid; place-items: center; }
+.card:has(> .gh) { padding-top: 44px; }
