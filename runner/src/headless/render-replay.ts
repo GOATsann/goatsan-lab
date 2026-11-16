@@ -1,6 +1,6 @@
 // Render replays to mp4 with the real game renderer, frame by frame (exactly what happened).
 //   npx tsx src/headless/render-replay.ts run1/progress_0100000.json [more.json ...] --outdir videos/run1
-//     [--fps 30] [--size 720x1280] [--label "AI · run 1"] [--tail 1.5] [--character boy|girl|seed]
+//     [--fps 30] [--size 720x1280] [--label "AI · run 1"] [--tail 1.5] [--character boy|girl|seed] [--clean]
 // --character seed (default) picks the runner from the track seed, so AI videos alternate.
 // Needs Playwright's Chromium (npx playwright install chromium) and ffmpeg on PATH.
 import { spawn } from "node:child_process";
@@ -25,6 +25,8 @@ const label = opt("label", "");
 const tail = Number(opt("tail", "1.5"));
 const outdir = opt("outdir", ".");
 const character = opt("character", "seed");
+const clean = args.includes("--clean");
+if (clean) args.splice(args.indexOf("--clean"), 1);
 const inputs = args;
 if (!inputs.length) throw new Error("give one or more replay .json files");
 const ticksPerFrame = TICK_HZ / fps;
@@ -33,7 +35,7 @@ if (!Number.isInteger(ticksPerFrame)) throw new Error(`fps must divide ${TICK_HZ
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const vite = await createServer({ root, logLevel: "error", server: { port: 0, host: "127.0.0.1" } });
 await vite.listen();
-const url = `http://127.0.0.1:${(vite.httpServer!.address() as { port: number }).port}/replay.html`;
+const url = `http://127.0.0.1:${(vite.httpServer!.address() as { port: number }).port}/replay.html${clean ? "?clean" : ""}`;
 const browser = await chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
 const page = await browser.newPage({ viewport: { width: w, height: h } });
 await page.goto(url);

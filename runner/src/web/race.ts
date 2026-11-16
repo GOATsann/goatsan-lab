@@ -29,7 +29,7 @@ let you: Game, ai: Game, driver: AiDriver | null = null;
 let phase: "loading" | "count" | "race" | "done" = "loading";
 let clock = 0; // race time in ticks; both games follow it
 let aiReady: { tick: number; action: Action } | null = null, aiThinking = false;
-(window as unknown as { race: () => unknown }).race = () => ({ you, ai, phase, driver: driver?.label }); // for tests
+(window as unknown as { race: () => unknown }).race = () => ({ you, ai, phase, clock, driver: driver?.label }); // for tests
 
 function resize(): void {
   for (const [r, half] of [[youR, $("youHalf")], [aiR, $("aiHalf")]] as const) r.resize(half.clientWidth, half.clientHeight);
@@ -54,7 +54,7 @@ async function setup(): Promise<void> {
   $("aiName").textContent = "AI";
   $("aiRunner").textContent = theirs.name;
   $("aiDot").style.setProperty("--c", theirs.colors.accent);
-  driver ??= await loadAi();
+  driver ??= await loadAi((["easy", "normal", "hard"] as const)[level]);
   input.clear();
   sfx.reset(you);
   countdown();

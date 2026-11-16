@@ -17,16 +17,18 @@ export class BotDriver implements AiDriver {
   }
 }
 
-/** The trained policy if one is published at /models/policy.onnx, else the stand-in. */
-export async function loadAi(): Promise<AiDriver> {
-  try {
-    const r = await fetch("/models/policy.json", { cache: "no-store" });
-    if (r.ok) {
-      const { OnnxDriver } = await import("./onnx-driver");
-      return await OnnxDriver.load("/models/policy.onnx", await r.json());
+/** The opponent for a level: /models/policy-<level>.onnx (easy = an earlier, weaker checkpoint),
+ *  else /models/policy.onnx, else the stand-in bot. */
+export async function loadAi(level: "easy" | "normal" | "hard"): Promise<AiDriver> {
+  const { OnnxDriver } = await import("./onnx-driver");
+  for (const name of [`policy-${level}`, "policy"]) {
+    try {
+      const r = await fetch(`/models/${name}.json`, { cache: "no-store" });
+      if (!r.ok || !(r.headers.get("content-type") ?? "").includes("json")) continue;
+      return await OnnxDriver.load(`/models/${name}.onnx`, await r.json());
+    } catch (e) {
+      console.warn(`AI model ${name} not available`, e);
     }
-  } catch (e) {
-    console.warn("trained AI not available, using the stand-in", e);
   }
   return new BotDriver();
 }

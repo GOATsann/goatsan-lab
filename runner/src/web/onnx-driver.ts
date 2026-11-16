@@ -13,6 +13,7 @@ export class OnnxDriver implements AiDriver {
   static async load(url: string, info: PolicyInfo): Promise<OnnxDriver> {
     if (info.obs_size !== OBS_SIZE) throw new Error(`policy expects obs ${info.obs_size}, game gives ${OBS_SIZE}`);
     const ort = await import("onnxruntime-web/wasm");
+    ort.env.logLevel = "error"; // no "Unknown CPU vendor" style warnings in visitors' consoles
     const session = await ort.InferenceSession.create(url, { executionProviders: ["wasm"] });
     return new OnnxDriver(info.run ? `${info.run}${info.steps ? ` · ${Math.round(info.steps / 1e6)}M steps` : ""}` : "trained AI", session, ort);
   }
