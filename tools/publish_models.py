@@ -119,7 +119,7 @@ The game's reward (+1000/N per new track tile, -0.1 per frame), plus per game fr
 - `bench.csv`: every benchmark track (return, frames, share of tiles visited, lap finished, wrong-way share).
 
 To drive it you need the same observation wrappers (resize to 64x64, grayscale, skip 2 frames,
-stack 2), which are in the training code: https://github.com/GOATsann/goatsan-lab (public soon).
+stack 2), which are in the training code: https://github.com/GOATsann/goatsan-lab.
 
 Made by @_goatsan.
 """
@@ -171,7 +171,7 @@ PPO (Stable-Baselines3 2.9.2), 192 games in parallel run by a Node game server, 
 per run, 55M decisions (about an hour on a laptop). Reward: +0.1 per metre, -1 per stumble, -10 when
 the run ends, -0.02 per reversed lane change or pointless jump/roll (see `reward.json`).
 
-Code: https://github.com/GOATsann/goatsan-lab (public soon). Made by @_goatsan.
+Code: https://github.com/GOATsann/goatsan-lab. Made by @_goatsan.
 """
 
 
