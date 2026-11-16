@@ -137,6 +137,7 @@ def main() -> None:
     p.add_argument("--band-penalty", type=float, default=0.0, help="per frame at most, for leaving the centre band; 0 = off")
     p.add_argument("--speed-bonus", type=float, default=0.0, help="per frame at most, for speed along the track; 0 = off")
     p.add_argument("--steer-penalty", type=float, default=0.0, help="per unit of steering change between decisions; 0 = off")
+    p.add_argument("--ent-coef", type=float, default=0.0, help="entropy bonus: pays the policy to keep exploring (0 = off)")
     p.add_argument("--frames", type=int, default=2, help="frames stacked into one observation (motion info)")
     p.add_argument("--resume", type=Path, default=None, help="a checkpoint .zip to continue from")
     args = p.parse_args()
@@ -174,7 +175,7 @@ def main() -> None:
             gamma=0.99,
             gae_lambda=0.95,
             clip_range=0.2,
-            ent_coef=0.0,
+            ent_coef=args.ent_coef,
             vf_coef=0.5,
             max_grad_norm=0.5,
             learning_rate=linear(1e-4),
