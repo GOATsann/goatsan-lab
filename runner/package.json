@@ -10,11 +10,13 @@
     "build": "vite build",
     "test": "vitest run",
     "speed": "tsx src/headless/speed.ts",
-    "server": "tsx src/headless/server.ts"
+    "server": "tsx src/headless/server.ts",
+    "parity": "tsx test/parity/make-replays.ts && node test/parity/browsers.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.19.1",
     "@types/three": "^0.181.0",
+    "playwright": "^1.56.1",
     "three": "^0.181.1",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",

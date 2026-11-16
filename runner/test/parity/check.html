@@ -1,0 +1,11 @@
+<!doctype html><meta charset="utf-8"><title>parity</title>
+<script type="module">
+  import { Game } from "/src/core/game.ts";
+  const cases = await (await fetch("/test/parity/replays.json")).json();
+  const bad = [];
+  for (const c of cases) for (const [t, h] of c.checkpoints) {
+    const got = Game.fromReplay(c.replay, t).hash();
+    if (got !== h) bad.push({ seed: c.replay.seed, tick: t, want: h, got });
+  }
+  window.parity = { cases: cases.length, checkpoints: cases.reduce((n, c) => n + c.checkpoints.length, 0), bad, ua: navigator.userAgent };
+</script>
