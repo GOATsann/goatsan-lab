@@ -41,15 +41,15 @@ PROGRESS_OPTIONS = GAME_OPTIONS | {"level": "normal"}
 class GameServers:
     """Start N Node game servers on consecutive ports; stop them on exit."""
 
-    def __init__(self, n: int, port0: int, log_dir: Path):
+    def __init__(self, n: int, port0: int, log_dir: Path, game_dir: Path = ROOT):
         self.procs, self.ports = [], list(range(port0, port0 + n))
-        tsx = ROOT / "node_modules" / ".bin" / "tsx"
+        tsx = game_dir / "node_modules" / ".bin" / "tsx"  # game_dir: a runner folder (the live one, or a frozen copy)
         log_dir.mkdir(parents=True, exist_ok=True)
         logs = [log_dir / f"server-{port}.log" for port in self.ports]
         for port, log in zip(self.ports, logs):
             with log.open("w") as f:  # a file, not a pipe: nobody reads a pipe after start-up, so it could fill and block
                 self.procs.append(subprocess.Popen([str(tsx), "src/headless/server.ts", "--port", str(port)],
-                                                   cwd=ROOT, stdout=f, stderr=subprocess.STDOUT))
+                                                   cwd=game_dir, stdout=f, stderr=subprocess.STDOUT))
         deadline = time.time() + 60
         for p, log in zip(self.procs, logs):
             while "runner server" not in log.read_text():  # "runner server v1 on 127.0.0.1:<port>"
