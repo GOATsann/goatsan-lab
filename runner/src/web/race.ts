@@ -23,6 +23,7 @@ const aiR = new Renderer($<HTMLCanvasElement>("aiCanvas"), { bloom: !phone });
 const input = new Input($("youHalf")); // swipes only on your half; keys anywhere
 const sfx = new Sfx();
 sfx.setMuted(store.get("muted") === "1");
+sfx.setMusic(store.get("music") !== "0");
 window.addEventListener("pointerdown", () => sfx.unlock());
 window.addEventListener("keydown", () => sfx.unlock());
 

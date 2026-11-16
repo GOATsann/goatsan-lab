@@ -16,6 +16,7 @@ export class Effects {
   private flyers: Flyer[] = [];
   private pops: Pop[] = [];
   private magnetRing: THREE.Mesh;
+  private x2Badge: THREE.Sprite;
   private bubble: THREE.Mesh;
   private trail: THREE.Points;
   private trailPos: Float32Array;
@@ -41,7 +42,9 @@ export class Effects {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(this.trailPos, 3));
     this.trail = new THREE.Points(g, new THREE.PointsMaterial({ color: 0x7dff6a, size: 0.16, map: dotTexture(), transparent: true, opacity: 0.9, depthWrite: false, alphaTest: 0.05 }));
-    this.group.add(this.magnetRing, this.bubble, this.trail);
+    this.x2Badge = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.x2, depthWrite: false, transparent: true }));
+    this.x2Badge.scale.set(0.9, 0.23, 1);
+    this.group.add(this.magnetRing, this.bubble, this.trail, this.x2Badge);
   }
 
   update(g: Game, dt: number): void {
@@ -95,6 +98,10 @@ export class Effects {
       return false;
     });
 
+    // double coins: an x2 badge over the head
+    this.x2Badge.visible = g.doubleTicks > 0 && !g.dead;
+    this.x2Badge.position.set(g.x * M, g.y * M + 2.15 + Math.sin(this.t * 4) * 0.05, 0);
+
     // magnet: a spinning ring at the feet
     this.magnetRing.visible = g.magnetTicks > 0 && !g.dead;
     this.magnetRing.position.set(g.x * M, g.y * M + 0.08 + Math.sin(this.t * 6) * 0.04, 0);
@@ -113,7 +120,8 @@ export class Effects {
 
     // spring shoes: a green sparkle trail in the air, and a stretch on take-off
     const head = this.trailHead++ % (this.trailPos.length / 3);
-    const sparkle = g.springTicks > 0 && !g.grounded;
+    // sparkles at the feet the whole time; every frame in the air, every other frame on the ground
+    const sparkle = g.springTicks > 0 && !g.dead && (!g.grounded || head % 2 === 0);
     const j1 = Math.sin(head * 12.9898) * 0.5, j2 = Math.sin(head * 78.233) * 0.5; // fixed jitter: videos render the same every time
     this.trailPos.set(sparkle ? [g.x * M + j1 * 0.3, g.y * M + 0.2, 0.3 + (j2 + 0.5) * 0.2] : [0, -1000, 0], head * 3);
     for (let i = 0; i < this.trailPos.length; i += 3) this.trailPos[i + 2] += (g.currentSpeed * M * 60) * dt; // sparkles stay behind

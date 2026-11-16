@@ -1,4 +1,5 @@
-// Soft sound effects, made with Web Audio (no files, no music). It watches the game state change,
+// Soft sound effects, made with Web Audio, plus an optional music loop from public/audio/music.mp3
+// (plays only if that file exists, under the effects). It watches the game state change,
 // like the visual effects. Browsers only allow sound after a tap or key press, so it starts muted
 // until then; the mute choice is remembered.
 import type { Game } from "../core/game";
@@ -7,6 +8,9 @@ export class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   muted = false;
+  musicOn = true;
+  private musicGain: GainNode | null = null;
+  private musicStarted = false;
   private last = { coins: 0, slow: 0, shield: 0, grounded: true, rolling: false, dead: false, powers: 0, tick: 0 };
   private nextBeat = 0;
   /** how many times each sound played (for tests: a headless browser can't listen) */
@@ -24,6 +28,33 @@ export class Sfx {
     this.master = this.ctx.createGain();
     this.master.gain.value = this.muted ? 0 : 0.5;
     this.master.connect(this.ctx.destination);
+    this.musicGain = this.ctx.createGain();
+    this.musicGain.gain.value = this.musicOn ? MUSIC_LEVEL : 0;
+    this.musicGain.connect(this.master);
+    void this.startMusic();
+  }
+
+  /** Loop public/audio/music.mp3 if it exists (a missing file is fine: no music). */
+  private async startMusic(): Promise<void> {
+    if (this.musicStarted || !this.ctx) return;
+    this.musicStarted = true;
+    try {
+      const r = await fetch("/audio/music.mp3");
+      if (!r.ok || !(r.headers.get("content-type") ?? "").startsWith("audio")) return;
+      const buf = await this.ctx.decodeAudioData(await r.arrayBuffer());
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      src.connect(this.musicGain!);
+      src.start();
+    } catch (e) {
+      console.warn("music not loaded", e);
+    }
+  }
+
+  setMusic(on: boolean): void {
+    this.musicOn = on;
+    if (this.musicGain && this.ctx) this.musicGain.gain.setTargetAtTime(on ? MUSIC_LEVEL : 0, this.ctx.currentTime, 0.05);
   }
 
   setMuted(m: boolean): void {
@@ -92,11 +123,23 @@ export class Sfx {
     this.played[name] = (this.played[name] ?? 0) + 1;
   }
 
+  private streak = 0;
+  private lastCoin = -1;
+
+  /** A short bell "ding": a bright fundamental plus a metallic overtone (2.76x, like a real bell),
+   *  rising a semitone per coin in a quick streak (up to 7). */
   private coin(double: boolean): void {
     this.count("coin");
-    this.tone(1320, 0.09, "sine", 0.12, 1760);
-    if (double) this.tone(1760, 0.09, "sine", 0.08, 2350, 0.06);
+    const now = this.ctx!.currentTime;
+    this.streak = now - this.lastCoin < 0.6 ? Math.min(this.streak + 1, 7) : 0;
+    this.lastCoin = now;
+    const f = 1568 * Math.pow(2, this.streak / 12); // G6, then up the scale
+    this.tone(f, 0.16, "sine", 0.13);
+    this.tone(f * 2.76, 0.07, "sine", 0.045);
+    this.tone(f * 2, 0.05, "triangle", 0.03);
+    if (double) this.tone(f * 1.5, 0.12, "sine", 0.07, f * 1.5, 0.05);
   }
+
   private chime(): void {
     this.count("powerup");
     [660, 880, 1320].forEach((f, i) => this.tone(f, 0.16, "triangle", 0.1, f, i * 0.07));
@@ -135,6 +178,9 @@ export class Sfx {
     [523, 466, 415, 349].forEach((f, i) => this.tone(f, 0.22, "triangle", 0.11, f * 0.97, i * 0.2));
   }
 }
+
+/** Music sits under the effects (effects peak around 0.1-0.3 before the master gain). */
+const MUSIC_LEVEL = 0.18;
 
 /** Power-ups taken among the pickups still in the world (a rise = a new pickup). */
 const powers = (g: Game) => g.pickups.reduce((n, p) => n + (p.taken && p.kind !== "coin" ? 1 : 0), 0);

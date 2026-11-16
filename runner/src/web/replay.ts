@@ -10,7 +10,7 @@ const canvas = document.createElement("canvas");
 document.body.prepend(canvas);
 const renderer = new Renderer(canvas);
 (window as unknown as { renderer: Renderer }).renderer = renderer; // debugging
-const hud = mountHud(document.body);
+const hud = mountHud(document.body, "", { debug: true }); // videos show the track and a label
 let player: ReplayPlayer | null = null;
 
 function resize(): void {

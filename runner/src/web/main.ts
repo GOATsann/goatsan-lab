@@ -26,7 +26,7 @@ if (![0, 1, 2].includes(level)) level = 1;
 let game = new Game(newSeed(), { level });
 const renderer = new Renderer(canvas, { seed: game.seed });
 const input = new Input(canvas);
-const hud = mountHud(document.body);
+const hud = mountHud(document.body, "", { debug: params.has("debug") });
 document.title = BRAND.gameName;
 $("title").textContent = BRAND.gameName;
 $("sub").textContent = BRAND.tagline;
@@ -80,6 +80,16 @@ function toggleSound(): void {
   showSound();
 }
 soundBtn.addEventListener("click", toggleSound);
+const musicBtn = $("music");
+sfx.setMusic(store.get("music") !== "0");
+const showMusic = () => { musicBtn.textContent = sfx.musicOn ? "Music on" : "Music off"; musicBtn.setAttribute("aria-pressed", String(sfx.musicOn)); };
+showMusic();
+musicBtn.addEventListener("click", () => {
+  sfx.unlock();
+  sfx.setMusic(!sfx.musicOn);
+  store.set("music", sfx.musicOn ? "1" : "0");
+  showMusic();
+});
 window.addEventListener("keydown", (e) => { if ((e.key === "m" || e.key === "M") && document.activeElement !== nameInput) toggleSound(); });
 
 // ---- game loop
