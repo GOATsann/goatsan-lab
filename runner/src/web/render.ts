@@ -71,6 +71,10 @@ export class Renderer {
   resize(w: number, h: number): void {
     this.gl.setSize(w, h, false);
     this.camera.aspect = w / h;
+    // keep the 3 lanes in view on tall screens (phones, vertical video): fix the horizontal angle
+    const hfov = 78 * (Math.PI / 180);
+    const vfov = (2 * Math.atan(Math.tan(hfov / 2) / this.camera.aspect) * 180) / Math.PI;
+    this.camera.fov = Math.max(62, Math.min(100, vfov));
     this.camera.updateProjectionMatrix();
   }
 

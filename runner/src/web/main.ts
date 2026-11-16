@@ -2,6 +2,7 @@
 import { BRAND } from "../brand";
 import { TICK_HZ } from "../core/config";
 import { Game } from "../core/game";
+import { mountHud } from "./hud";
 import { Input } from "./input";
 import { Renderer } from "./render";
 
@@ -42,16 +43,8 @@ function resize(): void {
 window.addEventListener("resize", resize);
 resize();
 
-function hud(): void {
-  $("score").textContent = String(game.score);
-  $("meta").textContent = `${game.meters} m · ${game.coins} coins`;
-  $("seed").textContent = `track ${game.seed}`;
-  const p: string[] = [];
-  if (game.magnetTicks) p.push(`magnet ${Math.ceil(game.magnetTicks / TICK_HZ)}s`);
-  if (game.springTicks) p.push(`spring shoes ${Math.ceil(game.springTicks / TICK_HZ)}s`);
-  if (game.doubleTicks) p.push(`2x coins ${Math.ceil(game.doubleTicks / TICK_HZ)}s`);
-  $("powers").replaceChildren(...p.map((t) => Object.assign(document.createElement("span"), { textContent: t })));
-}
+const hudView = mountHud(document.body);
+const hud = () => hudView.update(game);
 
 function frame(now: number): void {
   if (running) {

@@ -365,3 +365,23 @@ export class Game {
 }
 
 const PERMS = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+
+/** Plays a replay tick by tick (for rendering and watching). */
+export class ReplayPlayer {
+  readonly game: Game;
+  private i = 0;
+  constructor(readonly replay: Replay) {
+    if (replay.version !== VERSION) throw new Error(`replay is for rules v${replay.version}, this core is v${VERSION}`);
+    this.game = new Game(replay.seed);
+  }
+  get done(): boolean {
+    return this.game.dead || this.game.tick >= this.replay.endTick;
+  }
+  step(): void {
+    if (this.done) return;
+    const r = this.replay.actions;
+    let a: Action = NOOP;
+    if (this.i < r.length && r[this.i][0] === this.game.tick) a = r[this.i++][1];
+    this.game.step(a);
+  }
+}
