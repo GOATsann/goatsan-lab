@@ -10,6 +10,7 @@ the replays of the best, median and worst seed to runs/<run>/bench-replays/ for 
 import argparse
 import csv
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -30,20 +31,24 @@ def main() -> None:
     p.add_argument("--episodes", type=int, default=100)
     p.add_argument("--seed-start", type=int, default=1000)
     p.add_argument("--port", type=int, default=7900)
-    p.add_argument("--out", default="bench.csv", help="file name inside runs/<run>/ (use another name for quick checks)")
+    p.add_argument("--out", default=None, help="file name inside runs/<run>/ (default bench.csv, or bench_<steps>.csv for a checkpoint)")
+    p.add_argument("--game-dir", type=Path, default=ROOT, help="runner folder whose game server to play (must match the model's version)")
+    p.add_argument("--checkpoint", type=Path, help="benchmark a checkpoint .zip instead of final.zip (for easier AI opponents)")
     args = p.parse_args()
 
     run_dir = ROOT / "runs" / args.run
-    out = run_dir / args.out
-    if out.exists() and args.out == "bench.csv" and args.episodes < 100:
+    steps = int(re.search(r"_(\d+)_steps", args.checkpoint.name).group(1)) if args.checkpoint else None
+    default_out = f"bench_{steps}.csv" if steps else "bench.csv"
+    out = run_dir / (args.out or default_out)
+    if out.exists() and out.name == default_out and args.episodes < 100:
         raise SystemExit(f"refusing to replace {out} with a {args.episodes}-seed result; use --out for quick checks")
-    model = PPO.load(run_dir / "final.zip", device="cpu")  # training normalizes rewards only, so raw obs go in
+    model = PPO.load(args.checkpoint or run_dir / "final.zip", device="cpu")  # training normalizes rewards only, so raw obs go in
     seeds = list(range(args.seed_start, args.seed_start + args.episodes))
 
     started = time.time()
     meta = json.loads((run_dir / "meta.json").read_text())
     options = meta.get("game_options", GAME_OPTIONS)  # the rules the model was trained on
-    servers = GameServers(1, args.port, run_dir / "logs")
+    servers = GameServers(1, args.port, run_dir / "logs", game_dir=args.game_dir)
     rows, replays = [], {}
     try:
         # v4+: every seed once per start level (the level of each pass is fixed, not random)
@@ -54,7 +59,7 @@ def main() -> None:
         probe.close()
         servers.stop()
         for level in levels:
-            servers = GameServers(1, args.port, run_dir / "logs")  # one connection per server process
+            servers = GameServers(1, args.port, run_dir / "logs", game_dir=args.game_dir)  # one connection per server process
             opts = options | ({"level": level} if level else {})
             env = RunnerVecEnv(servers.ports[0], n_envs=len(seeds), seed_base=10**9, max_ticks=MAX_TICKS, options=opts)
             obs = np.stack([env.set_seed(i, s) for i, s in enumerate(seeds)])
@@ -88,7 +93,7 @@ def main() -> None:
     (run_dir / "bench-replays").mkdir(exist_ok=True)
     for level in dict.fromkeys(r["level"] for r in rows):
         mine = sorted((r for r in rows if r["level"] == level), key=lambda r: r["score"])
-        tag = f"{level}-" if level else ""
+        tag = (f"{steps}-" if steps else "") + (f"{level}-" if level else "")
         for label, r in {"worst": mine[0], "median": mine[len(mine) // 2], "best": mine[-1]}.items():
             (run_dir / "bench-replays" / f"{tag}{label}-seed{r['seed']}.json").write_text(json.dumps(replays[(level, r["seed"])]))
         score = np.array([r["score"] for r in mine])

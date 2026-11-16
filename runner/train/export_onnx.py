@@ -110,14 +110,20 @@ def main() -> None:
     sb3_actions, _ = model.predict(obs, deterministic=True)
     assert (sb3_actions == torch_actions).all(), "the exported actor does not match SB3's predict()"
 
-    bench_mean = None
-    bench = run_dir / "bench.csv"
-    if bench.exists() and not args.checkpoint:
-        bench_mean = round(float(np.mean([float(r["score"]) for r in csv.DictReader(bench.open())])), 1)
+    bench_mean, by_level = None, {}
+    bench = run_dir / (f"bench_{steps}.csv" if args.checkpoint else "bench.csv")  # bench.py --checkpoint writes bench_<steps>.csv
+    if bench.exists():
+        rows = list(csv.DictReader(bench.open()))
+        bench_mean = round(float(np.mean([float(r["score"]) for r in rows])), 1)
+        for level in dict.fromkeys(r.get("level", "") for r in rows):
+            if level:
+                by_level[level] = round(float(np.mean([float(r["score"]) for r in rows if r["level"] == level])), 1)
+    else:
+        print(f"note: no {bench.name}, so policy json has no benchmark mean (run bench.py first)")
     (run_dir / f"{stem}.json").write_text(json.dumps({
         "version": meta["game_version"], "obs_size": obs_size, "n_actions": int(model.action_space.n),
         "observe_chaser": bool(meta.get("game_options", {}).get("observe_chaser", False)), "run": args.run, "steps": steps,
-        "benchmark_mean": bench_mean, "input": "obs", "output": "logits", "play": "argmax",
+        "benchmark_mean": bench_mean, "benchmark_by_level": by_level, "input": "obs", "output": "logits", "play": "argmax",
     }, indent=2))
     (run_dir / f"{stem}_parity.json").write_text(json.dumps({
         "obs": [[float(v) for v in o] for o in obs], "actions": [int(a) for a in torch_actions],
