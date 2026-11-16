@@ -28,6 +28,7 @@ def episode(job: tuple[str, int]) -> dict:
     """One race of run `name` on track `seed`. Frame stacking matches VecFrameStack(n_stack=2)."""
     from stable_baselines3 import PPO
 
+    from train import stacked_frames
     from wrappers import make_env
 
     name, seed = job
@@ -36,7 +37,8 @@ def episode(job: tuple[str, int]) -> dict:
     model = _models[name]
     env = make_env(measure=True)  # measure: only records wrong-way; the reward stays the game's
     obs, _ = env.reset(seed=seed)
-    stacked = np.zeros(obs.shape[:-1] + (obs.shape[-1] * 2,), dtype=obs.dtype)
+    n = stacked_frames(model)  # N frames, as the model was trained; stacked channels-last like VecFrameStack
+    stacked = np.zeros(obs.shape[:-1] + (obs.shape[-1] * n,), dtype=obs.dtype)
     stacked[..., -obs.shape[-1]:] = obs
     ret, decisions, wrong, done = 0.0, 0, 0, False
     while not done:
@@ -68,6 +70,7 @@ def main() -> None:
     p.add_argument("--episodes", type=int, default=100)
     p.add_argument("--seed-start", type=int, default=1000)
     p.add_argument("--workers", type=int, default=4)
+    p.add_argument("--out", default="bench.csv", help="file name inside runs/<run>/ (use another name for quick checks)")
     args = p.parse_args()
 
     seeds = range(args.seed_start, args.seed_start + args.episodes)
@@ -77,7 +80,10 @@ def main() -> None:
         rows = pool.map(episode, jobs, chunksize=max(1, len(jobs) // (args.workers * 4)))
     for name in args.runs:
         mine = sorted((r for r in rows if r["run"] == name), key=lambda r: r["seed"])
-        with (Path("runs") / name / "bench.csv").open("w", newline="") as f:
+        out = Path("runs") / name / args.out
+        if out.exists() and args.out == "bench.csv" and len(mine) < 100:
+            raise SystemExit(f"refusing to replace {out} with a {len(mine)}-track result; use --out for quick checks")
+        with out.open("w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=list(mine[0]))
             w.writeheader()
             w.writerows(mine)

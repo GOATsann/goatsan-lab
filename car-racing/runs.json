@@ -1,0 +1,9 @@
+{
+  "baseline":            {"number": 1, "change": "the game's own reward",                "args": ""},
+  "grass":               {"number": 2, "change": "run 1 + grass penalty",                 "args": "--grass-penalty 0.1"},
+  "band-speed":          {"number": 3, "change": "run 2 + centre band + speed bonus",     "args": "--grass-penalty 0.1 --band-penalty 0.05 --speed-bonus 0.05"},
+  "band-speed-steer":    {"number": 4, "change": "run 3 + steering smoothness penalty",   "args": "--grass-penalty 0.1 --band-penalty 0.05 --speed-bonus 0.05 --steer-penalty 0.1"},
+  "speed-0.2":           {"number": 5, "change": "run 4 with speed bonus 0.2",            "args": "--grass-penalty 0.1 --band-penalty 0.05 --speed-bonus 0.2 --steer-penalty 0.1"},
+  "band-steer":          {"number": 6, "change": "run 4 without the speed bonus",         "args": "--grass-penalty 0.1 --band-penalty 0.05 --steer-penalty 0.1"},
+  "band-speed-steer-4f": {"number": 7, "change": "run 4 with 4 stacked frames instead of 2", "args": "--grass-penalty 0.1 --band-penalty 0.05 --speed-bonus 0.05 --steer-penalty 0.1 --frames 4"}
+}

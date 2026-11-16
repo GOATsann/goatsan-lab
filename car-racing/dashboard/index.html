@@ -42,7 +42,7 @@
   <section id="legend" class="compare" hidden aria-label="Runs compared">
     <fieldset class="pick"><legend>Pick up to 5 runs</legend><div id="pick"></div></fieldset>
     <div class="table-scroll"><table>
-      <thead><tr><th>Run</th><th>Steps</th><th>Latest test race</th><th>Best test race</th></tr></thead>
+      <thead><tr><th>#</th><th>Run</th><th>Steps</th><th>Latest test race</th><th>Best test race</th></tr></thead>
       <tbody id="compare-rows"></tbody>
     </table></div>
   </section>
@@ -72,6 +72,7 @@ const CHARTS = [
 // validate_palette.js --pairs all, dark, surface #141a22): CVD ΔE >= 8.5, normal-vision ΔE >= 21.
 const RUN_COLORS = ["#187eb3", "#a26109", "#b24df7", "#10af2f", "#dc0e76"];
 const COMPARE = "__compare__";
+const label = n => (data?.runs[n]?.number ? `#${data.runs[n].number} ` : "") + n;  // "#4 band-speed-steer"
 const PICK_KEY = "car-racing-dash:compare";
 let picked = null;            // run names in Compare, max RUN_COLORS.length
 const colorOf = {};           // run -> colour; kept while the run stays picked, so survivors never repaint
@@ -96,7 +97,7 @@ function renderPicker(names) {
     });
     lab.append(cb);
     if (cb.checked) { const k = document.createElement("i"); k.className = "key"; k.style.background = colorOf[n]; lab.append(k); }
-    lab.append(document.createTextNode(n));
+    lab.append(document.createTextNode(label(n)));
     return lab;
   }));
 }
@@ -229,6 +230,7 @@ function renderCompare() {
     const best = races.reduce((b, r) => (b && b.score > r.score ? b : r), null);
     const tr = document.createElement("tr");
     const c0 = document.createElement("td"); const key = document.createElement("i"); key.className = "key"; key.style.background = colorOf[n]; c0.append(key, document.createTextNode(n));
+    const cn = document.createElement("td"); cn.className = "num"; cn.textContent = data.runs[n].number ?? "–"; tr.appendChild(cn);
     const cells = [fmtSteps(steps), races.at(-1) ? races.at(-1).score.toFixed(0) : "–", best ? best.score.toFixed(0) : "–"];
     tr.appendChild(c0); for (const c of cells) { const td = document.createElement("td"); td.textContent = c; tr.appendChild(td); }
     rows.appendChild(tr);
@@ -321,7 +323,7 @@ async function load() {
   const sel = document.getElementById("run"), names = Object.keys(data.runs);
   const want = [...names, ...(names.length > 1 ? [COMPARE] : [])];
   if ([...sel.options].map(o => o.value).join() !== want.join()) {
-    sel.replaceChildren(...want.map(n => { const o = document.createElement("option"); o.value = n; o.textContent = n === COMPARE ? "Compare runs" : n; return o; }));
+    sel.replaceChildren(...want.map(n => { const o = document.createElement("option"); o.value = n; o.textContent = n === COMPARE ? "Compare runs" : label(n); return o; }));
     runName ??= names.includes("baseline") ? "baseline" : names[0];
     sel.value = runName;
   }

@@ -15,7 +15,8 @@
   .table-scroll { overflow-x: auto; }
   table.results { border-collapse: collapse; width: 100%; min-width: 760px; font-variant-numeric: tabular-nums; }
   .results th, .results td { text-align: right; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  .results th:first-child, .results td:first-child { text-align: left; padding-left: 0; }
+  .results th:first-child, .results td:first-child, .results th:nth-child(2), .results td:nth-child(2) { text-align: left; }
+  .results th:first-child, .results td:first-child { padding-left: 0; color: var(--dim); }
   .results th { color: var(--dim); font-weight: 500; font-size: 0.8rem; }
   .results td { font-family: var(--mono); font-size: 0.9rem; }
   .results td.mean { color: var(--reward-ink); }
@@ -48,7 +49,7 @@
     <div class="table-scroll">
       <table class="results">
         <thead><tr>
-          <th>Run</th><th>Mean <small>± 95% CI</small></th><th>Median</th><th>Worst</th><th>Std</th>
+          <th>#</th><th>Run</th><th>Mean <small>± 95% CI</small></th><th>Median</th><th>Worst</th><th>Std</th>
           <th>≥ 900</th><th>Laps finished</th><th>Timed out</th><th>Tiles visited</th><th>Lap pace <small>median</small></th><th>Wrong way</th>
         </tr></thead>
         <tbody id="rows"></tbody>
@@ -111,14 +112,14 @@ function renderPicker() {
     });
     lab.append(cb);
     if (cb.checked) { const k = document.createElement("i"); k.className = "key"; k.style.background = colorOf[name]; lab.append(k); }
-    lab.append(document.createTextNode(name));
+    lab.append(document.createTextNode(allRuns.find(r => r.name === name).label));
     return lab;
   }));
 }
 function fillH2H() {
   for (const [id, pick] of [["h2h-a", runs.find(r => r.name === "baseline") || runs.at(-1)], ["h2h-b", runs[0]]]) {
     const sel = document.getElementById(id), keep = sel.value;
-    sel.replaceChildren(...runs.map(r => { const o = document.createElement("option"); o.value = o.textContent = r.name; return o; }));
+    sel.replaceChildren(...runs.map(r => { const o = document.createElement("option"); o.value = r.name; o.textContent = r.label; return o; }));
     if (runs.length) sel.value = runs.some(r => r.name === keep) ? keep : pick.name;
   }
   const A = document.getElementById("h2h-a"), B = document.getElementById("h2h-b");
@@ -165,8 +166,9 @@ function renderTable() {
     const n = r.ret.length, m = mean(r.ret), sd = std(r.ret), ci = 1.96 * sd / Math.sqrt(n);
     const tr = document.createElement("tr");
     const c0 = document.createElement("td"); const k = document.createElement("i"); k.className = "key"; k.style.background = r.color; c0.append(k, document.createTextNode(r.name));
+    const cn = document.createElement("td"); cn.className = "num"; cn.textContent = r.number ?? "–";
     const cm = document.createElement("td"); cm.className = "mean"; cm.append(m.toFixed(1) + " "); const sm = document.createElement("small"); sm.textContent = "± " + ci.toFixed(1); cm.append(sm);
-    tr.append(c0, cm);
+    tr.append(cn, c0, cm);
     for (const v of [median(r.ret).toFixed(1), Math.min(...r.ret).toFixed(1), sd.toFixed(1), pct(mean(r.ret.map(x => x >= 900 ? 1 : 0))),
                      pct(mean(r.rows.map(x => x.lap))), pct(mean(r.rows.map(x => timedOut(x) ? 1 : 0))), pct(mean(r.rows.map(x => x.tiles))),
                      Math.round(median(r.rows.map(pace))) + " fr", pct(mean(r.rows.map(x => x.wrong_way)))]) {
@@ -179,7 +181,7 @@ function renderTable() {
 // One row per run, one dot per track. cfg: { id, value(row), lo, hi, ref, refLabel, fmt, label, tipLines(row, r) }
 function renderStrip(cfg) {
   const card = document.getElementById(cfg.id);
-  const W = Math.max(300, card.clientWidth - 32), rowH = 46, L = Math.min(150, 20 + 7 * Math.max(...runs.map(r => r.name.length))), R = 12, T = 18, B = 26;
+  const W = Math.max(300, card.clientWidth - 32), rowH = 46, L = Math.min(170, 20 + 7 * Math.max(...runs.map(r => r.label.length))), R = 12, T = 18, B = 26;
   const H = T + rowH * runs.length + B;
   const { svg, add, tip } = svgIn(card, W, H);
   const x0 = cfg.lo, x1 = cfg.hi, val = row => Math.max(x0, Math.min(x1, cfg.value(row)));
@@ -195,7 +197,7 @@ function renderStrip(cfg) {
   const dots = [];
   runs.forEach((r, i) => {
     const cy = T + rowH * i + rowH / 2;
-    add("text", { x: L - 10, y: cy + 4, "text-anchor": "end", fill: css("--ink"), "font-size": 12 }, r.name);
+    add("text", { x: L - 10, y: cy + 4, "text-anchor": "end", fill: css("--ink"), "font-size": 12 }, r.label);
     r.rows.forEach((row, j) => {
       const jitter = (((row.seed * 2654435761) % 1000) / 1000 - 0.5) * (rowH - 18);  // fixed per track, so redraws don't shuffle
       const d = { x: X(val(row)), y: cy + jitter, r, row };
@@ -283,11 +285,11 @@ async function load() {
   try { data = await (await fetch("data.json?t=" + Date.now(), { cache: "no-store" })).json(); } catch { return; }
   document.getElementById("updated").textContent = "updated " + new Date(data.updated.replace(" ", "T")).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   allRuns = Object.entries(data.runs).filter(([, r]) => r.bench && r.bench.length)
-    .map(([name, r]) => ({ name, rows: r.bench, ret: r.bench.map(x => x.return) }))
+    .map(([name, r]) => ({ name, number: r.number, label: (r.number ? `#${r.number} ` : "") + name, rows: r.bench, ret: r.bench.map(x => x.return) }))
     .sort((a, b) => mean(b.ret) - mean(a.ret));  // best first, everywhere
   if (!allRuns.length) {
     document.getElementById("rows").innerHTML = "";
-    const e = document.createElement("tr"), td = document.createElement("td"); td.colSpan = 11; td.className = "empty";
+    const e = document.createElement("tr"), td = document.createElement("td"); td.colSpan = 12; td.className = "empty";
     td.textContent = "No benchmark yet. Run bench.py, then the export."; e.appendChild(td); document.getElementById("rows").appendChild(e);
     return;
   }

@@ -73,9 +73,13 @@ def videos(run: str) -> list[dict]:
 
 
 def main() -> None:
+    # runs.json: each run's number, what it changed, and its training flags (the lab notebook)
+    registry = json.loads((ROOT / "runs.json").read_text()) if (ROOT / "runs.json").exists() else {}
     runs = {}
-    for run_dir in sorted(p for p in (ROOT / "runs").iterdir() if p.is_dir()):
-        runs[run_dir.name] = {"series": scalars(run_dir), "races": races(run_dir), "videos": videos(run_dir.name), "bench": bench(run_dir)}
+    dirs = [p for p in (ROOT / "runs").iterdir() if p.is_dir()]
+    for run_dir in sorted(dirs, key=lambda p: (registry.get(p.name, {}).get("number", 10**6), p.name)):
+        info = registry.get(run_dir.name, {})
+        runs[run_dir.name] = {"number": info.get("number"), "change": info.get("change", ""),"series": scalars(run_dir), "races": races(run_dir), "videos": videos(run_dir.name), "bench": bench(run_dir)}
     data = {"updated": time.strftime("%Y-%m-%d %H:%M:%S"), "target_steps": 4_000_000, "solved_score": 900, "runs": runs}
     out = ROOT / "dashboard" / "data.json"
     out.write_text(json.dumps(data))

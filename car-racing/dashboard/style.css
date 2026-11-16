@@ -76,6 +76,7 @@
   .compare th, .compare td { text-align: left; padding: 8px 16px 8px 0; border-bottom: 1px solid var(--line); }
   .compare th { color: var(--dim); font-weight: 500; font-size: 0.8rem; }
   .compare td { font-family: var(--mono); font-size: 0.9rem; }
+  .compare td.num { color: var(--dim); }
   .compare .key { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 8px; vertical-align: middle; }
   .tip strong { display: flex; align-items: center; gap: 4px; }
   .tip strong span { color: var(--dim); font-family: var(--text); font-size: 0.75rem; font-weight: 400; }

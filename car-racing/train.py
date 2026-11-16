@@ -22,12 +22,22 @@ from moviepy import ImageSequenceClip
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback, CallbackList, CheckpointCallback
 from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.preprocessing import is_image_space_channels_first
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecFrameStack, VecNormalize
 from torch import nn
 
 from wrappers import make_env
 
 EVAL_SEED = 7  # the same track for every test race, so progress is comparable
+
+
+def stacked_frames(model: PPO) -> int:
+    """How many frames the model was trained with (1 gray channel per frame).
+
+    SB3 stores image spaces channels-first, (frames, 64, 64), so read the channel axis, not the last one.
+    """
+    space = model.observation_space
+    return space.shape[0] if is_image_space_channels_first(space) else space.shape[-1]
 
 
 def linear(start: float):
@@ -41,7 +51,8 @@ def test_race(model: PPO, video_path: Path | None) -> tuple[float, float]:
     Returns the game's own score (test races never use our shaping, so every run
     is scored the same way) and the share of decisions spent pointing the wrong way.
     """
-    env = VecFrameStack(DummyVecEnv([lambda: make_env("rgb_array", measure=True)]), n_stack=2)
+    n_stack = stacked_frames(model)
+    env = VecFrameStack(DummyVecEnv([lambda: make_env("rgb_array", measure=True)]), n_stack=n_stack)
     env.seed(EVAL_SEED)
     obs = env.reset()
     frames, score, done, wrong, n = [], 0.0, False, 0, 0
@@ -126,6 +137,7 @@ def main() -> None:
     p.add_argument("--band-penalty", type=float, default=0.0, help="per frame at most, for leaving the centre band; 0 = off")
     p.add_argument("--speed-bonus", type=float, default=0.0, help="per frame at most, for speed along the track; 0 = off")
     p.add_argument("--steer-penalty", type=float, default=0.0, help="per unit of steering change between decisions; 0 = off")
+    p.add_argument("--frames", type=int, default=2, help="frames stacked into one observation (motion info)")
     p.add_argument("--resume", type=Path, default=None, help="a checkpoint .zip to continue from")
     args = p.parse_args()
 
@@ -141,7 +153,7 @@ def main() -> None:
         vec_env_cls=SubprocVecEnv,
         env_kwargs={"grass_penalty": args.grass_penalty, "band_penalty": args.band_penalty, "speed_bonus": args.speed_bonus, "steer_penalty": args.steer_penalty},
     )
-    env = VecFrameStack(env, n_stack=2)  # "the last 2 frames", so it can see motion
+    env = VecFrameStack(env, n_stack=args.frames)  # the last N frames, so it can see motion
     env = VecNormalize(env, norm_obs=False, norm_reward=True)  # keeps reward sizes steady for learning
 
     # Each update learns from 4096 decisions, whatever the number of games.
