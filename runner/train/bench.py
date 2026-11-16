@@ -22,13 +22,15 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
 from runner_env import RunnerVecEnv  # noqa: E402
-from train import GAME_OPTIONS, MAX_TICKS, GameServers  # noqa: E402
+from train import GAME_OPTIONS, GameServers  # noqa: E402
 
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("run")
     p.add_argument("--episodes", type=int, default=100)
+    p.add_argument("--max-minutes", type=float, default=30.0,
+                   help="game-time limit per episode (training uses 10); long enough that it rarely decides the score")
     p.add_argument("--seed-start", type=int, default=1000)
     p.add_argument("--port", type=int, default=7900)
     p.add_argument("--out", default=None, help="file name inside runs/<run>/ (default bench.csv, or bench_<steps>.csv for a checkpoint)")
@@ -45,6 +47,7 @@ def main() -> None:
     model = PPO.load(args.checkpoint or run_dir / "final.zip", device="cpu")  # training normalizes rewards only, so raw obs go in
     seeds = list(range(args.seed_start, args.seed_start + args.episodes))
 
+    max_ticks = int(args.max_minutes * 60 * 60)  # 60 ticks per second
     started = time.time()
     meta = json.loads((run_dir / "meta.json").read_text())
     options = meta.get("game_options", GAME_OPTIONS)  # the rules the model was trained on
@@ -52,7 +55,7 @@ def main() -> None:
     rows, replays = [], {}
     try:
         # v4+: every seed once per start level (the level of each pass is fixed, not random)
-        probe = RunnerVecEnv(servers.ports[0], n_envs=1, seed_base=10**9, max_ticks=MAX_TICKS, options=options)
+        probe = RunnerVecEnv(servers.ports[0], n_envs=1, seed_base=10**9, max_ticks=max_ticks, options=options)
         levels = probe.level_names or [""]
         if probe.version != meta["game_version"]:
             raise SystemExit(f"model trained on game version {meta['game_version']}, server is version {probe.version}")
@@ -61,7 +64,7 @@ def main() -> None:
         for level in levels:
             servers = GameServers(1, args.port, run_dir / "logs", game_dir=args.game_dir)  # one connection per server process
             opts = options | ({"level": level} if level else {})
-            env = RunnerVecEnv(servers.ports[0], n_envs=len(seeds), seed_base=10**9, max_ticks=MAX_TICKS, options=opts)
+            env = RunnerVecEnv(servers.ports[0], n_envs=len(seeds), seed_base=10**9, max_ticks=max_ticks, options=opts)
             obs = np.stack([env.set_seed(i, s) for i, s in enumerate(seeds)])
             results: dict[int, dict] = {}
             while len(results) < len(seeds):
@@ -76,7 +79,7 @@ def main() -> None:
             for i, s in enumerate(seeds):
                 e = results[i]
                 assert e["seed"] == s and e.get("level", "") == level, (e["seed"], s, e.get("level"), level)
-                rows.append({"level": level, "seed": s, "score": e["score"], "meters": e["meters"],
+                rows.append({"level": level, "seed": s, "time_limit_min": args.max_minutes, "score": e["score"], "meters": e["meters"],
                              "coin_score": e["score"] - e["meters"], "seconds": round(e["ticks"] / 60, 2),
                              "death_cause": e["death_cause"] or "time limit",
                              "moves_per_100m": round(e["moves_per_100m"], 2), "reversals_per_100m": round(e["reversals_per_100m"], 2),
@@ -102,7 +105,7 @@ def main() -> None:
             causes[r["death_cause"]] = causes.get(r["death_cause"], 0) + 1
         print(f"{args.run} {level or ''}: mean {score.mean():.1f} ± {1.96 * score.std(ddof=1) / np.sqrt(len(score)):.1f} (95% CI)  "
               f"median {np.median(score):.0f}  worst {score.min():.0f}  best {score.max():.0f}  "
-              f"survived 10 min {np.mean([r['death_cause'] == 'time limit' for r in mine]):.0%}")
+              f"reached the {args.max_minutes:g}-min limit {np.mean([r['death_cause'] == 'time limit' for r in mine]):.0%}")
         print("  deaths:", ", ".join(f"{c} {n}" for c, n in sorted(causes.items(), key=lambda kv: -kv[1])))
     print(f"{len(rows)} episodes in {(time.time() - started) / 60:.1f} min -> {out}")
 
