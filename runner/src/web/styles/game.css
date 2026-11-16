@@ -85,3 +85,22 @@
   color: #fff; font-size: 0.85rem; font-weight: 600; text-align: center; }
 .overlay.compact .level-info { display: none; }
 .overlay .watch-link { display: inline-block; }
+/* save score + leaderboard */
+.links-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; }
+.save { display: grid; justify-items: center; gap: 6px; }
+.save[hidden] { display: none; }
+.save-btn { min-width: 160px; padding: 10px 18px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.55); background: rgba(255, 255, 255, 0.12);
+  color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.save-btn:disabled { opacity: 0.6; cursor: wait; }
+.save-msg { margin: 0; color: #dfe4f7; font-size: 0.9rem; text-align: center; min-height: 1.2em; }
+.board { z-index: 7; align-content: center; background: rgba(6, 8, 24, 0.82); }
+.board-title { margin: 0; font-size: 1.5rem; }
+.board-list { list-style: none; margin: 0; padding: 0; width: 100%; max-height: min(50vh, 420px); overflow-y: auto; display: grid; gap: 4px; }
+.board-list li { display: grid; grid-template-columns: 2.4em minmax(0, 1fr) auto; gap: 8px; padding: 6px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.06); font-variant-numeric: tabular-nums; text-align: left; }
+.board-list li span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-list li b { color: #ffd36a; }
+.board-list li span:last-child { font-weight: 700; }
+.board-list .empty { display: block; text-align: center; color: #b8c0dc; background: none; }
+.toast { position: fixed; top: 76px; left: 50%; transform: translateX(-50%); z-index: 8; max-width: calc(100vw - 32px); padding: 10px 16px; border-radius: 12px;
+  background: rgba(14, 18, 44, 0.92); border: 1px solid rgba(255, 255, 255, 0.2); color: #fff; font-size: 0.95rem; text-align: center; }
+.toast[hidden] { display: none; }

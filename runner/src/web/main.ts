@@ -4,6 +4,7 @@ import { TICK_HZ } from "../core/config";
 import { Game } from "../core/game";
 import { loadCharacters, makeCharacter, type CharacterInfo, type CharacterView } from "./character";
 import { Sfx } from "./audio";
+import { fetchBoard, saveScore, signInToSave, takePending, type SaveOutcome } from "./scores";
 import { mountSoundControls } from "./sound-controls";
 import { mountHud } from "./hud";
 import { Input } from "./input";
@@ -78,6 +79,7 @@ function start(): void {
   input.clear();
   running = true;
   $("overlay").classList.remove("compact");
+  $("saveRow").hidden = true;
   $("overlay").hidden = true;
   hud.label(playerName());
   sfx.reset(game);
@@ -124,6 +126,7 @@ function frame(now: number): void {
       $("title").textContent = `${game.score} points`;
       $("sub").textContent = `${game.meters} m, ${game.coins} coins · ${caught ? "the Blackout caught you" : `hit a ${game.deathCause.replace(" front", "")}`}`;
       $("play").textContent = "Run again";
+      showSave(game);
       $("overlay").classList.add("compact"); // just the result and the two buttons; settings fold away
       // every run end: the ghost circles you and the stars spin for a moment, then the card
       setTimeout(() => { $("overlay").hidden = false; }, 1900);
@@ -136,3 +139,83 @@ function frame(now: number): void {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+// ---- save score + leaderboard (playing never needs an account; saving does)
+const LEVEL_WORDS = ["Easy", "Normal", "Hard"];
+let lastRun: Game | null = null;
+
+function showSave(g: Game): void {
+  lastRun = g;
+  $("saveRow").hidden = false;
+  $<HTMLButtonElement>("save").disabled = false;
+  $("save").textContent = "Save score";
+  $("saveMsg").textContent = "";
+}
+
+function describe(o: SaveOutcome): string {
+  if (!o.ok) return o.signIn ? "Sign in to save your score." : o.message;
+  const r = o.result, board = LEVEL_WORDS[r.level];
+  const rank = r.rank ? `, number ${r.rank} on the ${board} board` : ` on the ${board} board`;
+  return r.improved ? `Saved! Your best is now ${r.best}${rank}.` : `Saved. Your best is still ${r.best}${rank}.`;
+}
+
+$("save").addEventListener("click", async () => {
+  if (!lastRun) return;
+  const name = nameInput.value.trim();
+  if (!name) {
+    $("overlay").classList.remove("compact"); // show the name field
+    $("saveMsg").textContent = "Type your name first, so the board can show it.";
+    nameInput.focus();
+    return;
+  }
+  const btn = $<HTMLButtonElement>("save");
+  btn.disabled = true;
+  btn.textContent = "Saving…";
+  const outcome = await saveScore(name, lastRun.replay());
+  if (!outcome.ok && outcome.signIn) {
+    $("saveMsg").textContent = "Taking you to sign in. Your run will be saved when you come back.";
+    signInToSave(name, lastRun.replay());
+    return;
+  }
+  $("saveMsg").textContent = describe(outcome);
+  btn.textContent = outcome.ok ? "Saved" : "Try again";
+  btn.disabled = outcome.ok;
+});
+
+// back from signing in: save the run that was waiting
+const pending = takePending();
+if (pending) {
+  const toast = $("toast");
+  toast.hidden = false;
+  toast.textContent = "Saving your score…";
+  saveScore(pending.name, pending.replay).then((o) => {
+    toast.textContent = describe(o);
+    setTimeout(() => { toast.hidden = true; }, 6000);
+  });
+}
+
+// the leaderboard: one board per level, opened from the start or game-over card
+let boardLevel: number = level;
+async function showBoard(l: number): Promise<void> {
+  boardLevel = l;
+  for (const b of document.querySelectorAll<HTMLButtonElement>("[data-board]")) b.setAttribute("aria-checked", String(Number(b.dataset.board) === l));
+  const list = $("boardList");
+  list.innerHTML = '<li class="empty">Loading…</li>';
+  $("boardMe").textContent = "";
+  const board = await fetchBoard(l);
+  if (boardLevel !== l) return;
+  if (!board) { list.innerHTML = '<li class="empty">The leaderboard can\'t be reached right now.</li>'; return; }
+  if (!board.top.length) { list.innerHTML = `<li class="empty">No scores on the ${LEVEL_WORDS[l]} board yet. Be the first!</li>`; }
+  else list.replaceChildren(...board.top.map((e) => {
+    const li = document.createElement("li");
+    li.innerHTML = "<b></b><span></span><span></span>";
+    li.children[0].textContent = String(e.rank);
+    li.children[1].textContent = e.name; // text, never HTML: names come from players
+    li.children[2].textContent = String(e.score);
+    return li;
+  }));
+  $("boardMe").textContent = board.me ? `Your best here: ${board.me.best}${board.me.rank ? `, number ${board.me.rank}` : ""}.` : "";
+}
+$("boardBtn").addEventListener("click", () => { $("board").hidden = false; void showBoard(level); });
+for (const b of document.querySelectorAll<HTMLButtonElement>("[data-board]")) b.addEventListener("click", () => void showBoard(Number(b.dataset.board)));
+$("boardClose").addEventListener("click", () => { $("board").hidden = true; });

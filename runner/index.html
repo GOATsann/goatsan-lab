@@ -43,10 +43,29 @@
     <button class="primary" id="play">Run</button>
     <button id="race" hidden>Race the AI</button>
   </div>
-  <button class="more watch-link" id="watch">Watch the AI play by itself</button>
+  <div class="save" id="saveRow" hidden>
+    <button class="save-btn" id="save">Save score</button>
+    <p class="save-msg" id="saveMsg" role="status"></p>
+  </div>
+  <div class="links-row">
+    <button class="more watch-link" id="watch">Watch the AI play by itself</button>
+    <button class="more watch-link" id="boardBtn">Leaderboard</button>
+  </div>
   <p class="hint"><kbd>←</kbd> <kbd>→</kbd> change lane · <kbd>↑</kbd> jump · <kbd>↓</kbd> roll · or swipe</p>
  </div>
 </div>
+<div class="overlay board" id="board" hidden>
+ <div class="card">
+  <h2 class="board-title">Leaderboard</h2>
+  <div class="levels" role="radiogroup" aria-label="Board">
+    <button data-board="0" role="radio">Easy</button><button data-board="1" role="radio">Normal</button><button data-board="2" role="radio">Hard</button>
+  </div>
+  <ol class="board-list" id="boardList"></ol>
+  <p class="save-msg" id="boardMe"></p>
+  <button class="save-btn" id="boardClose">Close</button>
+ </div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
 <script type="module" src="/src/web/main.ts"></script>
 </body>
 </html>
