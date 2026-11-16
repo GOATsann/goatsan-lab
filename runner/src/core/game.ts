@@ -14,6 +14,12 @@ export const ACTION_NAMES = ["nothing", "left", "right", "jump", "roll"] as cons
 
 export const VERSION = 1; // bump when the rules change: old replays no longer match
 
+/** Every way a run can end. Index 0 = still alive. The batch server sends the index. */
+export const DEATH_CAUSES = [
+  "", "low front", "high front", "train front", "oncoming train",
+  "low side, twice", "high side, twice", "train side, twice",
+] as const;
+
 export type ObstacleKind = "low" | "high" | "train" | "ramp";
 export type PickupKind = "coin" | "magnet" | "spring" | "double";
 
@@ -294,6 +300,7 @@ export class Game {
   }
 
   private die(cause: string): void {
+    if (!(DEATH_CAUSES as readonly string[]).includes(cause)) throw new Error(`unknown death cause: ${cause}`);
     this.dead = true;
     this.deathCause = cause;
     this.events.died = 1;

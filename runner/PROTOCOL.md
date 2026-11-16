@@ -1,7 +1,8 @@
 # Batch server protocol (Node game server <-> Python trainer)
 
-Status: proposal by the Python side (personal-website [a39e8d]); the server side (personal-website
-[43d7c1]) confirms or edits. Both sides follow this file; change it here first.
+Status: agreed. Proposed by the Python side (a39e8d), confirmed with two edits by the server side
+(43d7c1): the real death-cause names, and a reply for command 4. Both sides follow this file; change it
+here first. Server: `src/headless/server.ts`.
 
 ## Transport
 
@@ -33,7 +34,8 @@ Server -> Python:
   "decision_ticks": 4,
   "event_fields": ["distance", "coins", "powerups", "jumps", "rolls", "laneChanges", "stumbles", "died",
                    "score", "meters", "ticks"],
-  "death_causes": ["", "low", "high", "trainFront", "trainSide", "movingTrain", "stumble"]
+  "death_causes": ["", "low front", "high front", "train front", "oncoming train",
+                   "low side, twice", "high side, twice", "train side, twice"]
 }
 ```
 
@@ -71,7 +73,11 @@ env's most recently finished episode. Used for progress races and benchmark seed
 ### 4 = run fixed seeds (benchmark / progress race)
 
 Python: `u8 4`, `u16 env`, `u32 seed`. Resets that env to exactly this seed (outside the seed stream).
-The next steps continue normally; after it finishes, the env goes back to its seed stream.
+Reply: `f32 obs[obs_size]` (that env's first observation). The next steps continue normally; after it
+finishes, the env goes back to its seed stream.
+
+Death causes come from `DEATH_CAUSES` in `src/core/game.ts` ("front" = ran into it; "side, twice" = a
+second lane change into something within 5 s; "oncoming train" = hit by a moving train).
 
 ### 0 = close
 
