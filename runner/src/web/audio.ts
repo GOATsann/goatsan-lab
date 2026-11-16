@@ -41,7 +41,8 @@ export class Sfx {
     this.musicStarted = true;
     try {
       const r = await fetch("/audio/music.mp3");
-      if (!r.ok || !(r.headers.get("content-type") ?? "").startsWith("audio")) return;
+      // a missing file comes back as the dev server's HTML page: skip it (any other type is decoded)
+      if (!r.ok || (r.headers.get("content-type") ?? "").includes("text/html")) return;
       const buf = await this.ctx.decodeAudioData(await r.arrayBuffer());
       const src = this.ctx.createBufferSource();
       src.buffer = buf;

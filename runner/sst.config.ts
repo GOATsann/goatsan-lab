@@ -17,6 +17,17 @@ export default $config({
     const cert = process.env.SURFER_CERT_ARN;
     const site = new sst.aws.StaticSite("Game", {
       build: { command: "npm run build", output: "dist" },
+      assets: {
+        // Later entries win. Only Vite's hashed files (assets/) may be cached forever: the models,
+        // characters and music keep their names, so a new AI model must reach players quickly.
+        fileOptions: [
+          { files: "**", cacheControl: "public,max-age=300,must-revalidate" },
+          { files: "assets/**", cacheControl: "public,max-age=31536000,immutable" },
+          { files: "**/*.html", cacheControl: "max-age=0,no-cache,no-store,must-revalidate" },
+          { files: "**/*.mp3", contentType: "audio/mpeg", cacheControl: "public,max-age=86400" },
+          { files: "**/*.glb", contentType: "model/gltf-binary", cacheControl: "public,max-age=3600" },
+        ],
+      },
       ...(cert ? { domain: { name: "surfer.theonlygoatsan.com", dns: false, cert } } : {}),
     });
     return { url: site.url };
