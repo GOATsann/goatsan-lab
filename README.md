@@ -10,4 +10,14 @@ by [@_goatsan](https://www.instagram.com/_goatsan/). Everything here is free to 
 
 All my free builds: [theonlygoatsan.com/free](https://www.theonlygoatsan.com/free)
 
+## New to this code? Let an AI walk you through it
+
+The quickest way in is to open this repo with an AI coding agent (Claude Code, Cursor, GitHub Copilot
+or similar) and ask it to explain the project to you. It can read every file and answer follow-up
+questions, so you don't have to work it all out alone. For example:
+
+> Explain how the runner/ project works, from the game rules to the AI training, and show me how to run it.
+
+Each project's README has a starter question like this one.
+
 Code: MIT. Art in this repo made for these projects: CC-BY 4.0. The Kai and Nova character models are not included. See [LICENSE](LICENSE).

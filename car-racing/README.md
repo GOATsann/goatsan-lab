@@ -3,6 +3,11 @@
 PPO (Stable-Baselines3) learning Gymnasium's **CarRacing-v3** from pixels, and a fair way to compare
 reward ideas: every model drives the same 100 tracks with the game's own score.
 
+> **New to this code?** Open this folder with an AI coding agent (Claude Code, Cursor, GitHub
+> Copilot or similar) and ask it to walk you through it. For example: *"Explain how train.py,
+> wrappers.py and bench.py fit together, what each reward idea changes, and how I train and
+> benchmark a run on my laptop."*
+
 ## What's here
 
 - `train.py`: PPO training (64×64 gray frames, a stack of 2 or 4, RL Zoo's tuned settings). Every
