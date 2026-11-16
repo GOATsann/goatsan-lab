@@ -9,6 +9,7 @@ Reads HF_TOKEN from .env.local (ignored by git). Every model zip is re-saved wit
 """
 
 import argparse
+import getpass
 import io
 import json
 import shutil
@@ -22,7 +23,9 @@ from stable_baselines3 import PPO
 
 LAB = Path(__file__).resolve().parents[1]
 USER = "TheOnlyGoatsan"
-FORBIDDEN = ["/Users/", "/private/", "/home/", "redbrain", "claude-501"]
+# Local paths and this machine's account name must never reach a public upload (read at run time,
+# so the name itself is not written in this public file).
+FORBIDDEN = ["/Users/", "/private/", "/home/", "/var/folders/", getpass.getuser(), Path.home().name]
 
 
 def token() -> str:
