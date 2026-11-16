@@ -3,3 +3,4 @@ dist/
 runs/
 videos/
 public/audio/music.mp3
+.sst/
