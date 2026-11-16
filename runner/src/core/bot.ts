@@ -29,14 +29,14 @@ function safe(g: Game, depth: number, horizon: number): Action | -1 {
   return -1;
 }
 
-export function botAction(g: Game, horizon = 12): Action {
+export function botAction(g: Game, horizon = 20): Action {
   const a = safe(g, 2, horizon);
   return a === -1 ? NOOP : a;
 }
 
 /** Play until `meters` or death. Returns the game. */
-export function botRun(seed: number, meters: number): Game {
-  const g = new Game(seed);
+export function botRun(seed: number, meters: number, level: 0 | 1 | 2 = 1): Game {
+  const g = new Game(seed, { level });
   while (!g.dead && g.meters < meters) g.decide(botAction(g));
   return g;
 }

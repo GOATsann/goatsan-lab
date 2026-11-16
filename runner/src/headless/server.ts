@@ -2,11 +2,11 @@
 //   npm run server -- --port 7001
 // One TCP client; it owns n_envs games and steps them all per message.
 import net from "node:net";
-import { DECISION_TICKS, LANES } from "../core/config";
-import { DEATH_CAUSES, DEFAULT_OPTIONS, Game, VERSION, type Action, type Events, type GameOptions, type Replay } from "../core/game";
+import { DECISION_TICKS, LANES, LEVEL_NAMES } from "../core/config";
+import { DEATH_CAUSES, DEFAULT_OPTIONS, Game, VERSION, levelFromSeed, type Action, type Events, type GameOptions, type Replay } from "../core/game";
 import { CHANNELS, OBS_SIZE, ROWS, ROW_LEN, STATE, observe, type ObsOptions } from "../core/obs";
 
-const EVENT_FIELDS = ["distance", "coins", "powerups", "jumps", "rolls", "laneChanges", "stumbles", "died", "score", "meters", "ticks", "shieldsUsed"] as const;
+const EVENT_FIELDS = ["distance", "coins", "powerups", "jumps", "rolls", "laneChanges", "stumbles", "died", "score", "meters", "ticks", "shieldsUsed", "level"] as const;
 const NEV = EVENT_FIELDS.length;
 const N_ACTIONS = 5;
 
@@ -24,16 +24,21 @@ interface Hello {
   powerups?: boolean;
   stumbles_to_catch?: number;
   observe_chaser?: boolean;
+  /** start level: "easy" | "normal" | "hard" | "random" (default; per episode, from the seed) */
+  level?: string;
 }
 
 class Batch {
   games: Game[];
   episode: number[]; // episodes started per env (for the seed stream)
   lastReplay: (Replay | null)[];
-  readonly rules: GameOptions;
+  readonly rules: Omit<GameOptions, "level">;
+  readonly level: string;
   readonly view: ObsOptions;
   constructor(readonly hello: Hello) {
     this.rules = { powerups: hello.powerups ?? DEFAULT_OPTIONS.powerups, stumblesToCatch: hello.stumbles_to_catch ?? DEFAULT_OPTIONS.stumblesToCatch };
+    this.level = hello.level ?? "random";
+    if (this.level !== "random" && !(LEVEL_NAMES as readonly string[]).includes(this.level)) throw new Error(`unknown level ${this.level}`);
     this.view = { observeChaser: hello.observe_chaser ?? false };
     const n = hello.n_envs;
     this.episode = new Array(n).fill(0);
@@ -43,7 +48,11 @@ class Batch {
   private fresh(i: number): Game {
     const seed = this.hello.seed_base + this.episode[i] * this.hello.n_envs + i;
     this.episode[i]++;
-    return new Game(seed, this.rules);
+    return this.game(seed);
+  }
+  game(seed: number): Game {
+    const level = this.level === "random" ? levelFromSeed(seed) : (LEVEL_NAMES as readonly string[]).indexOf(this.level) as 0 | 1 | 2;
+    return new Game(seed, { ...this.rules, level });
   }
   resetAll(): Buffer {
     this.games = this.games.map((_, i) => this.fresh(i));
@@ -52,7 +61,7 @@ class Batch {
     return Buffer.from(obs.buffer);
   }
   resetTo(env: number, seed: number): Buffer {
-    this.games[env] = new Game(seed, this.rules);
+    this.games[env] = this.game(seed);
     const obs = new Float32Array(OBS_SIZE);
     observe(this.games[env], obs, this.view);
     return Buffer.from(obs.buffer);
@@ -70,7 +79,7 @@ class Batch {
       seeds[i] = g.seed;
       const row = ev.subarray(i * NEV, (i + 1) * NEV);
       row[0] = e.distance; row[1] = e.coins; row[2] = e.powerups; row[3] = e.jumps; row[4] = e.rolls;
-      row[5] = e.laneChanges; row[6] = e.stumbles; row[7] = e.died; row[8] = g.score; row[9] = g.meters; row[10] = g.tick; row[11] = e.shieldsUsed;
+      row[5] = e.laneChanges; row[6] = e.stumbles; row[7] = e.died; row[8] = g.score; row[9] = g.meters; row[10] = g.tick; row[11] = e.shieldsUsed; row[12] = g.options.level;
       term[i] = g.dead ? 1 : 0;
       trunc[i] = !g.dead && g.tick >= this.hello.max_ticks ? 1 : 0;
       cause[i] = DEATH_CAUSES.indexOf(g.deathCause as (typeof DEATH_CAUSES)[number]);
@@ -124,7 +133,7 @@ const server = net.createServer((sock) => {
           sock.write(frame(Buffer.from(JSON.stringify({
             version: VERSION, obs_size: OBS_SIZE, n_actions: N_ACTIONS, decision_ticks: DECISION_TICKS,
             event_fields: EVENT_FIELDS, death_causes: DEATH_CAUSES,
-            rules: batch.rules, observe_chaser: batch.view.observeChaser,
+            rules: batch.rules, level: batch.level, level_names: LEVEL_NAMES, observe_chaser: batch.view.observeChaser,
             obs_layout: {
               lanes: LANES, rows: ROWS, row_len_mm: ROW_LEN, first_row_offset_mm: -ROW_LEN,
               channels: CHANNELS, grid_order: "lane,row,channel", state: STATE,

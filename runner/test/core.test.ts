@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as C from "../src/core/config";
 import { botRun } from "../src/core/bot";
-import { Game, JUMP, LEFT, NOOP, POWER_KINDS, ROLL, laneX, type Action, type GameOptions } from "../src/core/game";
+import { Game, JUMP, LEFT, NOOP, POWER_KINDS, ROLL, laneX, speedAt, type Action, type GameOptions } from "../src/core/game";
 import { Rng } from "../src/core/rng";
 
 /** A game with the generated track removed and our own obstacles in it. */
@@ -135,10 +135,18 @@ describe("rules", () => {
 });
 
 describe("track generator", () => {
-  it("every seed can be survived for 1.5 km by the search bot", () => {
-    for (let seed = 0; seed < 12; seed++) {
-      const g = botRun(seed, 1500);
-      expect({ seed, dead: g.dead, cause: g.deathCause, m: g.meters }).toEqual({ seed, dead: false, cause: "", m: g.meters });
+  it("every seed, at every start level, can be survived for 1.5 km by the search bot", () => {
+    for (const level of [0, 1, 2] as const) for (let seed = 0; seed < 6; seed++) {
+      const g = botRun(seed, 1500, level);
+      expect({ level, seed, dead: g.dead, cause: g.deathCause }).toEqual({ level, seed, dead: false, cause: "" });
     }
-  }, 120000);
+  }, 600000);
+  it("difficulty keeps rising: speed and heat grow, with no ceiling", () => {
+    const at = (min: number, level: 0 | 1 | 2) => { const g = new Game(1, { level }); g.tick = min * 3600; return { heat: g.heat, speed: speedAt(g.tick, level) }; };
+    expect(at(0, 0).heat).toBeLessThan(at(0, 1).heat);
+    expect(at(0, 1).heat).toBeLessThan(at(0, 2).heat);
+    expect(at(3, 1).heat).toBeCloseTo(1.3);
+    expect(at(5, 1).heat).toBeGreaterThan(at(3, 1).heat);
+    expect(at(30, 1).speed).toBeGreaterThan(at(10, 1).speed);
+  });
 });

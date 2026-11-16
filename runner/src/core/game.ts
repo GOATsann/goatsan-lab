@@ -12,7 +12,7 @@ export const NOOP = 0, LEFT = 1, RIGHT = 2, JUMP = 3, ROLL = 4;
 export type Action = 0 | 1 | 2 | 3 | 4;
 export const ACTION_NAMES = ["nothing", "left", "right", "jump", "roll"] as const;
 
-export const VERSION = 3; // bump when the rules change: old replays no longer match
+export const VERSION = 4; // bump when the rules change: old replays no longer match
 
 /** Every way a run can end. Index 0 = still alive. The batch server sends the index. */
 export const DEATH_CAUSES = ["", "train front", "oncoming train", "caught"] as const;
@@ -27,8 +27,20 @@ export interface GameOptions {
   powerups: boolean;
   /** stumbles in a row (while the chaser is close) that end the run; 2 = the second one catches you */
   stumblesToCatch: number;
+  /** start level: 0 easy, 1 normal, 2 hard (the difficulty ramp builds on top) */
+  level: 0 | 1 | 2;
 }
-export const DEFAULT_OPTIONS: GameOptions = { powerups: true, stumblesToCatch: 2 };
+export const DEFAULT_OPTIONS: GameOptions = { powerups: true, stumblesToCatch: 2, level: 1 };
+
+/** "random" start level, decided by the seed with the core's own PRNG (same seed -> same level). */
+export const levelFromSeed = (seed: number): 0 | 1 | 2 => new Rng((seed ^ 0x1e7e1) >>> 0).int(3) as 0 | 1 | 2;
+
+/** Difficulty at a tick: start level base + smooth 3-min ramp + a step every 2 min, no ceiling. */
+export function heatAt(tick: number, level: number): number {
+  const ramp = Math.min(1, tick / C.RAMP_TICKS);
+  const steps = tick > C.RAMP_TICKS ? Math.floor((tick - C.RAMP_TICKS) / C.STEP_TICKS) : 0;
+  return C.LEVEL_BASE[level] + ramp + steps * C.STEP_HEAT;
+}
 
 export interface Obstacle {
   id: number;
@@ -96,7 +108,7 @@ export class Game {
   rollQueued = false;
   rollCooldown = 0;
   bounceIgnore = -1; // obstacle we just bounced off; ignored while we slide back
-  speed = C.START_SPEED; // base speed; slower for a moment after a stumble
+  speed = C.START_SPEED; // base speed (follows heat); slower for a moment after a stumble
   slowTicks = 0;
   magnetTicks = 0;
   springTicks = 0;
@@ -126,6 +138,7 @@ export class Game {
   constructor(seed: number, options: Partial<GameOptions> = {}) {
     this.seed = seed >>> 0;
     this.options = { ...DEFAULT_OPTIONS, ...options };
+    this.speed = speedAt(0, this.options.level);
     this.rng = new Rng(this.seed);
     this.buildTrack();
   }
@@ -136,6 +149,11 @@ export class Game {
 
   get score(): number {
     return this.meters + this.coinScore;
+  }
+
+  /** Current difficulty (see heatAt). */
+  get heat(): number {
+    return heatAt(this.tick, this.options.level);
   }
 
   get rolling(): boolean {
@@ -179,7 +197,7 @@ export class Game {
 
     // up and down
     const ground = this.groundAt(this.y);
-    this.vy -= C.GRAVITY;
+    this.vy -= Math.abs(this.vy) < C.HANG_V ? C.HANG_GRAVITY : C.GRAVITY;
     this.y += this.vy;
     if (this.y <= ground) {
       this.y = ground;
@@ -212,7 +230,7 @@ export class Game {
     if (this.springTicks > 0) this.springTicks--;
     if (this.doubleTicks > 0) this.doubleTicks--;
     this.tick++;
-    if (this.tick % C.SPEEDUP_EVERY === 0 && this.speed < C.MAX_SPEED) this.speed++;
+    this.speed = speedAt(this.tick, this.options.level);
     this.buildTrack();
   }
 
@@ -264,7 +282,7 @@ export class Game {
     for (const v of [this.tick, this.z, this.x, this.y, this.vy, this.lane, this.rollTicks, this.rollCooldown, this.speed,
       this.coins, this.coinScore, this.dead ? 1 : 0, this.slowTicks, this.magnetTicks, this.springTicks,
       this.doubleTicks, this.shieldTicks, this.graceTicks, this.passThrough, this.chaserTicks, this.chaserGap, this.stumbleCount,
-      this.nextChunkZ, this.options.powerups ? 1 : 0, this.options.stumblesToCatch]) mix(v);
+      this.nextChunkZ, this.options.powerups ? 1 : 0, this.options.stumblesToCatch, this.options.level]) mix(v);
     for (const s of this.rng.s) mix(s);
     for (const o of this.obstacles) { mix(o.id); mix(o.z0); mix(o.lane); mix(o.broken ? 1 : 0); }
     for (const p of this.pickups) { mix(p.id); mix(p.taken ? 1 : 0); }
@@ -400,12 +418,21 @@ export class Game {
   private buildTrack(): void {
     while (this.nextChunkZ < this.z + C.VIEW_DISTANCE) {
       const meters = this.nextChunkZ / 1000;
-      const pool = CHUNKS.filter((c) => c.minMeters <= meters);
-      const chunk = this.rng.weighted(pool, pool.map((c) => c.weight));
+      const h = this.heat;
+      // a harder start level unlocks the harder pieces sooner
+      const unlock = 1 - C.LEVEL_BASE[this.options.level];
+      const pool = CHUNKS.filter((c) => c.minMeters * unlock <= meters);
+      // integer weights (x100) so every machine picks the same piece
+      const weights = pool.map((c) => Math.max(1, Math.round(c.weight * 100 *
+        (c.level === 0 ? 1 - Math.min(C.EASY_FADE_MAX, C.EASY_FADE * h) : 1 + C.HARD_BOOST * c.level * h))));
+      const chunk = this.rng.weighted(pool, weights);
       const perm = PERMS[this.rng.int(PERMS.length)];
-      const base = this.nextChunkZ;
+      // denser track: shorten the empty run-up before the piece's first obstacle (its inside spacing stays)
+      const lead = Math.min(...chunk.items.map((it) => it.z));
+      const shift = Math.floor(lead * Math.min(C.LEADIN_SQUEEZE_MAX, C.LEADIN_SQUEEZE * h));
+      const base = this.nextChunkZ - shift;
       for (const it of chunk.items) this.place(it.kind, perm[it.slot], base + it.z, it.onRoof ?? false, it.lift ?? 0);
-      this.nextChunkZ += chunk.len;
+      this.nextChunkZ += chunk.len - shift;
     }
     const behind = this.z - 15000;
     if (this.obstacles.length && this.obstacles[0].z1 < behind) this.obstacles = this.obstacles.filter((o) => o.z1 >= behind);
@@ -428,6 +455,9 @@ export class Game {
     }
   }
 }
+
+/** Base speed (mm/tick) at a tick for a start level. */
+export const speedAt = (tick: number, level: number) => C.START_SPEED + Math.floor(C.SPEED_PER_HEAT * heatAt(tick, level));
 
 const PERMS = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
 

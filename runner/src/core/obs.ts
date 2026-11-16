@@ -15,7 +15,7 @@ export const CHANNELS = ["low", "high", "trainFront", "trainBody", "ramp", "coin
 export const NCH = CHANNELS.length;
 export const STATE = [
   "lane0", "lane1", "lane2", "x", "y", "vy", "grounded", "rolling", "onRoof", "speed",
-  "slowed", "magnet", "spring", "double", "shield",
+  "slowed", "magnet", "spring", "double", "shield", "heat",
   "chaserNear", "stumbleCount", // 0 unless observeChaser
 ] as const;
 export const OBS_SIZE = C.LANES * ROWS * NCH + STATE.length;
@@ -63,12 +63,13 @@ export function observe(g: Game, out: Float32Array, opts: ObsOptions = DEFAULT_O
   out[i++] = g.grounded ? 1 : 0;
   out[i++] = g.rolling ? 1 : 0;
   out[i++] = g.y >= C.TRAIN.height - C.STEP_UP ? 1 : 0;
-  out[i++] = (g.speed - C.START_SPEED) / (C.MAX_SPEED - C.START_SPEED);
+  out[i++] = (g.speed - C.START_SPEED) / (2 * C.SPEED_PER_HEAT); // 0 at heat 0, 1 at heat 2; keeps growing
   out[i++] = g.slowTicks / C.STUMBLE_SLOW_TICKS;
   out[i++] = g.magnetTicks / C.POWER_TICKS;
   out[i++] = g.springTicks / C.POWER_TICKS;
   out[i++] = g.doubleTicks / C.POWER_TICKS;
   out[i++] = g.shieldTicks / C.SHIELD_TICKS;
+  out[i++] = g.heat / 2; // how hard the track is right now (a human sees this as speed and density)
   out[i++] = opts.observeChaser ? g.chaserTicks / C.CHASER_TICKS : 0;
   out[i++] = opts.observeChaser ? g.stumbleCount / g.options.stumblesToCatch : 0;
   return out;

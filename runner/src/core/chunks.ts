@@ -23,6 +23,8 @@ export interface Chunk {
   /** from this distance (m) on, the chunk may appear */
   minMeters: number;
   weight: number;
+  /** 0 easy, 1 medium, 2 hard: harder pieces get more likely as the run goes on */
+  level: 0 | 1 | 2;
   items: ChunkItem[];
 }
 
@@ -32,6 +34,7 @@ const coinLine = (slot: 0 | 1 | 2, z0: number, n: number, gap = 2500, onRoof = f
 export const CHUNKS: Chunk[] = [
   {
     name: "barrier row",
+    level: 0,
     len: 30000,
     minMeters: 0,
     weight: 4,
@@ -43,6 +46,7 @@ export const CHUNKS: Chunk[] = [
   },
   {
     name: "coin arc",
+    level: 0,
     len: 30000,
     minMeters: 0,
     weight: 3,
@@ -54,6 +58,7 @@ export const CHUNKS: Chunk[] = [
   },
   {
     name: "zigzag",
+    level: 0,
     len: 45000,
     minMeters: 0,
     weight: 3,
@@ -66,6 +71,7 @@ export const CHUNKS: Chunk[] = [
   },
   {
     name: "power-up",
+    level: 0,
     len: 30000,
     minMeters: 100,
     weight: 1,
@@ -77,6 +83,7 @@ export const CHUNKS: Chunk[] = [
   },
   {
     name: "spring shoes",
+    level: 0,
     len: 30000,
     minMeters: 200,
     weight: 1,
@@ -84,6 +91,7 @@ export const CHUNKS: Chunk[] = [
   },
   {
     name: "double coins",
+    level: 0,
     len: 30000,
     minMeters: 200,
     weight: 1,
@@ -91,6 +99,7 @@ export const CHUNKS: Chunk[] = [
   },
   {
     name: "shield",
+    level: 0,
     len: 30000,
     minMeters: 500,
     weight: 1,
@@ -98,6 +107,7 @@ export const CHUNKS: Chunk[] = [
   },
   {
     name: "two trains",
+    level: 1,
     len: 40000,
     minMeters: 300,
     weight: 3,
@@ -109,6 +119,7 @@ export const CHUNKS: Chunk[] = [
   },
   {
     name: "ramp to the roofs",
+    level: 1,
     len: 50000,
     minMeters: 400,
     weight: 3,
@@ -122,6 +133,7 @@ export const CHUNKS: Chunk[] = [
   },
   {
     name: "oncoming train",
+    level: 2,
     // the train starts moving when the player is 60 m away and can travel up to ~30 m back,
     // so the first 30 m of this chunk stay clear in its lane
     len: 60000,
@@ -136,6 +148,7 @@ export const CHUNKS: Chunk[] = [
   },
   {
     name: "train wall",
+    level: 2,
     len: 50000,
     minMeters: 1000,
     weight: 2,
@@ -145,6 +158,37 @@ export const CHUNKS: Chunk[] = [
       { kind: "train", slot: 0, z: 14000 },
       { kind: "train", slot: 2, z: 16000 },
       ...coinLine(1, 16000, 7, 2500, true),
+    ],
+  },
+  {
+    name: "barrier combo",
+    // lane a: jump, then roll; lane b: roll, then jump; lane c: a train
+    len: 40000,
+    minMeters: 1500,
+    weight: 2,
+    level: 2,
+    items: [
+      { kind: "low", slot: 0, z: 10000 },
+      { kind: "high", slot: 1, z: 10000 },
+      { kind: "train", slot: 2, z: 6000 },
+      { kind: "high", slot: 0, z: 22000 },
+      { kind: "low", slot: 1, z: 22000 },
+      ...coinLine(0, 13000, 3),
+    ],
+  },
+  {
+    name: "slalom",
+    // trains in lanes a then b, the free lane c has a low then a high barrier
+    len: 60000,
+    minMeters: 2000,
+    weight: 2,
+    level: 2,
+    items: [
+      { kind: "train", slot: 0, z: 8000 },
+      { kind: "train", slot: 1, z: 30000 },
+      { kind: "low", slot: 2, z: 20000 },
+      { kind: "high", slot: 2, z: 40000 },
+      ...coinLine(1, 10000, 6),
     ],
   },
 ];

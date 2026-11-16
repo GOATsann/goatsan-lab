@@ -18,12 +18,15 @@ Python -> server:
 
 ```json
 { "n_envs": 64, "seed_base": 1000000, "max_ticks": 36000,
-  "powerups": true, "stumbles_to_catch": 2, "observe_chaser": false }
+  "powerups": true, "stumbles_to_catch": 2, "observe_chaser": false, "level": "random" }
 ```
 
 - `powerups`, `stumbles_to_catch`, `observe_chaser` are optional (defaults shown). `powerups: false`
   gives the same tracks without power-ups (for clean benchmarks). `observe_chaser: false` keeps the
   chaser's two state values at 0, so the AI cannot see it.
+- `level`: start level `"easy"`, `"normal"`, `"hard"`, or `"random"` (default): each episode's level
+  comes from its seed with the core's PRNG (`levelFromSeed`), so the same seed always gets the same
+  level. The level is stored in every replay's `options.level` (0 easy, 1 normal, 2 hard).
 
 - `seed_base`: env `i`'s k-th episode uses seed `seed_base + k * n_envs + i` (deterministic, no
   overlap between envs). Benchmark seeds (1000-1099) stay out of the training range.
@@ -33,14 +36,16 @@ Server -> Python:
 
 ```json
 {
-  "version": 3,
-  "obs_size": 1073,
+  "version": 4,
+  "obs_size": 1074,
   "n_actions": 5,
   "decision_ticks": 4,
   "event_fields": ["distance", "coins", "powerups", "jumps", "rolls", "laneChanges", "stumbles", "died",
-                   "score", "meters", "ticks", "shieldsUsed"],
+                   "score", "meters", "ticks", "shieldsUsed", "level"],
   "death_causes": ["", "train front", "oncoming train", "caught"],
   "rules": { "powerups": true, "stumblesToCatch": 2 },
+  "level": "random",
+  "level_names": ["easy", "normal", "hard"],
   "observe_chaser": false,
   "obs_layout": {
     "lanes": 3, "rows": 32, "row_len_mm": 3000, "first_row_offset_mm": -3000,
@@ -48,7 +53,7 @@ Server -> Python:
                  "magnet", "spring", "double", "shield"],
     "grid_order": "lane,row,channel",
     "state": ["lane0", "lane1", "lane2", "x", "y", "vy", "grounded", "rolling", "onRoof", "speed",
-              "slowed", "magnet", "spring", "double", "shield", "chaserNear", "stumbleCount"]
+              "slowed", "magnet", "spring", "double", "shield", "heat", "chaserNear", "stumbleCount"]
   }
 }
 ```
@@ -64,6 +69,14 @@ power-up absorbs one hit of any kind (event `shieldsUsed`). Replays store the ru
 
 Rules v3: a roll is a fixed 0.6 s move. Roll pressed while rolling does nothing, and after a roll the
 runner stands for at least 0.2 s before it can roll again (no endless roll, for humans or the AI).
+
+Rules v4: difficulty ("heat") rises for the whole run with no ceiling: start level base (easy 0,
+normal 0.3, hard 0.6) + a smooth ramp of +1 over the first 3 minutes + 0.25 every 2 minutes after
+that. Speed = 10 m/s + 8.4 m/s per heat unit. Higher heat also shortens the empty run-up before each
+track piece (up to 60%) and makes hard pieces more likely; two new hard pieces. The jump is longer:
+about 0.76 s in the air with a short hang at the top (about 1.47 m high). New state value `heat`
+(heat / 2); `speed` is now (speed - 10 m/s) / 16.8 m/s and keeps growing past 1. Event `level` is the
+episode's start level (constant). All numbers are named constants in `src/core/config.ts`.
 
 ## Commands
 
