@@ -61,5 +61,6 @@ export function mountSoundControls(sfx: Sfx, isTyping: () => boolean = () => fal
   for (const ev of ["pointerup", "touchend", "click", "keydown"]) window.addEventListener(ev, () => sfx.unlock(), { capture: true });
   document.addEventListener("visibilitychange", () => { if (!document.hidden) sfx.unlock(); });
   window.addEventListener("pageshow", () => sfx.unlock());
+  window.addEventListener("focus", () => sfx.unlock()); // back from laptop sleep or another window
   show();
 }

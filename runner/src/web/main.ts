@@ -89,6 +89,11 @@ $("play").addEventListener("click", start);
 $("more").addEventListener("click", () => $("overlay").classList.remove("compact"));
 // Race the AI: same track and level for both; the race page reads runner, name and level from storage
 $("race").hidden = false;
+// Watch the AI: the AI for the chosen level plays alone on that level's track
+$("watch").addEventListener("click", () => {
+  const name = ["easy", "normal", "hard"][level];
+  location.href = `/watch.html?ai=${name}&level=${level}`;
+});
 $("race").addEventListener("click", () => { store.set("name", nameInput.value.trim()); location.href = "/race.html"; });
 const levelButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-level]")];
 const LEVEL_INFO = [

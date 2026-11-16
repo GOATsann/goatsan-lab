@@ -1,6 +1,7 @@
 // Watch the AI: the trained policy plays alone, full screen, in real time (local demo page).
 //   /watch.html?ai=hard&level=2&seed=1042   (seed fixed = the same run every time; otherwise a new track each run)
-// It restarts by itself after the crash scene. H hides the panel and the move indicator for filming.
+// It restarts by itself after the crash scene. "Hide" (or H) hides the panel and the move indicator
+// for filming; a tap or H brings them back.
 import { DECISION_TICKS, TICK_HZ } from "../core/config";
 import { Game, NOOP, type Action } from "../core/game";
 import { Rng } from "../core/rng";
@@ -39,9 +40,10 @@ $<HTMLSelectElement>("ai").value = aiName;
 $<HTMLSelectElement>("level").value = String(level);
 $("ai").addEventListener("change", async (e) => { aiName = (e.target as HTMLSelectElement).value as typeof aiName; driver = await loadAi(aiName); newRun(); });
 $("level").addEventListener("change", (e) => { level = Number((e.target as HTMLSelectElement).value) as 0 | 1 | 2; newRun(); });
-addEventListener("keydown", (e) => {
-  if (e.key === "h" || e.key === "H") { $("panel").hidden = !$("panel").hidden; $("move").hidden = $("panel").hidden; }
-});
+const setHidden = (h: boolean) => { $("panel").hidden = h; $("move").hidden = h; };
+addEventListener("keydown", (e) => { if (e.key === "h" || e.key === "H") setHidden(!$("panel").hidden); });
+$("hide").addEventListener("click", (e) => { e.stopPropagation(); setHidden(true); });
+canvas.addEventListener("click", () => setHidden(false));
 
 function newRun(): void {
   runs++;

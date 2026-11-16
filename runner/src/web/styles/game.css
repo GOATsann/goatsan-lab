@@ -83,3 +83,4 @@
 .audioctl button[aria-pressed="false"] { color: #8a90aa; }
 .level-info { margin: -4px 0 0; color: #dfe4f7; font-size: 0.85rem; text-align: center; }
 .overlay.compact .level-info { display: none; }
+.overlay .watch-link { display: inline-block; }
