@@ -91,7 +91,8 @@ class Logging(BaseCallback):
         for name, total in self.terms.items():
             self.logger.record(f"reward/{name}", total / max(self.decisions, 1))
         if self.ends:
-            for key in ("score", "meters", "ticks"):
+            for key in ("score", "meters", "ticks", "moves_per_100m", "reversals_per_100m", "pointless_per_100m",
+                        "jumps", "rolls", "laneChanges"):
                 self.logger.record(f"episode/{key}", float(np.mean([e[key] for e in self.ends])))
             causes = Counter(e["death_cause"] or "time limit" for e in self.ends)
             for cause, n in causes.items():
@@ -121,9 +122,11 @@ class ProgressRaces(BaseCallback):
         with log.open("a", newline="") as f:
             w = csv.writer(f)
             if new:
-                w.writerow(["steps", "minutes", "score", "meters", "seconds", "death_cause"])
+                w.writerow(["steps", "minutes", "score", "meters", "seconds", "death_cause",
+                            "moves_per_100m", "reversals_per_100m", "pointless_per_100m"])
             w.writerow([steps, round((time.time() - self.started) / 60, 1), end["score"], end["meters"],
-                        round(end["ticks"] / 60, 1), end["death_cause"] or "time limit"])
+                        round(end["ticks"] / 60, 1), end["death_cause"] or "time limit",
+                        round(end["moves_per_100m"], 2), round(end["reversals_per_100m"], 2), round(end["pointless_per_100m"], 2)])
         print(f"[race] steps={steps:,} score={end['score']:.0f} m={end['meters']:.0f} "
               f"died={end['death_cause'] or 'no (time limit)'}", flush=True)
 

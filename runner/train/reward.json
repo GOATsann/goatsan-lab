@@ -1,18 +1,55 @@
 {
   "_doc": [
     "The reward the AI learns from. One weight per event; the reward of a decision is the sum of weight x event.",
-    "Edit the numbers, keep the names. Events come from the game (src/core/game.ts, Events) once per decision (4 ticks).",
+    "Edit the numbers, keep the names. Most terms are game events (src/core/game.ts, Events), counted once per decision (4 ticks = 1/15 s). meters, moves, reversals and pointlessJumpsRolls are computed in train/runner_env.py.",
     "Every term is also logged on its own (reward/<name>), so the dashboard shows which part drives learning.",
-    "The benchmark never uses this file: it scores with the game's own score (metres + 5 per coin)."
+    "The benchmark never uses this file: it scores with the game's own score (metres + 5 per coin).",
+    "Scale: one second of running earns about +1 to +2 (10-20 m/s x 0.1 per metre). The wasted-move costs (-0.02) are 1-2 % of that, so dodging always pays more."
   ],
   "weights": {
-    "meters":      { "w": 0.1,  "doc": "per metre moved forward (the game reports mm; we convert). The main signal: survive and go far." },
-    "coins":       { "w": 0.0,  "doc": "per coin picked up. Off at first: coin greed makes it take risky lanes." },
-    "powerups":    { "w": 0.0,  "doc": "per power-up picked up." },
-    "jumps":       { "w": 0.0,  "doc": "per jump started. Make it slightly negative if it learns to spam jumps." },
-    "rolls":       { "w": 0.0,  "doc": "per roll started. Make it slightly negative if it learns to spam rolls." },
-    "laneChanges": { "w": 0.0,  "doc": "per lane change. Slightly negative stops left-right jitter." },
-    "stumbles":    { "w": -1.0, "doc": "per side hit (the first one only bounces you back; the second within 5 s kills)." },
-    "died":        { "w": -10.0, "doc": "once, when the run ends in a crash." }
+    "meters": {
+      "w": 0.1,
+      "doc": "per metre moved forward this decision (from the game's distance in mm). The main signal: survive and go far."
+    },
+    "coins": {
+      "w": 0.0,
+      "doc": "per coin picked up. Off at first: coin greed makes it take risky lanes."
+    },
+    "powerups": {
+      "w": 0.0,
+      "doc": "per power-up picked up."
+    },
+    "jumps": {
+      "w": 0.0,
+      "doc": "per jump started. Make it slightly negative if it learns to spam jumps."
+    },
+    "rolls": {
+      "w": 0.0,
+      "doc": "per roll started. Make it slightly negative if it learns to spam rolls."
+    },
+    "laneChanges": {
+      "w": 0.0,
+      "doc": "per lane change. Slightly negative stops left-right jitter."
+    },
+    "stumbles": {
+      "w": -1.0,
+      "doc": "per side hit (the first one only bounces you back; the second within 5 s kills)."
+    },
+    "died": {
+      "w": -10.0,
+      "doc": "once, when the run ends in a crash."
+    },
+    "moves": {
+      "w": 0.0,
+      "doc": "per decision with an action other than nothing (left, right, jump, roll), whether or not it did anything. A small cost makes it act only when needed."
+    },
+    "reversals": {
+      "w": -0.02,
+      "doc": "per lane change that undoes the previous one within 8 decisions (0.53 s): left then right, or right then left. Targets jitter."
+    },
+    "pointlessJumpsRolls": {
+      "w": -0.02,
+      "doc": "per jump or roll started with no obstacle ahead in its lane within 12 m (about the length of one jump at top speed). Coins and power-ups do not count as obstacles."
+    }
   }
 }

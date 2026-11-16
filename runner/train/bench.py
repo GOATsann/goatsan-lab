@@ -63,7 +63,10 @@ def main() -> None:
         e = results[i]
         assert e["seed"] == s, (e["seed"], s)
         rows.append({"seed": s, "score": e["score"], "meters": e["meters"], "coin_score": e["score"] - e["meters"],
-                     "seconds": round(e["ticks"] / 60, 2), "death_cause": e["death_cause"] or "time limit"})
+                     "seconds": round(e["ticks"] / 60, 2), "death_cause": e["death_cause"] or "time limit",
+                     "moves_per_100m": round(e["moves_per_100m"], 2), "reversals_per_100m": round(e["reversals_per_100m"], 2),
+                     "pointless_per_100m": round(e["pointless_per_100m"], 2), "jumps": e["jumps"], "rolls": e["rolls"],
+                     "lane_changes": e["laneChanges"]})
     with out.open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()

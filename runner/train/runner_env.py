@@ -19,6 +19,24 @@ from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
 HERE = Path(__file__).resolve().parent
 CMD_CLOSE, CMD_RESET, CMD_STEP, CMD_REPLAY, CMD_SEED = 0, 1, 2, 3, 4
+NOTHING, LEFT, RIGHT, JUMP, ROLL = 0, 1, 2, 3, 4
+
+# The step reply carries these as episode totals so far: they are reported, never rewarded.
+TOTALS = {"score", "meters", "ticks"}
+# Reward terms computed here rather than sent by the game.
+DERIVED = {
+    "meters",               # metres moved this decision (from the game's "distance", in mm)
+    "moves",                # an action other than "nothing" was chosen
+    "reversals",            # a lane change undone within REVERSE_DECISIONS
+    "pointlessJumpsRolls",  # a jump or roll started with no obstacle ahead in that lane within REACH_MM
+}
+REVERSE_DECISIONS = 8  # 8 decisions = 0.53 s
+REACH_MM = 12_000      # a jump lasts ~0.6 s; at 20 m/s that is 12 m
+# Observation layout of game version 1 (src/core/obs.ts), used when the server does not send "obs_layout".
+V1_LAYOUT = {"lanes": 3, "rows": 32, "row_len_mm": 3000, "first_row_offset_mm": -3000,
+             "channels": ["low", "high", "trainFront", "trainBody", "ramp", "coin", "moving", "powerup"],
+             "state": ["lane0", "lane1", "lane2"]}
+NOT_OBSTACLES = {"coin", "powerup"}
 
 
 def load_reward(path: Path = HERE / "reward.json") -> dict[str, float]:
@@ -67,20 +85,39 @@ class RunnerVecEnv(VecEnv):
         self.fields: list[str] = hello["event_fields"]
         self.death_causes: list[str] = hello["death_causes"]
         self.reward = reward if reward is not None else load_reward()
-        unknown = set(self.reward) - set(self.fields)
+        rewardable = (set(self.fields) - TOTALS - {"distance"}) | DERIVED
+        unknown = set(self.reward) - rewardable
         if unknown:
-            raise ValueError(f"reward.json names events the game does not send: {sorted(unknown)}")
-        self._w = np.array([self.reward.get(f, 0.0) for f in self.fields], dtype=np.float32)
-        self._w[self.fields.index("distance")] = 0.0  # distance arrives in mm; 'meters' weight applies to it
-        self._meters_w = self.reward.get("meters", 0.0)
+            raise ValueError(f"reward.json has terms this game cannot reward: {sorted(unknown)}; allowed: {sorted(rewardable)}")
+        # one weight per per-decision event; episode totals and raw mm distance get weight 0
+        self._event_terms = [f for f in self.fields if f in self.reward and f not in TOTALS and f != "distance"]
+        self._w = np.array([self.reward[f] if f in self._event_terms else 0.0 for f in self.fields], dtype=np.float32)
+        self._derived_w = {name: self.reward.get(name, 0.0) for name in DERIVED}
+        self._f = {name: j for j, name in enumerate(self.fields)}
+        self._layout(hello.get("obs_layout", V1_LAYOUT))
         self._actions = np.zeros(n_envs, dtype=np.uint8)
+        self._last_obs = np.zeros((n_envs, self.obs_size), dtype=np.float32)
+        self._t = np.zeros(n_envs, dtype=np.int64)            # decisions so far in this episode
+        self._last_turn = np.zeros(n_envs, dtype=np.int8)     # -1 left, +1 right, 0 none yet
+        self._last_turn_t = np.full(n_envs, -10**9, dtype=np.int64)
+        self._count = {k: np.zeros(n_envs, dtype=np.int64) for k in ("moves", "reversals", "pointless", "jumps", "rolls", "laneChanges")}
         observation_space = spaces.Box(-np.inf, np.inf, shape=(self.obs_size,), dtype=np.float32)
         super().__init__(n_envs, observation_space, spaces.Discrete(hello["n_actions"]))
 
     # --- VecEnv API ---------------------------------------------------------------------------
     def reset(self) -> np.ndarray:
+        self._send_reset()
+        return self._recv_reset()
+
+    def _send_reset(self) -> None:
         self.conn.send(bytes([CMD_RESET]))
-        return self._obs(self.conn.recv(), 0)[0]
+
+    def _recv_reset(self) -> np.ndarray:
+        obs = self._obs(self.conn.recv(), 0)[0]
+        self._last_obs[:] = obs
+        for i in range(self.num_envs):
+            self._new_episode(i)
+        return obs
 
     def step_async(self, actions: np.ndarray) -> None:
         self._actions = np.asarray(actions, dtype=np.uint8).reshape(self.num_envs)
@@ -110,24 +147,81 @@ class RunnerVecEnv(VecEnv):
         if off != len(msg):
             raise ValueError(f"step reply has {len(msg) - off} unexpected bytes (protocol mismatch)")
 
-        terms = events * self._w  # per event, per env
-        meters = events[:, self.fields.index("distance")] / 1000.0
-        rewards = terms.sum(axis=1) + self._meters_w * meters
+        f, a = self._f, self._actions
+        derived = self._derived(events, a)  # uses _last_obs = what the agent saw when it chose `a`
+        event_terms = events * self._w  # per-decision events only (totals have weight 0)
+        rewards = event_terms.sum(axis=1)
+        for name, values in derived.items():
+            rewards = rewards + self._derived_w[name] * values
         dones = terminated | truncated
-        f = {name: j for j, name in enumerate(self.fields)}
         infos = []
         for i in range(n):
-            info = {"reward_terms": {name: float(terms[i, j]) for j, name in enumerate(self.fields) if self._w[j]}}
-            info["reward_terms"]["meters"] = float(self._meters_w * meters[i])
+            terms = {name: float(event_terms[i, f[name]]) for name in self._event_terms}
+            terms.update({name: float(self._derived_w[name] * values[i]) for name, values in derived.items()})
+            info = {"reward_terms": terms}
             if dones[i]:
                 info["terminal_observation"] = terminal[i]
                 info["TimeLimit.truncated"] = bool(truncated[i] and not terminated[i])
+                meters_total = float(events[i, f["meters"]])
+                per100 = 100.0 / max(meters_total, 1.0)
+                c = {k: int(v[i]) for k, v in self._count.items()}
                 info["episode_end"] = {
-                    "seed": int(seeds[i]), "score": float(events[i, f["score"]]), "meters": float(events[i, f["meters"]]),
+                    "seed": int(seeds[i]), "score": float(events[i, f["score"]]), "meters": meters_total,
                     "ticks": int(events[i, f["ticks"]]), "death_cause": self.death_causes[cause[i]] if terminated[i] else "",
+                    **c, "moves_per_100m": c["moves"] * per100, "reversals_per_100m": c["reversals"] * per100,
+                    "pointless_per_100m": c["pointless"] * per100,
                 }
+                self._new_episode(i)
             infos.append(info)
+        self._last_obs = obs
         return obs, rewards.astype(np.float32), dones, infos
+
+    def _layout(self, lay: dict) -> None:
+        """Where, in an observation, the lane grid and the runner's lane are."""
+        rows, ch = lay["rows"], len(lay["channels"])
+        self._grid_shape = (lay["lanes"], rows, ch)
+        self._lane_at = lay["lanes"] * rows * ch + lay["state"].index("lane0")  # lane one-hot starts here
+        row_start = lay["first_row_offset_mm"] + np.arange(rows) * lay["row_len_mm"]
+        self._reach_rows = np.flatnonzero((row_start + lay["row_len_mm"] > 0) & (row_start < REACH_MM))
+        self._obstacle_ch = [j for j, name in enumerate(lay["channels"]) if name not in NOT_OBSTACLES]
+
+    def _derived(self, events: np.ndarray, a: np.ndarray) -> dict[str, np.ndarray]:
+        """The derived reward terms of this decision (0/1 per env), and the episode counters."""
+        f, n = self._f, self.num_envs
+        moved = (a != NOTHING).astype(np.float32)
+        turned = events[:, f["laneChanges"]] > 0
+        turn_dir = np.where(a == LEFT, -1, np.where(a == RIGHT, 1, 0)).astype(np.int8)
+        turned &= turn_dir != 0  # only lane changes the agent asked for (not a bounce back after a side hit)
+        reversed_ = turned & (self._last_turn == -turn_dir) & (self._t - self._last_turn_t <= REVERSE_DECISIONS)
+        self._last_turn = np.where(turned, turn_dir, self._last_turn)
+        self._last_turn_t = np.where(turned, self._t, self._last_turn_t)
+
+        started = ((a == JUMP) & (events[:, f["jumps"]] > 0)) | ((a == ROLL) & (events[:, f["rolls"]] > 0))
+        grid = self._last_obs[:, : np.prod(self._grid_shape)].reshape(n, *self._grid_shape)
+        lane = self._last_obs[:, self._lane_at: self._lane_at + self._grid_shape[0]].argmax(axis=1)
+        ahead = grid[np.arange(n), lane][:, self._reach_rows][:, :, self._obstacle_ch]  # (n, rows in reach, obstacle channels)
+        pointless = started & (ahead.max(axis=(1, 2)) == 0)
+
+        self._t += 1
+        self._count["moves"] += moved.astype(np.int64)
+        self._count["reversals"] += reversed_
+        self._count["pointless"] += pointless
+        self._count["jumps"] += events[:, f["jumps"]].astype(np.int64)
+        self._count["rolls"] += events[:, f["rolls"]].astype(np.int64)
+        self._count["laneChanges"] += events[:, f["laneChanges"]].astype(np.int64)
+        return {
+            "meters": events[:, f["distance"]] / 1000.0,
+            "moves": moved,
+            "reversals": reversed_.astype(np.float32),
+            "pointlessJumpsRolls": pointless.astype(np.float32),
+        }
+
+    def _new_episode(self, i: int) -> None:
+        self._t[i] = 0
+        self._last_turn[i] = 0
+        self._last_turn_t[i] = -10**9
+        for v in self._count.values():
+            v[i] = 0
 
     def close(self) -> None:
         try:
@@ -139,7 +233,10 @@ class RunnerVecEnv(VecEnv):
     def set_seed(self, env: int, seed: int) -> np.ndarray:
         """Restart game `env` on exactly this seed (benchmarks, progress races). Returns its first obs."""
         self.conn.send(bytes([CMD_SEED]) + struct.pack("<HI", env, seed))
-        return np.frombuffer(self.conn.recv(), np.float32, self.obs_size).copy()
+        obs = np.frombuffer(self.conn.recv(), np.float32, self.obs_size).copy()
+        self._last_obs[env] = obs
+        self._new_episode(env)
+        return obs
 
     def replay(self, env: int) -> dict:
         """The replay of game `env`'s most recently finished episode."""
@@ -180,8 +277,8 @@ class MultiRunnerVecEnv(VecEnv):
 
     def reset(self):
         for e in self.envs:
-            e.conn.send(bytes([CMD_RESET]))
-        return np.concatenate([e._obs(e.conn.recv(), 0)[0] for e in self.envs])
+            e._send_reset()  # every server resets in parallel
+        return np.concatenate([e._recv_reset() for e in self.envs])
 
     def step_async(self, actions):
         for e, a, b in zip(self.envs, self._cuts[:-1], self._cuts[1:]):
