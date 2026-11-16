@@ -16,10 +16,18 @@ export class Sfx {
   /** how many times each sound played (for tests: a headless browser can't listen) */
   readonly played: Record<string, number> = {};
 
-  /** Call from a user gesture (tap, key) so the browser allows sound. */
+  /** The music file starts downloading as soon as the page loads (no audio permission needed for
+   *  that), so it is ready by the first tap instead of starting a 1-2 MB download then. */
+  private musicBytes: Promise<ArrayBuffer | null> = fetch("/audio/music.mp3")
+    .then((r) => (!r.ok || (r.headers.get("content-type") ?? "").includes("text/html") ? null : r.arrayBuffer()))
+    .catch(() => null); // a missing file comes back as the dev server's HTML page: no music
+
+  /** Call from a user gesture (a finished tap, a click, a key) so the browser allows sound.
+   *  Safari only counts finished taps (touchend/click), not pointerdown. Also resumes a context that
+   *  Safari "interrupted" (screen lock, a call, an app switch) or suspended; safe to call often. */
   unlock(): void {
     if (this.ctx) {
-      if (this.ctx.state === "suspended") void this.ctx.resume();
+      if (this.ctx.state !== "running") void this.ctx.resume().catch(() => {});
       return;
     }
     const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -32,7 +40,15 @@ export class Sfx {
     this.musicGain = this.ctx.createGain();
     this.musicGain.gain.value = this.musicOn ? MUSIC_LEVEL : 0;
     this.musicGain.connect(this.ctx.destination);
-    void this.startMusic();
+    if (this.ctx.state !== "running") void this.ctx.resume().catch(() => {});
+    // start the music once the audio is really running (Safari can start it "interrupted")
+    this.ctx.addEventListener("statechange", () => { if (this.ctx?.state === "running") void this.startMusic(); });
+    if (this.ctx.state === "running") void this.startMusic();
+  }
+
+  /** The audio state, for tests. */
+  get state(): string {
+    return this.ctx?.state ?? "none";
   }
 
   /** Loop public/audio/music.mp3 if it exists (a missing file is fine: no music). */
@@ -40,10 +56,9 @@ export class Sfx {
     if (this.musicStarted || !this.ctx) return;
     this.musicStarted = true;
     try {
-      const r = await fetch("/audio/music.mp3");
-      // a missing file comes back as the dev server's HTML page: skip it (any other type is decoded)
-      if (!r.ok || (r.headers.get("content-type") ?? "").includes("text/html")) return;
-      const buf = await this.ctx.decodeAudioData(await r.arrayBuffer());
+      const bytes = await this.musicBytes;
+      if (!bytes) return;
+      const buf = await this.ctx.decodeAudioData(bytes.slice(0)); // decode a copy: Safari detaches the buffer
       const src = this.ctx.createBufferSource();
       src.buffer = buf;
       src.loop = true;
@@ -54,6 +69,7 @@ export class Sfx {
       src.connect(this.musicGain!);
       src.start(0, from);
     } catch (e) {
+      this.musicStarted = false; // let the next gesture try again
       console.warn("music not loaded", e);
     }
   }

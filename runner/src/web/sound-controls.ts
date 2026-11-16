@@ -56,7 +56,10 @@ export function mountSoundControls(sfx: Sfx, isTyping: () => boolean = () => fal
       set("music", !anyOn);
     }
   });
-  window.addEventListener("pointerdown", () => sfx.unlock());
-  window.addEventListener("keydown", () => sfx.unlock());
+  // Safari grants audio on finished taps and clicks (not pointerdown); also come back after a screen
+  // lock or a tab switch, which can leave the audio "interrupted" or suspended
+  for (const ev of ["pointerup", "touchend", "click", "keydown"]) window.addEventListener(ev, () => sfx.unlock(), { capture: true });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) sfx.unlock(); });
+  window.addEventListener("pageshow", () => sfx.unlock());
   show();
 }
