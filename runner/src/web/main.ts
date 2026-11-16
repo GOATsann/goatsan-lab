@@ -3,6 +3,7 @@ import { BRAND } from "../brand";
 import { TICK_HZ } from "../core/config";
 import { Game } from "../core/game";
 import { loadCharacters, makeCharacter, type CharacterInfo, type CharacterView } from "./character";
+import { Sfx } from "./audio";
 import { mountHud } from "./hud";
 import { Input } from "./input";
 import { Renderer } from "./render";
@@ -59,6 +60,28 @@ loadCharacters().then((list) => {
   showCharacter(saved >= 0 ? saved : 0);
 });
 
+// ---- sound: starts on the first tap or key (browser rule); M or the button toggles it
+const sfx = new Sfx();
+(window as unknown as { sfx: Sfx }).sfx = sfx; // for tests
+const soundBtn = $("sound");
+function showSound(): void {
+  soundBtn.textContent = sfx.muted ? "Sound off" : "Sound on";
+  soundBtn.setAttribute("aria-pressed", String(!sfx.muted));
+}
+sfx.setMuted(store.get("muted") === "1");
+showSound();
+const unlock = () => sfx.unlock();
+window.addEventListener("pointerdown", unlock);
+window.addEventListener("keydown", unlock);
+function toggleSound(): void {
+  sfx.unlock();
+  sfx.setMuted(!sfx.muted);
+  store.set("muted", sfx.muted ? "1" : "0");
+  showSound();
+}
+soundBtn.addEventListener("click", toggleSound);
+window.addEventListener("keydown", (e) => { if ((e.key === "m" || e.key === "M") && document.activeElement !== nameInput) toggleSound(); });
+
 // ---- game loop
 let running = false;
 let last = performance.now(), acc = 0;
@@ -71,6 +94,7 @@ function start(): void {
   running = true;
   $("overlay").hidden = true;
   hud.label(playerName());
+  sfx.reset(game);
   last = performance.now();
   acc = 0;
 }
@@ -113,6 +137,7 @@ function frame(now: number): void {
   last = now;
   renderer.draw(game);
   hud.update(game);
+  sfx.update(game);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
