@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Lights-Out Surfer · Watch the AI</title>
+<link rel="stylesheet" href="/src/web/styles/game.css">
+<style>
+  .panel { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 14px;
+    padding: 10px 14px; border-radius: 16px; background: rgba(8, 10, 30, 0.78); border: 1px solid rgba(255, 255, 255, 0.18); color: #fff; font-size: 0.85rem; z-index: 6; max-width: calc(100vw - 24px); }
+  .panel[hidden] { display: none; }
+  .panel label { display: inline-flex; align-items: center; gap: 6px; color: #c9d0ea; }
+  .panel select { font: inherit; color: #fff; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 8px; padding: 4px 8px; }
+  .panel .stat b { font-variant-numeric: tabular-nums; color: #fff; }
+  .move { position: fixed; top: 110px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; pointer-events: none; z-index: 5; }
+  .move span { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 10px; background: rgba(8, 10, 30, 0.55); border: 1px solid rgba(255, 255, 255, 0.2); color: rgba(255, 255, 255, 0.45); font-size: 1.1rem; transition: background 0.08s, color 0.08s; }
+  .move span.on { background: #22e3f0; color: #071018; border-color: transparent; }
+  .move[hidden] { display: none; }
+  .hint { color: #8a90aa; }
+</style>
+</head>
+<body>
+<div class="move" id="move" aria-hidden="true"><span data-a="1">←</span><span data-a="3">↑</span><span data-a="4">↓</span><span data-a="2">→</span></div>
+<div class="panel" id="panel">
+  <label>AI <select id="ai"><option value="easy">Easy · 15M steps</option><option value="normal">Normal · 27M steps</option><option value="hard">Hard · 55M steps</option></select></label>
+  <label>Track <select id="level"><option value="0">Easy</option><option value="1">Normal</option><option value="2">Hard</option></select></label>
+  <span class="stat">Run <b id="run">1</b></span>
+  <span class="stat">Best <b id="best">0</b></span>
+  <span class="hint">H hides this panel</span>
+</div>
+<script type="module" src="/src/web/watch.ts"></script>
+</body>
+</html>
