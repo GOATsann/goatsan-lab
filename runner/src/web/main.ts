@@ -4,7 +4,7 @@ import { TICK_HZ } from "../core/config";
 import { Game } from "../core/game";
 import { loadCharacters, makeCharacter, type CharacterInfo, type CharacterView } from "./character";
 import { Sfx } from "./audio";
-import { fetchBoard, saveScore, signInToSave, takePending, type SaveOutcome } from "./scores";
+import { clearPending, fetchBoard, readPending, saveScore, signInToSave, type SaveOutcome } from "./scores";
 import { mountSoundControls } from "./sound-controls";
 import { mountHud } from "./hud";
 import { Input } from "./input";
@@ -182,13 +182,24 @@ $("save").addEventListener("click", async () => {
   btn.disabled = outcome.ok;
 });
 
-// back from signing in: save the run that was waiting
-const pending = takePending();
+// a run waiting to be saved (back from signing in, or a sign-in that lost its way): try it on every load.
+// Saved -> say so. Still signed out -> keep it and offer to sign in (no automatic redirect). Rejected -> drop it.
+const pending = readPending();
 if (pending) {
   const toast = $("toast");
   toast.hidden = false;
-  toast.textContent = "Saving your score…";
+  toast.textContent = "Saving your last run…";
   saveScore(pending.name, pending.replay).then((o) => {
+    if (!o.ok && o.signIn) {
+      toast.textContent = "Sign in to save your last run. ";
+      const go = document.createElement("button");
+      go.className = "toast-btn";
+      go.textContent = "Sign in";
+      go.addEventListener("click", () => signInToSave(pending.name, pending.replay));
+      toast.appendChild(go);
+      return;
+    }
+    if (o.ok || !o.message.includes("reach")) clearPending(); // saved, or rejected for good; keep it if the network failed
     toast.textContent = describe(o);
     setTimeout(() => { toast.hidden = true; }, 6000);
   });

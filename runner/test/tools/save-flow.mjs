@@ -15,7 +15,7 @@ await p.route("http://localhost:3100/**", async (route) => {
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ level: Number(u.searchParams.get("level")), top: [
       { rank: 1, name: "Ike", score: 9001, seconds: 600, at: "2026-11-16" }, { rank: 2, name: "<img src=x onerror=alert(1)>", score: 500, seconds: 60, at: "2026-11-16" }], me: { best: 321, rank: 4 } }) });
   }
-  if (u.pathname === "/auth/signin") { signinUrl = u.toString(); signedIn = true; const back = u.searchParams.get("returnTo"); return route.fulfill({ status: 302, headers: { location: back } }); }
+  if (u.pathname === "/auth/signin") { signinUrl = u.toString(); signedIn = true; const back = u.searchParams.get("return"); return route.fulfill({ status: 302, headers: { location: back } }); }
   return route.fulfill({ status: 404, body: "" });
 });
 await p.goto("http://localhost:5180/?seed=7");

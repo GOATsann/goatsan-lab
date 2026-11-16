@@ -37,23 +37,32 @@ export async function saveScore(name: string, replay: Replay): Promise<SaveOutco
 
 /** Keep the run, send the player to sign in, and come back to save it. */
 export function signInToSave(name: string, replay: Replay): void {
-  try { localStorage.setItem(PENDING, JSON.stringify({ name, replay })); } catch { /* private mode: nothing to resume */ }
+  try { localStorage.setItem(PENDING, JSON.stringify({ name, replay, at: Date.now() })); } catch { /* private mode: nothing to resume */ }
   const back = new URL(location.href);
   back.search = "?save=pending";
-  location.href = `${API}/auth/signin?returnTo=${encodeURIComponent(back.toString())}`;
+  location.href = `${API}/auth/signin?return=${encodeURIComponent(back.toString())}`;
 }
 
-/** After the sign-in round trip: the run that was waiting, if any (removed from storage). */
-export function takePending(): { name: string; replay: Replay } | null {
-  if (new URLSearchParams(location.search).get("save") !== "pending") return null;
-  history.replaceState(null, "", location.pathname); // don't resubmit on reload
+export interface Pending { name: string; replay: Replay; at?: number }
+const MAX_AGE = 24 * 3600 * 1000;
+
+/** A run waiting to be saved (from a sign-in round trip, even one that lost its way back), if it is
+ *  less than a day old. It stays stored until it is saved or rejected (see clearPending). */
+export function readPending(): Pending | null {
+  if (new URLSearchParams(location.search).get("save") === "pending") history.replaceState(null, "", location.pathname);
   try {
     const raw = localStorage.getItem(PENDING);
-    localStorage.removeItem(PENDING);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const p = JSON.parse(raw) as Pending;
+    if (p.at && Date.now() - p.at > MAX_AGE) { localStorage.removeItem(PENDING); return null; }
+    return p;
   } catch {
     return null;
   }
+}
+
+export function clearPending(): void {
+  try { localStorage.removeItem(PENDING); } catch { /* nothing stored */ }
 }
 
 export async function fetchBoard(level: number): Promise<Board | null> {
