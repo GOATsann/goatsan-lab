@@ -33,7 +33,8 @@ const ticksPerFrame = TICK_HZ / fps;
 if (!Number.isInteger(ticksPerFrame)) throw new Error(`fps must divide ${TICK_HZ}`);
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const vite = await createServer({ root, logLevel: "error", server: { port: 0, host: "127.0.0.1" } });
+// no live reload and no file watching: editing the code during a render must not reload the page
+const vite = await createServer({ root, logLevel: "error", server: { port: 0, host: "127.0.0.1", hmr: false, watch: null } });
 await vite.listen();
 const url = `http://127.0.0.1:${(vite.httpServer!.address() as { port: number }).port}/replay.html${clean ? "?clean" : ""}`;
 const browser = await chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
