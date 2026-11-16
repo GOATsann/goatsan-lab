@@ -1,0 +1,24 @@
+<!doctype html><meta charset="utf-8"><title>policy parity</title>
+<script type="module">
+  // ?run=<dir under runs/> : the browser must pick the same actions as PyTorch for the recorded observations
+  import * as ort from "onnxruntime-web/wasm";
+  const run = new URLSearchParams(location.search).get("run");
+  const base = `/runs/${run}/`;
+  const info = await (await fetch(base + "policy.json")).json();
+  const { obs, actions } = await (await fetch(base + "policy_parity.json")).json();
+  const t0 = performance.now();
+  const s = await ort.InferenceSession.create(base + "policy.onnx", { executionProviders: ["wasm"] });
+  const loadMs = performance.now() - t0;
+  const bad = [];
+  let runMs = 0;
+  for (let i = 0; i < obs.length; i++) {
+    const t = performance.now();
+    const out = await s.run({ obs: new ort.Tensor("float32", Float32Array.from(obs[i]), [1, info.obs_size]) });
+    runMs += performance.now() - t;
+    const l = out.logits.data;
+    let a = 0;
+    for (let k = 1; k < l.length; k++) if (l[k] > l[a]) a = k;
+    if (a !== actions[i]) bad.push({ i, want: actions[i], got: a });
+  }
+  window.parity = { run, n: obs.length, bad, loadMs: Math.round(loadMs), perDecisionMs: +(runMs / obs.length).toFixed(2), actionsSeen: [...new Set(actions)].sort() };
+</script>

@@ -11,7 +11,9 @@
     "test": "vitest run",
     "speed": "tsx src/headless/speed.ts",
     "server": "tsx src/headless/server.ts",
-    "parity": "tsx test/parity/make-replays.ts && node test/parity/browsers.mjs"
+    "parity": "tsx test/parity/make-replays.ts && node test/parity/browsers.mjs",
+    "publish-model": "tsx src/headless/publish-model.ts",
+    "parity-policy": "node test/parity/policy.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.19.1",
