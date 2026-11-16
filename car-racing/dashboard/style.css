@@ -87,3 +87,7 @@
   .nav a { color: var(--dim); text-decoration: none; font-size: 0.85rem; padding: 6px 12px; border-radius: 8px; border: 1px solid transparent; }
   .nav a:hover { color: var(--ink); border-color: var(--line); }
   .nav a[aria-current="page"] { color: var(--ink); background: var(--panel); border-color: var(--line); }
+  .nav.projects { margin: 0 0 10px; }
+  .nav.projects a { font-size: 0.78rem; padding: 4px 10px; }
+  /* the hidden attribute must win over any display rule (it lost to .compare { display: grid }) */
+  [hidden] { display: none !important; }

@@ -13,9 +13,10 @@
 <main class="page">
   <header class="head">
     <div>
-      <div class="kicker">BULSHY.FM · Build #1</div>
-      <h1>Car racing training</h1>
-      <nav class="nav" aria-label="Pages"><a href="./" aria-current="page">Training</a><a href="bench.html">Benchmark</a></nav>
+      <nav class="nav projects" aria-label="Projects" id="projects"></nav>
+      <div class="kicker" id="kicker">BULSHY.FM</div>
+      <h1 id="title">Training</h1>
+      <nav class="nav" aria-label="Pages"><a id="nav-train" href="./" aria-current="page">Training</a><a id="nav-bench" href="bench.html">Benchmark</a></nav>
     </div>
     <div class="meta">
       <label for="run">Run</label>
@@ -33,9 +34,9 @@
 
   <section class="tiles" aria-label="Headline numbers">
     <div class="tile"><span>Latest test race</span><b class="score" id="t-latest">–</b><span id="t-latest-at"></span></div>
-    <div class="tile"><span>Best test race</span><b class="score" id="t-best">–</b><span>900 = solved</span></div>
+    <div class="tile"><span>Best test race</span><b class="score" id="t-best">–</b><span id="t-best-note"></span></div>
     <div class="tile"><span>Coach accuracy</span><b id="t-coach">–</b><span>1.00 = predicts the points perfectly</span></div>
-    <div class="tile"><span>Driver's randomness</span><b id="t-explore">–</b><span>shrinks as it gets confident</span></div>
+    <div class="tile"><span id="t-explore-label">Driver's randomness</span><b id="t-explore">–</b><span>shrinks as it gets confident</span></div>
   </section>
   </div>
 
@@ -57,7 +58,8 @@
 </main>
 
 <script>
-const CHARTS = [
+// Each project: its data file, wording and charts. Pick one with ?p=<id> (CarRacing is the default).
+const CAR_CHARTS = [
   { key: "races", title: "Test race score", desc: "Same track every time, so the scores compare fairly. 900 means solved.", color: "--reward", target: 900, fmt: v => v.toFixed(0) },
   { key: "practice_score", title: "Practice race score (average)", desc: "Average score of the last 100 practice races.", color: "--reward", target: 900, fmt: v => v.toFixed(0) },
   { key: "coach_accuracy", title: "Coach accuracy", desc: "How well the critic predicts the points (explained variance).", color: "--signal", min: 0, max: 1, fmt: v => v.toFixed(2) },
@@ -68,12 +70,50 @@ const CHARTS = [
   { key: "driver_loss", title: "Driver loss", desc: "The clipped policy loss. Noisy by nature; watch the trend.", color: "--signal", fmt: v => v.toFixed(3) },
   { key: "advantage_size", title: "Advantage size", desc: "Average size of the raw advantage: how surprised the coach still is.", color: "--signal", min: 0, fmt: v => v.toFixed(2) },
 ];
+const RUNNER_CHARTS = [
+  { key: "races", title: "Progress race score", desc: "The same track (seed 7) on Normal every time, so the scores compare fairly.", color: "--reward", min: 0, fmt: v => v.toFixed(0) },
+  { key: "practice_score", title: "Training run score (average)", desc: "The game's own score of the runs that ended in each update, all levels mixed.", color: "--reward", min: 0, fmt: v => v.toFixed(0) },
+  { key: "survival", title: "Survival time (average)", desc: "Seconds per run before the end (training runs stop at 10 minutes).", color: "--reward", min: 0, fmt: v => v.toFixed(0) + " s" },
+  { key: "caught_share", title: "Runs ending in \"caught\"", desc: "Two stumbles while the chaser is close. Share of runs that ended this way.", color: "--signal", min: 0, max: 1, fmt: v => (v * 100).toFixed(0) + "%" },
+  { key: "moves", title: "Moves per 100 m", desc: "Any action other than \"nothing\". Falls as it stops fidgeting.", color: "--signal", min: 0, fmt: v => v.toFixed(0) },
+  { key: "reversals", title: "Reversed lane changes per 100 m", desc: "A lane change undone within 0.5 s: jitter. Costs -0.02 each.", color: "--signal", min: 0, fmt: v => v.toFixed(2) },
+  { key: "pointless", title: "Pointless jumps and rolls per 100 m", desc: "With no obstacle within 12 m in that lane. Costs -0.02 each.", color: "--signal", min: 0, fmt: v => v.toFixed(2) },
+  { key: "coach_accuracy", title: "Coach accuracy", desc: "How well the critic predicts the points (explained variance).", color: "--signal", min: 0, max: 1, fmt: v => v.toFixed(2) },
+  { key: "exploration", title: "Randomness (entropy)", desc: "How spread out its action choices are. High = still experimenting.", color: "--signal", min: 0, fmt: v => v.toFixed(2) },
+  { key: "clipped_share", title: "Updates hitting the ±20% cap", desc: "Share of samples where PPO's clip stopped a bigger change.", color: "--signal", min: 0, fmt: v => (v * 100).toFixed(0) + "%" },
+  { key: "update_size", title: "Update size", desc: "How much the policy changed per update (approx. KL).", color: "--signal", min: 0, fmt: v => v.toFixed(3) },
+  { key: "coach_loss", title: "Coach loss", desc: "Squared gap between the critic's guess and the real points.", color: "--signal", min: 0, fmt: v => v.toFixed(3) },
+];
+const PROJECTS = {
+  car: { name: "CarRacing", kicker: "BULSHY.FM · Build #1", title: "Car racing training", data: "data.json", charts: CAR_CHARTS,
+         bestNote: "900 = solved", explore: "Driver's randomness", exploreFmt: v => v.toFixed(3), defaultRun: "baseline",
+         videosNote: "One test race on the same track every 100,000 steps. Newest first." },
+  runner: { name: "Lights-Out Surfer", kicker: "BULSHY.FM · Lights-Out Surfer", title: "Runner training", data: "data-runner.json", charts: RUNNER_CHARTS,
+            bestNote: "same track, on Normal", explore: "Randomness (entropy)", exploreFmt: v => v.toFixed(2), defaultRun: null,
+            videosNote: "Progress races on the same track (seed 7, Normal), rendered from replays. Newest first." },
+};
+const PID = PROJECTS[new URLSearchParams(location.search).get("p")] ? new URLSearchParams(location.search).get("p") : "car";
+const PROJECT = PROJECTS[PID];
+const CHARTS = PROJECT.charts;
+const Q = PID === "car" ? "" : `?p=${PID}`;
+document.title = PROJECT.title;
+document.getElementById("kicker").textContent = PROJECT.kicker;
+document.getElementById("title").textContent = PROJECT.title;
+document.getElementById("t-best-note").textContent = PROJECT.bestNote;
+document.getElementById("t-explore-label").textContent = PROJECT.explore;
+document.getElementById("nav-train").href = "./" + Q;
+document.getElementById("nav-bench").href = "bench.html" + Q;
+document.getElementById("projects").replaceChildren(...Object.entries(PROJECTS).map(([id, p]) => {
+  const a = document.createElement("a"); a.href = "./" + (id === "car" ? "" : `?p=${id}`); a.textContent = p.name;
+  if (id === PID) a.setAttribute("aria-current", "page");
+  return a;
+}));
 // Compare mode colours. Any of them can sit side by side, so every PAIR is validated (dataviz
 // validate_palette.js --pairs all, dark, surface #141a22): CVD ΔE >= 8.5, normal-vision ΔE >= 21.
 const RUN_COLORS = ["#187eb3", "#a26109", "#b24df7", "#10af2f", "#dc0e76"];
 const COMPARE = "__compare__";
 const label = n => (data?.runs[n]?.number ? `#${data.runs[n].number} ` : "") + n;  // "#4 band-speed-steer"
-const PICK_KEY = "car-racing-dash:compare";
+const PICK_KEY = `goatsan-dash:${PID}:compare`;
 let picked = null;            // run names in Compare, max RUN_COLORS.length
 const colorOf = {};           // run -> colour; kept while the run stays picked, so survivors never repaint
 function loadPicked(names) {
@@ -274,22 +314,23 @@ function render() {
   updatedChip();
   if (runName === COMPARE) return renderCompare();
   document.getElementById("single").hidden = false; document.getElementById("legend").hidden = true;
-  document.getElementById("videos-note").textContent = "One test race on the same track every 100,000 steps. Newest first.";
+  document.getElementById("videos-note").textContent = PROJECT.videosNote;
   const run = data.runs[runName]; if (!run) return;
   const races = run.races, s = run.series;
   const steps = Math.max(0, ...(s.practice_score || []).map(p => p[0]), ...races.map(r => r.steps));
-  document.getElementById("bar").style.width = Math.min(100, steps / data.target_steps * 100).toFixed(1) + "%";
-  document.getElementById("steps").textContent = `${steps.toLocaleString()} / ${data.target_steps.toLocaleString()} steps`;
+  const target = targetOf(run);
+  document.getElementById("bar").style.width = Math.min(100, steps / target * 100).toFixed(1) + "%";
+  document.getElementById("steps").textContent = `${steps.toLocaleString()} / ${target.toLocaleString()} steps`;
   const fps = (s.fps || []).at(-1)?.[1];
-  const left = fps ? (data.target_steps - steps) / fps / 60 : null;
-  document.getElementById("eta").textContent = steps >= data.target_steps ? "finished" : fps ? `${Math.round(fps)} steps/s · about ${left > 90 ? (left / 60).toFixed(1) + " h" : Math.round(left) + " min"} left` : "";
+  const left = fps ? (target - steps) / fps / 60 : null;
+  document.getElementById("eta").textContent = steps >= target ? "finished" : fps ? `${Math.round(fps)} steps/s · about ${left > 90 ? (left / 60).toFixed(1) + " h" : Math.round(left) + " min"} left` : "";
   const latest = races.at(-1), best = races.reduce((b, r) => (b && b.score > r.score ? b : r), null);
   document.getElementById("t-latest").textContent = latest ? latest.score.toFixed(0) : "–";
   document.getElementById("t-latest-at").textContent = latest ? `at ${fmtSteps(latest.steps)} steps, ${latest.minutes.toFixed(0)} min in` : "";
   document.getElementById("t-best").textContent = best ? best.score.toFixed(0) : "–";
   const coach = (s.coach_accuracy || []).at(-1)?.[1], explore = (s.exploration || []).at(-1)?.[1];
   document.getElementById("t-coach").textContent = coach !== undefined ? coach.toFixed(2) : "–";
-  document.getElementById("t-explore").textContent = explore !== undefined ? explore.toFixed(3) : "–";
+  document.getElementById("t-explore").textContent = explore !== undefined ? PROJECT.exploreFmt(explore) : "–";
   const charts = ensureCards();
   for (const cfg of CHARTS) {
     const card = charts.querySelector(`[data-key="${cfg.key}"]`);
@@ -305,11 +346,13 @@ function render() {
   }
 }
 
+function targetOf(run) { return run.target_steps ?? data.target_steps; }  // runner runs each have their own length
+
 function updatedChip() {
   const updatedAt = new Date(data.updated.replace(" ", "T")), ageMin = (Date.now() - updatedAt) / 60000;
   const status = document.getElementById("status");
   const runs = runName === COMPARE ? (picked || []).map(n => data.runs[n]).filter(Boolean) : [data.runs[runName]].filter(Boolean);
-  const done = runs.length && runs.every(r => Math.max(0, ...(r.series.practice_score || []).map(p => p[0])) >= data.target_steps);
+  const done = runs.length && runs.every(r => Math.max(0, ...(r.series.practice_score || []).map(p => p[0]), ...r.races.map(x => x.steps)) >= targetOf(r));
   status.className = "chip " + (done ? "done" : ageMin > 25 ? "stale" : "live");
   status.querySelector("span").textContent = done ? "finished" : ageMin > 25 ? "no new data" : "training";
   document.getElementById("updated").textContent = "updated " + updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -317,14 +360,14 @@ function updatedChip() {
 
 async function load() {
   try {
-    const r = await fetch("data.json?t=" + Date.now(), { cache: "no-store" });
+    const r = await fetch(PROJECT.data + "?t=" + Date.now(), { cache: "no-store" });
     data = await r.json();
   } catch { document.getElementById("status").querySelector("span").textContent = "no data yet"; return; }
   const sel = document.getElementById("run"), names = Object.keys(data.runs);
   const want = [...names, ...(names.length > 1 ? [COMPARE] : [])];
   if ([...sel.options].map(o => o.value).join() !== want.join()) {
     sel.replaceChildren(...want.map(n => { const o = document.createElement("option"); o.value = n; o.textContent = n === COMPARE ? "Compare runs" : label(n); return o; }));
-    runName ??= names.includes("baseline") ? "baseline" : names[0];
+    runName ??= names.includes(PROJECT.defaultRun) ? PROJECT.defaultRun : names.at(-1);  // runner: the newest run
     sel.value = runName;
   }
   render();

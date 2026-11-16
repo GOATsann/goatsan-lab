@@ -1,0 +1,6 @@
+{
+  "r1-local":   {"number": 1, "change": "rules v1; reward: +0.1/m, -1 side hit, -10 death, -0.02 per reversal or pointless jump/roll; 20M on the Mac"},
+  "r2-v3":      {"number": 2, "change": "rules v3 (stumbles, hidden chaser, power-ups); same reward; 20M on the Mac"},
+  "r3-v4":      {"number": 3, "change": "rules v4 (difficulty ramp, random start level); same reward; 20M on the Mac"},
+  "r4-v4-long": {"number": 4, "change": "run 3, longer: 55M on the Mac"}
+}
