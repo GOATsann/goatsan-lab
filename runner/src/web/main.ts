@@ -91,8 +91,14 @@ $("more").addEventListener("click", () => $("overlay").classList.remove("compact
 $("race").hidden = false;
 $("race").addEventListener("click", () => { store.set("name", nameInput.value.trim()); location.href = "/race.html"; });
 const levelButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-level]")];
+const LEVEL_INFO = [
+  "Easy: a gentle start, and a beginner AI to race.",
+  "Normal: a faster start, and a trained AI to race.",
+  "Hard: the fastest start, and my full-strength AI to race.",
+];
 function showLevel(): void {
   for (const b of levelButtons) b.setAttribute("aria-checked", String(Number(b.dataset.level) === level));
+  $("levelInfo").textContent = LEVEL_INFO[level];
 }
 for (const b of levelButtons) b.addEventListener("click", () => {
   level = Number(b.dataset.level) as 0 | 1 | 2;
