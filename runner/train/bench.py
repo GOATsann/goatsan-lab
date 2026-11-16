@@ -21,7 +21,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
 from runner_env import RunnerVecEnv  # noqa: E402
-from train import MAX_TICKS, GameServers  # noqa: E402
+from train import GAME_OPTIONS, MAX_TICKS, GameServers  # noqa: E402
 
 
 def main() -> None:
@@ -43,7 +43,11 @@ def main() -> None:
     started = time.time()
     servers = GameServers(1, args.port, run_dir / "logs")
     try:
-        env = RunnerVecEnv(servers.ports[0], n_envs=len(seeds), seed_base=10**9, max_ticks=MAX_TICKS)
+        meta = json.loads((run_dir / "meta.json").read_text())
+        options = meta.get("game_options", GAME_OPTIONS)  # the rules the model was trained on
+        env = RunnerVecEnv(servers.ports[0], n_envs=len(seeds), seed_base=10**9, max_ticks=MAX_TICKS, options=options)
+        if env.version != meta["game_version"]:
+            raise SystemExit(f"model trained on game version {meta['game_version']}, server is version {env.version}")
         obs = np.stack([env.set_seed(i, s) for i, s in enumerate(seeds)])
         results: dict[int, dict] = {}
         replays: dict[int, dict] = {}

@@ -33,11 +33,15 @@
     },
     "stumbles": {
       "w": -1.0,
-      "doc": "per side hit (the first one only bounces you back; the second within 5 s kills)."
+      "doc": "per stumble: hitting a barrier or a train's side (rules v3: you break through or bounce back and slow down; 2 stumbles while the chaser is close = caught). The main penalty for sloppy dodging."
+    },
+    "shieldsUsed": {
+      "w": 0.0,
+      "doc": "per hit absorbed by a shield power-up."
     },
     "died": {
       "w": -10.0,
-      "doc": "once, when the run ends in a crash."
+      "doc": "once, when the run ends: head-on into a train, an oncoming train, or caught by the chaser."
     },
     "moves": {
       "w": 0.0,

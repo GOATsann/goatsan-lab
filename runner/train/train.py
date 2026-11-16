@@ -31,6 +31,9 @@ from runner_env import MultiRunnerVecEnv, RunnerVecEnv, load_reward  # noqa: E40
 
 PROGRESS_SEED = 7  # the same track for every progress race, so they compare
 MAX_TICKS = 36_000  # 10 minutes of game time per episode
+# Game options sent in every handshake (rules v3+). The chaser stays hidden from the AI, like from a
+# player who does not look back; benchmarks use the same options as training (from meta.json).
+GAME_OPTIONS = {"powerups": True, "stumbles_to_catch": 2, "observe_chaser": False}
 
 
 class GameServers:
@@ -106,7 +109,7 @@ class ProgressRaces(BaseCallback):
     def __init__(self, every: int, port: int, run_dir: Path, norm: VecNormalize):
         super().__init__()
         self.every, self.run_dir, self.norm = every, run_dir, norm
-        self.env = RunnerVecEnv(port, n_envs=1, seed_base=10**9, max_ticks=MAX_TICKS)
+        self.env = RunnerVecEnv(port, n_envs=1, seed_base=10**9, max_ticks=MAX_TICKS, options=GAME_OPTIONS)
         self.next_at = 0
         self.started = time.time()
         (run_dir / "replays").mkdir(parents=True, exist_ok=True)
@@ -167,11 +170,12 @@ def main() -> None:
     try:
         env = MultiRunnerVecEnv([
             RunnerVecEnv(port, n_envs=args.envs_per_server, seed_base=1_000_000 + i * 10_000_000,
-                         max_ticks=MAX_TICKS, reward=reward)
+                         max_ticks=MAX_TICKS, reward=reward, options=GAME_OPTIONS)
             for i, port in enumerate(servers.ports[:-1])
         ])
         (run_dir / "meta.json").write_text(json.dumps({
-            "game_version": env.envs[0].version, "obs_size": env.envs[0].obs_size, "args": vars(args) | {"reward": str(args.reward)},
+            "game_version": env.envs[0].version, "obs_size": env.envs[0].obs_size, "game_options": GAME_OPTIONS,
+            "server_rules": env.envs[0].hello.get("rules"), "args": vars(args) | {"reward": str(args.reward)},
         }, indent=2, default=str))
         env = VecNormalize(env, norm_obs=False, norm_reward=True, gamma=0.99)
 

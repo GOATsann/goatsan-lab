@@ -36,7 +36,8 @@ REACH_MM = 12_000      # a jump lasts ~0.6 s; at 20 m/s that is 12 m
 V1_LAYOUT = {"lanes": 3, "rows": 32, "row_len_mm": 3000, "first_row_offset_mm": -3000,
              "channels": ["low", "high", "trainFront", "trainBody", "ramp", "coin", "moving", "powerup"],
              "state": ["lane0", "lane1", "lane2"]}
-NOT_OBSTACLES = {"coin", "powerup"}
+# Grid channels that are things to avoid (everything else, like coins and power-ups, is a pickup).
+OBSTACLES = {"low", "high", "trainFront", "trainBody", "ramp", "moving"}
 
 
 def load_reward(path: Path = HERE / "reward.json") -> dict[str, float]:
@@ -76,10 +77,12 @@ class RunnerVecEnv(VecEnv):
     """n_envs games on one server process. Auto-resets finished games (SB3 convention)."""
 
     def __init__(self, port: int, n_envs: int = 64, seed_base: int = 1_000_000, max_ticks: int = 36_000,
-                 reward: dict[str, float] | None = None, host: str = "127.0.0.1"):
+                 reward: dict[str, float] | None = None, host: str = "127.0.0.1", options: dict | None = None):
+        """options: game options for the handshake (v3+): powerups, stumbles_to_catch, observe_chaser."""
         self.conn = Conn(host, port)
-        self.conn.send(json.dumps({"n_envs": n_envs, "seed_base": seed_base, "max_ticks": max_ticks}).encode())
+        self.conn.send(json.dumps({"n_envs": n_envs, "seed_base": seed_base, "max_ticks": max_ticks, **(options or {})}).encode())
         hello = json.loads(self.conn.recv())
+        self.hello = hello
         self.version: int = hello["version"]
         self.obs_size: int = hello["obs_size"]
         self.fields: list[str] = hello["event_fields"]
@@ -183,7 +186,10 @@ class RunnerVecEnv(VecEnv):
         self._lane_at = lay["lanes"] * rows * ch + lay["state"].index("lane0")  # lane one-hot starts here
         row_start = lay["first_row_offset_mm"] + np.arange(rows) * lay["row_len_mm"]
         self._reach_rows = np.flatnonzero((row_start + lay["row_len_mm"] > 0) & (row_start < REACH_MM))
-        self._obstacle_ch = [j for j, name in enumerate(lay["channels"]) if name not in NOT_OBSTACLES]
+        self._obstacle_ch = [j for j, name in enumerate(lay["channels"]) if name in OBSTACLES]
+        missing = OBSTACLES - set(lay["channels"])
+        if missing:
+            raise ValueError(f"obs_layout has no channel for {sorted(missing)}: update OBSTACLES in runner_env.py")
 
     def _derived(self, events: np.ndarray, a: np.ndarray) -> dict[str, np.ndarray]:
         """The derived reward terms of this decision (0/1 per env), and the episode counters."""
