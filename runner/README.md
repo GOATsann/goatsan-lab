@@ -27,6 +27,11 @@ npm run parity       # same replays give the same result in Node, Chromium, Fire
 
 Optional music: put an MP3 at `public/audio/music.mp3` (not included, see [ASSETS.md](ASSETS.md)).
 
+The trained AI opponents are not in this repo either. Race the AI loads them from
+`public/models/policy-{easy,normal,hard}.onnx` (with a `.json` next to each); without them it uses a
+built-in stand-in bot. To use your own, train one (see `train/`) and run
+`npm run publish-model -- <run> [checkpoint steps] --as easy|normal|hard`.
+
 ## How it's built
 
 - **One deterministic core** (`src/core/`): fixed 60 Hz ticks, integer physics, a seeded random
