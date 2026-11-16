@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Lights-Out Surfer · Race the AI</title>
+<link rel="stylesheet" href="/src/web/styles/game.css">
+<style>
+  .race { position: fixed; inset: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-areas: "you ai"; gap: 3px; background: #05060f; }
+  @media (orientation: portrait) { .race { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; grid-template-areas: "ai" "you"; } }
+  .half { position: relative; overflow: hidden; touch-action: none; }
+  .half.you { grid-area: you; }
+  .half.ai { grid-area: ai; }
+  .half canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .tag { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: baseline; padding: 10px 14px 18px;
+    background: linear-gradient(to bottom, rgba(6, 8, 24, 0.7), transparent); color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7); pointer-events: none; font-variant-numeric: tabular-nums; }
+  .tag b { font-size: 1.05rem; }
+  .tag .score { font-size: 1.5rem; font-weight: 700; }
+  .tag .who { display: flex; align-items: center; gap: 8px; }
+  .tag i { width: 10px; height: 10px; border-radius: 50%; background: var(--c, #22e3f0); }
+  .tag small { color: #c9d0ea; margin-left: 6px; }
+  .count { position: fixed; inset: 0; display: grid; place-content: center; font-size: 22vmin; font-weight: 800; color: #fff; text-shadow: 0 4px 30px rgba(0, 0, 0, 0.6); pointer-events: none; }
+  .count[hidden] { display: none; }
+  .out { position: absolute; inset: 0; display: grid; place-content: center; background: rgba(6, 8, 24, 0.45); color: #fff; font-size: 1.4rem; font-weight: 700; pointer-events: none; }
+  .out[hidden] { display: none; }
+</style>
+</head>
+<body>
+<div class="race">
+  <div class="half ai" id="aiHalf"><canvas id="aiCanvas"></canvas><div class="tag"><span class="who"><i id="aiDot"></i><b id="aiName">AI</b><small id="aiRunner"></small></span><span class="score" id="aiScore">0</span></div><div class="out" id="aiOut" hidden></div></div>
+  <div class="half you" id="youHalf"><canvas id="youCanvas"></canvas><div class="tag"><span class="who"><i id="youDot"></i><b id="youName">You</b><small id="youRunner"></small></span><span class="score" id="youScore">0</span></div><div class="out" id="youOut" hidden></div></div>
+</div>
+<div class="count" id="count" hidden>3</div>
+<div class="overlay" id="overlay" hidden>
+ <div class="card">
+  <h1 id="title">You win</h1>
+  <p id="sub"></p>
+  <div class="buttons">
+    <button class="primary" id="again">Race again</button>
+    <button id="back">Back</button>
+  </div>
+ </div>
+</div>
+<script type="module" src="/src/web/race.ts"></script>
+</body>
+</html>

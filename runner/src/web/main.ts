@@ -100,6 +100,9 @@ function start(): void {
 }
 input.onStart = () => { if ($("overlay").hidden === false && document.activeElement === nameInput) return; start(); };
 $("play").addEventListener("click", start);
+// Race the AI: same track and level for both; the race page reads runner, name and level from storage
+$("race").hidden = false;
+$("race").addEventListener("click", () => { store.set("name", nameInput.value.trim()); location.href = "/race.html"; });
 const levelButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-level]")];
 function showLevel(): void {
   for (const b of levelButtons) b.setAttribute("aria-checked", String(Number(b.dataset.level) === level));
