@@ -32,7 +32,7 @@
 .buttons .primary { background: var(--accent, #22e3f0); border-color: transparent; color: #071018; }
 
 /* start / game-over: one clear frosted card; the scene behind is dimmed evenly, never black */
-.overlay { background: rgba(6, 8, 24, 0.35); align-content: end; padding: 0 16px 6vh; }
+.overlay { background: rgba(6, 8, 24, 0.35); align-content: end; padding: 0 16px max(6vh, 68px); } /* clear of the corner sound icons */
 .card { box-sizing: border-box; width: min(380px, calc(100vw - 32px)); margin: 0 auto; display: grid; gap: 14px; justify-items: center; padding: 22px 20px 18px;
   border-radius: 22px; background: rgba(14, 18, 44, 0.82); border: 1px solid rgba(255, 255, 255, 0.16);
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45); }
