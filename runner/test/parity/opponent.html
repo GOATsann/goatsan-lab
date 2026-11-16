@@ -1,0 +1,27 @@
+<!doctype html><meta charset="utf-8"><title>opponent parity</title>
+<script type="module">
+  // The browser opponent (loadAi + HandicapFilter) must make exactly the moves bench-opponent.ts made.
+  import { Game } from "/src/core/game.ts";
+  import { DECISION_TICKS } from "/src/core/config.ts";
+  import { loadAi } from "/src/web/ai.ts";
+  const files = ["easy-worst-seed1000", "easy-median-seed1001", "easy-best-seed1002", "normal-worst-seed1000", "normal-median-seed1001",
+    "normal-best-seed1002", "hard-worst-seed1000", "hard-median-seed1001", "hard-best-seed1002"];
+  const driver = await loadAi();
+  const results = [];
+  for (const f of files) {
+    const ref = await (await fetch(`/test/parity/opponent-replays/${f}.json`)).json();
+    const g = new Game(ref.seed, ref.options);
+    driver.start(ref.options.level, ref.seed);
+    while (!g.dead && g.tick < ref.endTick) {
+      const a = await driver.act(g);
+      for (let i = 0; i < DECISION_TICKS && !g.dead && g.tick < ref.endTick; i++) g.step(i === 0 ? a : 0);
+    }
+    const mine = g.replay().actions, theirs = ref.actions;
+    let first = -1;
+    for (let i = 0; i < Math.max(mine.length, theirs.length); i++) {
+      if (!mine[i] || !theirs[i] || mine[i][0] !== theirs[i][0] || mine[i][1] !== theirs[i][1]) { first = i; break; }
+    }
+    results.push({ f, moves: theirs.length, match: first === -1, firstDiff: first === -1 ? null : { at: first, mine: mine[first], theirs: theirs[first] } });
+  }
+  window.parity = { driver: driver.label, results };
+</script>

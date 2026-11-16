@@ -55,7 +55,8 @@ async function setup(): Promise<void> {
   $("aiName").textContent = `AI · ${LEVEL_LABEL[level]}`;
   $("aiRunner").textContent = theirs.name;
   $("aiDot").style.setProperty("--c", theirs.colors.accent);
-  driver ??= await loadAi((["easy", "normal", "hard"] as const)[level]);
+  driver ??= await loadAi();
+  driver.start(level, seed); // the level's handicap, seeded by this race
   input.clear();
   sfx.reset(you);
   countdown();

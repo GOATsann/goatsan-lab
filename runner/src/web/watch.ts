@@ -15,7 +15,6 @@ import { mountSoundControls } from "./sound-controls";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
-const LEVELS = ["easy", "normal", "hard"] as const;
 let level = Math.max(0, Math.min(2, Number(params.get("level") ?? 2) || 0)) as 0 | 1 | 2;
 const fixedSeed = params.has("seed") ? Number(params.get("seed")) : null;
 
@@ -38,7 +37,7 @@ let runs = 0, best = 0, lastAction: Action = NOOP, restartAt = 0;
 
 $<HTMLSelectElement>("level").value = String(level);
 // one choice: the level sets the track and the AI opponent, exactly as in Race the AI
-$("level").addEventListener("change", async (e) => { level = Number((e.target as HTMLSelectElement).value) as 0 | 1 | 2; driver = await loadAi(LEVELS[level]); newRun(); });
+$("level").addEventListener("change", (e) => { level = Number((e.target as HTMLSelectElement).value) as 0 | 1 | 2; newRun(); });
 const setHidden = (h: boolean) => { $("panel").hidden = h; };
 addEventListener("keydown", (e) => { if (e.key === "h" || e.key === "H") setHidden(!$("panel").hidden); });
 $("hide").addEventListener("click", (e) => { e.stopPropagation(); setHidden(true); });
@@ -48,6 +47,7 @@ function newRun(): void {
   runs++;
   const seed = fixedSeed ?? new Rng((Date.now() ^ (runs * 0x9e3779b9)) >>> 0).next(); // UI only
   game = new Game(seed, { level });
+  driver?.start(level, seed); // the level's handicap, seeded by this run
   ready = null;
   restartAt = 0;
   sfx.reset(game);
@@ -92,7 +92,7 @@ function frame(now: number): void {
 }
 
 (async () => {
-  driver = await loadAi(LEVELS[level]);
+  driver = await loadAi();
   const chars = await loadCharacters();
   renderer.setCharacter(await makeCharacter(chars[new Rng(fixedSeed ?? Date.now()).int(chars.length)]));
   newRun();

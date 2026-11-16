@@ -2,10 +2,6 @@
   "repo": "TheOnlyGoatsan/lights-out-surfer-ppo",
   "revision": "1c7905372b41eb2fb677aefc84b3839adabee3a8",
   "files": {
-    "policy-easy.onnx": "1ce43cb5010af73a8fd9424b840b8acb2e3421b3cd18ec52457fee6305729370",
-    "policy-easy.json": "e3d021241de8b961a924e7d53e72b7b739ca6b6193d3d097c7ef2c52bb0979cf",
-    "policy-normal.onnx": "ff5a411a244545438a85637dfb83fd39ebf9878e21870092bd38e9cd80b14d0c",
-    "policy-normal.json": "eea65a6397a3367d99834fb88d01789ee72dc04d5ecdf0057aca69ceebff7050",
     "policy-hard.onnx": "dfc3d9838413f179c00d4b94a9f307080fa8cdb8bef96cb1644a5a3c7e2a6d87",
     "policy-hard.json": "3e2adf161223bed3444f881eba58826b1da65c01eabce2ac4c2e90467a9b1fc3"
   }
