@@ -4,3 +4,5 @@ runs/
 videos/
 public/audio/music.mp3
 .sst/
+public/models/
+sst-env.d.ts
