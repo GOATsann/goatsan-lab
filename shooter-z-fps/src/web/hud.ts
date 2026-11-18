@@ -6,6 +6,9 @@ import { MODES } from "../core/game";
 import type { Slot } from "../core/match";
 import { CHARACTERS } from "../core/characters";
 
+// friend-or-foe colours, the same as the markers over robots' heads (gameview.ts)
+const MATE = "#3ddc84", FOE = "#ff4b3e";
+
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, parent?: HTMLElement, html = "") => {
   const e = document.createElement(tag);
   e.className = cls;
@@ -270,13 +273,13 @@ export class Hud {
       if (me && a.id === me.id) continue;
       const isMate = me ? a.team === me.team : true;
       if (!me || ctx.spectator) { dot(a.x, a.z, ctx.colors[a.id], 9); continue; }
-      if (isMate) { dot(a.x, a.z, ctx.colors[a.id], 8); continue; }
-      if (a.outlineFor[me.id] > 0 || a.revealTicks > 0 || a.scanFor[me.team] > 0) { dot(a.x, a.z, ctx.colors[a.id], 8); dot(a.x, a.z, "#fff", 14, true); continue; }
+      if (isMate) { dot(a.x, a.z, MATE, 8); continue; }
+      if (a.outlineFor[me.id] > 0 || a.revealTicks > 0 || a.scanFor[me.team] > 0) { dot(a.x, a.z, FOE, 8); dot(a.x, a.z, "#fff", 14, true); continue; }
       if (a.pingTicks > 0) {
         const k = a.pingTicks / C.PING_TICKS;
         g2.globalAlpha = k;
-        dot(a.pingX, a.pingZ, ctx.colors[a.id], 8);
-        dot(a.pingX, a.pingZ, ctx.colors[a.id], 10 + (1 - k) * 22, true);
+        dot(a.pingX, a.pingZ, FOE, 8);
+        dot(a.pingX, a.pingZ, FOE, 10 + (1 - k) * 22, true);
         g2.globalAlpha = 1;
       }
     }
@@ -285,7 +288,7 @@ export class Hud {
     if (me) {
       g2.save();
       g2.translate(R, R);
-      g2.fillStyle = ctx.colors[me.id]; g2.strokeStyle = "#fff"; g2.lineWidth = 3;
+      g2.fillStyle = "#ffffff"; g2.strokeStyle = "rgba(0,0,0,0.7)"; g2.lineWidth = 3;
       g2.beginPath(); g2.moveTo(0, -16); g2.lineTo(11, 12); g2.lineTo(0, 6); g2.lineTo(-11, 12); g2.closePath(); g2.fill(); g2.stroke();
       g2.restore();
     }

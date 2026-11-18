@@ -9,10 +9,13 @@ import type { Input } from "./input";
 export interface TouchOptions {
   /** radians of turn per pixel dragged */
   lookSpeed: number;
+  /** Simple: the game fires while the crosshair is on a visible enemy (no Fire buttons). Advanced: manual Fire. */
+  simple: boolean;
   onPause: () => void;
 }
 
-type Role = { kind: "stick"; x0: number; y0: number } | { kind: "look"; x: number; y: number } | { kind: "button"; name: string };
+// a Fire button also aims: dragging while holding it turns the view (like the big mobile shooters)
+type Role = { kind: "stick"; x0: number; y0: number } | { kind: "look"; x: number; y: number } | { kind: "button"; name: string; x: number; y: number };
 
 export class TouchControls {
   readonly el: HTMLElement;
@@ -42,7 +45,10 @@ export class TouchControls {
       <button class="t-btn t-jump" data-t="jump" aria-label="Jump">Jump</button>
       <button class="t-btn t-crouch" data-t="crouch" aria-label="Crouch">Crouch</button>
       <button class="t-btn t-fire" data-t="fire" aria-label="Fire">Fire</button>
-      <div class="t-hint">Left thumb: move · drag right side: aim</div>`;
+      <button class="t-btn t-fire t-fire-left" data-t="fire" aria-label="Fire (left thumb)">Fire</button>
+      <div class="t-hint">${opts.simple ? "Left thumb: move · drag right side: aim · it fires when you're on target" : "Left thumb: move · drag right side or Fire: aim"}</div>`;
+    this.el.classList.toggle("simple", opts.simple);
+    this.autoFire = opts.simple;
     parent.appendChild(this.el);
     this.stickBase = this.el.querySelector(".t-stick")!;
     this.stickKnob = this.el.querySelector(".t-knob")!;
@@ -62,7 +68,8 @@ export class TouchControls {
     const btn = (e.target as HTMLElement).closest("[data-t]") as HTMLElement | null;
     if (btn) {
       const name = btn.dataset.t!;
-      this.roles.set(e.pointerId, { kind: "button", name });
+      this.roles.set(e.pointerId, { kind: "button", name, x: e.clientX, y: e.clientY });
+      try { this.el.setPointerCapture(e.pointerId); } catch { /* synthetic events in tests */ }
       btn.classList.add("on");
       const t = this.input.touch;
       if (name === "fire") t.fire = true;
@@ -98,7 +105,7 @@ export class TouchControls {
       const nx = dx / max, ny = dy / max;
       this.input.touch.strafe = nx > 0.35 ? 1 : nx < -0.35 ? -1 : 0;
       this.input.touch.forward = ny < -0.35 ? 1 : ny > 0.35 ? -1 : 0;
-    } else if (r.kind === "look") {
+    } else if (r.kind === "look" || (r.kind === "button" && r.name === "fire")) {
       const dx = e.clientX - r.x, dy = e.clientY - r.y;
       r.x = e.clientX; r.y = e.clientY;
       // turn into "mouse pixels" so the camera and the core get it exactly like mouse movement
@@ -115,9 +122,10 @@ export class TouchControls {
       this.stickBase.hidden = true;
       this.input.touch.forward = 0; this.input.touch.strafe = 0;
     } else if (r.kind === "button") {
-      this.el.querySelector(`[data-t="${r.name}"]`)?.classList.remove("on");
+      for (const b of this.el.querySelectorAll(`[data-t="${r.name}"]`)) b.classList.remove("on");
       const t = this.input.touch;
-      if (r.name === "fire") t.fire = false;
+      // two Fire buttons: keep firing while either is still held
+      if (r.name === "fire") t.fire = [...this.roles.values()].some((x) => x.kind === "button" && x.name === "fire");
       else if (r.name === "jump") t.jump = false;
       else if (r.name === "reload") t.reload = false;
       else if (r.name === "ability") t.ability = false;

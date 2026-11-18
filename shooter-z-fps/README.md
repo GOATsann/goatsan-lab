@@ -44,9 +44,14 @@ crouching more.
 - Firing shows you on everyone's minimap for 1 s.
 - Standing still without firing for 15 s reveals you to everyone for 2 s.
 - In 2v2 your teammate is always outlined and on your minimap. There is no friendly fire.
+- Friend or foe: a **green arrow** floats over teammates (always) and a **red arrow** over an opponent only
+  while you can see it or it is revealed (hit, scan, standing still), never through walls otherwise. The
+  minimap uses the same green and red. Every character keeps its own colours; there is no team tinting.
 
 **Characters** (same health, speed and laser; the Special Move is the only difference). Click a character
-on the menu to see it turning, with its Special Move and cooldown.
+on the menu to see it turning, with its Special Move and cooldown; every few seconds it performs the move
+with its effects while the move's name flashes (Dash: speed lines and an afterimage trail; Bulwark: the
+shield; Echo: a scan ring with a radar sweep; Wisp: a shimmer, then near-invisible).
 
 | Character | Special Move | What it does | Cooldown |
 |---|---|---|---|
@@ -67,7 +72,8 @@ cameras; the same mode is on the desktop menu). Touch controls, all usable at on
 |---|---|
 | Left thumb anywhere on the left side | a floating stick: move (8 directions; the game has one run speed) |
 | Drag on the right side | aim (Look speed on the menu) |
-| Fire (big button, bottom right) | fire while held; Auto-fire (menu, off by default) fires when the crosshair is on an enemy |
+| Firing: **Simple** (the phone default) | the game fires for you while the crosshair is on a visible enemy; no Fire buttons |
+| Firing: **Advanced** (menu) | a big Fire button (bottom right) that also aims: drag while holding it, like the big mobile shooters; and a smaller Fire button on the left, above the stick, so the left thumb fires while the right thumb aims |
 | Special Move button (with cooldown ring) | your character's Special Move |
 | Jump, Crouch (tap to toggle), R | jump, crouch, reload (it also reloads by itself when empty) |
 | II (top right) | pause |

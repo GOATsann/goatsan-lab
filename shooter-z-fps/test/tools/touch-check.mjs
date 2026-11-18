@@ -38,6 +38,7 @@ const BTN = {
   crouch: { x: 844 - 214 - 32, y: 390 - 22 - 32 },
   reload: { x: 844 - 128 - 27, y: 390 - 106 - 27 },
   ability: { x: 844 - 34 - 37, y: 390 - 142 - 37 },
+  fireLeft: { x: 26 + 34, y: 390 - 168 - 34 },
 };
 const game = (p) => p.evaluate(() => { const g = window.shooterZ.match.game, a = g.agents[0]; return { x: a.x, z: a.z, yaw: a.yaw, shots: a.shots, abilityCd: a.abilityCooldown, alive: a.alive, tick: g.tick }; });
 
@@ -56,7 +57,11 @@ const A = await phonePage(L, true);
 await A.p.goto(`${BASE}/?seed=3&nofs`);
 await A.p.waitForTimeout(2200);
 await A.p.screenshot({ path: `${out}/touch-landscape-menu.png` });
-const menuDefaults = await A.p.evaluate(() => ({ skill: document.querySelector("[data-setting=skill] .on")?.textContent, graphics: document.querySelector("[data-setting=graphics] .on")?.textContent }));
+const menuDefaults = await A.p.evaluate(() => ({ skill: document.querySelector("[data-setting=skill] .on")?.textContent, graphics: document.querySelector("[data-setting=graphics] .on")?.textContent, firing: document.querySelector("[data-setting=fireMode] .on")?.textContent }));
+// this run tests the manual Fire buttons: switch to Advanced firing
+await A.p.locator("[data-setting=fireMode] [data-v=advanced]").scrollIntoViewIfNeeded();
+await A.p.tap("[data-setting=fireMode] [data-v=advanced]");
+await A.p.locator("#playTouch").scrollIntoViewIfNeeded();
 await A.p.tap("#playTouch");
 await A.p.waitForTimeout(1500);
 const before = await game(A.p);
@@ -72,6 +77,27 @@ await A.T.up(3); await A.T.up(2); await A.T.up(1);
 await A.T.tap(BTN.ability.x, BTN.ability.y);
 await A.p.waitForTimeout(300);
 const after = await game(A.p);
+// Fire also aims: hold the right Fire button and drag it
+while (!(await game(A.p)).alive) await A.p.waitForTimeout(200);
+const fa0 = await game(A.p);
+await A.T.down(4, BTN.fire.x, BTN.fire.y);
+for (let i = 1; i <= 8; i++) { await A.T.move(4, BTN.fire.x - i * 6, BTN.fire.y - i * 2); await A.p.waitForTimeout(50); }
+await A.p.waitForTimeout(300);
+const fa1 = await game(A.p);
+await A.T.up(4);
+// left-thumb Fire while the right thumb aims
+await A.p.waitForTimeout(400);
+while (!(await game(A.p)).alive) await A.p.waitForTimeout(200);
+const lf0 = await game(A.p);
+await A.T.down(5, BTN.fireLeft.x, BTN.fireLeft.y);
+await A.T.down(2, 600, 170);
+for (let i = 1; i <= 8; i++) { await A.T.move(2, 600 - i * 6, 170); await A.p.waitForTimeout(50); }
+await A.p.waitForTimeout(300);
+await A.p.screenshot({ path: `${out}/touch-advanced-leftfire.png` });
+const lf1 = await game(A.p);
+await A.T.up(2); await A.T.up(5);
+const fireAims = { turned: Math.abs(fa1.yaw - fa0.yaw).toFixed(2), shots: fa1.shots - fa0.shots };
+const leftFire = { turned: Math.abs(lf1.yaw - lf0.yaw).toFixed(2), shots: lf1.shots - lf0.shots };
 // pause and resume
 await A.T.tap(844 - 12 - 23, 10 + 23);
 await A.p.waitForTimeout(300);
@@ -146,6 +172,36 @@ await p.waitForTimeout(500);
 await p.screenshot({ path: `${out}/touch-tutorial-done.png` });
 const tut = await p.evaluate(() => ({ done: window.shooterZ.tutorial.done, endButtons: !document.getElementById("touchEnd").hidden }));
 await B.ctx.close();
+
+// ---- 4. Simple firing (the phone default): aim at the bot, the game fires by itself
+const C = await phonePage(L);
+await C.p.goto(`${BASE}/?seed=5`);
+await C.p.waitForTimeout(2000);
+await C.p.tap("#playTouch");
+await C.p.waitForTimeout(1200);
+const fireButtonsHidden = await C.p.evaluate(() => [...document.querySelectorAll(".t-fire")].every((b) => getComputedStyle(b).display === "none"));
+let simpleShots = 0, simpleHits = 0;
+const s0 = Date.now();
+while (Date.now() - s0 < 40000) {
+  const s = await C.p.evaluate(() => {
+    const g = window.shooterZ.match.game, me = g.agents[0], t = g.agents[1];
+    const eye = me.y + (me.crouch ? 1.1 : 1.62);
+    const dx = t.x - me.x, dz = t.z - me.z, d = Math.hypot(dx, dz);
+    const w = (v) => v - 2 * Math.PI * Math.floor((v + Math.PI) / (2 * Math.PI));
+    return { ey: w(Math.atan2(-dx, -dz) - me.yaw), ep: Math.atan2(t.y + 1.15 - eye, d) - me.pitch, clear: t.alive && me.alive && g.world.clear(me.x, eye, me.z, t.x, t.y + 1.15, t.z), shots: me.shots, hits: me.hits, held: window.shooterZ.input.touch.fire };
+  });
+  simpleShots = s.shots; simpleHits = s.hits;
+  if (s.held) throw new Error("manual fire was held in Simple mode");
+  if (simpleHits > 0) break;
+  if (s.clear) {
+    const px = Math.max(-80, Math.min(80, (-s.ey * 0.6) / 0.006)), py = Math.max(-60, Math.min(60, (-s.ep * 0.6) / 0.006));
+    await C.T.up(1).catch(() => {});
+    await C.T.down(2, 600, 190); await C.T.move(2, 600 + px, 190 + py); await C.T.up(2);
+  } else { await C.T.down(1, 150, 290); await C.T.move(1, 150, 235); }
+  await C.p.waitForTimeout(60);
+}
+await C.p.screenshot({ path: `${out}/touch-simple-autofire.png` });
+await C.ctx.close();
 await b.close();
 
 if (vids && videoOut) {
@@ -156,6 +212,7 @@ if (vids && videoOut) {
 console.log(JSON.stringify({
   portrait, menuDefaults,
   moved: Math.hypot(during.x - before.x, during.z - before.z).toFixed(2), turned: Math.abs(during.yaw - before.yaw).toFixed(2), shotsWhileMovingAndAiming: during.shots - before.shots,
-  specialMoveUsed: after.abilityCd > 0, pausedShown, resumed,
+  specialMoveUsed: after.abilityCd > 0, pausedShown, resumed, fireAims, leftFire,
+  simple: { fireButtonsHidden, shots: simpleShots, hits: simpleHits },
   tutorial: tut, tutorialStepTimes: stepTimes, errors: errs.length ? errs : "none",
 }));

@@ -45,7 +45,8 @@ const settings = {
   graphics: ((params.get("graphics") ?? store.get("graphics") ?? (touchDevice ? "low" : "normal")) === "low" ? "low" : "normal") as Graphics,
   sens: Number(store.get("sens") ?? 1),
   touchSens: Number(store.get("touchSens") ?? 1),
-  autoFire: (store.get("autoFire") ?? "off") as "off" | "on",
+  // phones: Simple firing (fires while the crosshair is on a visible enemy) or Advanced (manual Fire)
+  fireMode: (store.get("fireMode") ?? "simple") as "simple" | "advanced",
 };
 if (!MODES[settings.mode]) settings.mode = "duel";
 if (!(settings.character >= 0 && settings.character < CHARACTERS.length)) settings.character = 0;
@@ -115,13 +116,13 @@ function startMatch(kind: "play" | "watch" | "backdrop" | "tutorial", mapOverrid
   const rig = newRig();
   rig.mode = spectate ? (kind === "backdrop" ? "overview" : "follow") : "fp";
   rig.target = 0;
-  const tutorial = tut ? new Tutorial(match, settings.character, touching ? document.body : hud.root, touching) : null;
+  const tutorial = tut ? new Tutorial(match, settings.character, touching ? document.body : hud.root, touching, touching && settings.fireMode === "simple") : null;
   if (touching) {
     touch = new TouchControls(document.body, input, {
       lookSpeed: 0.006 * settings.touchSens,
+      simple: settings.fireMode === "simple",
       onPause: () => { touchPaused = true; pausedByUser = true; touch?.reset(); },
     });
-    touch.autoFire = settings.autoFire === "on";
   }
   hud.tutorial = tut;
   S = { match, view, hud, rig, spectator: spectate, self, colors, slots, endedAt: -1, backdrop: kind === "backdrop", tutorial };
@@ -231,7 +232,7 @@ function frame(now: number): void {
 }
 requestAnimationFrame(frame);
 
-/** Auto-fire (touch option): is the crosshair on an enemy you can see right now? */
+/** Simple firing (touch): is the crosshair on an enemy you can see right now? */
 function crosshairOnEnemy(s: Session): boolean {
   const g = s.match.game, me = g.agents[s.self];
   if (!me.alive) return false;
@@ -387,7 +388,7 @@ function hideMenu(): void { $("menu").hidden = true; preview.running = false; }
 
 function refreshMenu(): void {
   for (const seg of document.querySelectorAll<HTMLElement>(".seg[data-setting]")) {
-    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics" | "limit" | "autoFire";
+    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics" | "limit" | "fireMode";
     seg.setAttribute("role", "radiogroup");
     for (const b of seg.querySelectorAll<HTMLButtonElement>("button")) { b.classList.toggle("on", b.dataset.v === String(settings[key])); b.setAttribute("role", "radio"); }
   }
@@ -404,7 +405,7 @@ function refreshMenu(): void {
   }
   for (const b of document.querySelectorAll<HTMLButtonElement>(".seg[data-setting] button")) b.setAttribute("aria-checked", String(b.classList.contains("on")));
   const ch = CHARACTERS[settings.character];
-  if (previewShown !== settings.character) { preview.show(settings.character, "#3d8bff"); previewShown = settings.character; }
+  if (previewShown !== settings.character) { preview.show(settings.character, CHARACTERS[settings.character].accent); previewShown = settings.character; }
   $("cpName").textContent = ch.name;
   $("cpMove").textContent = ch.abilityName;
   $("charPreview").style.setProperty("--c", ch.accent);
@@ -427,7 +428,7 @@ for (const seg of document.querySelectorAll<HTMLElement>(".seg[data-setting]")) 
   seg.addEventListener("click", (e) => {
     const b = (e.target as HTMLElement).closest("button") as HTMLButtonElement | null;
     if (!b) return;
-    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics" | "limit" | "autoFire";
+    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics" | "limit" | "fireMode";
     const v = b.dataset.v!;
     if (key === "graphics") {
       if (v !== settings.graphics) { store.set("graphics", v); location.reload(); }

@@ -312,3 +312,16 @@ body.phone .touch-tut, .touch-tut { left: calc(12px + env(safe-area-inset-left))
 .touch-tut .tut-card b { font-size: 17px; }
 .touch-tut .tut-card p { font-size: 13px; line-height: 1.35; }
 .touch-tut .tut-skip { min-height: 44px; padding: 6px 14px; font-size: 13px; }
+
+/* touch firing: a second, smaller Fire button for the left thumb (upper-left of the stick area) */
+.t-fire-left { right: auto; left: calc(26px + env(safe-area-inset-left)); bottom: 168px; width: 68px; height: 68px; font-size: 14px; }
+.touch.simple .t-fire { display: none; }
+.touch.simple .t-hint { white-space: normal; max-width: 80vw; text-align: center; }
+
+/* character preview: the Special Move name flashes while it plays */
+.cp-stage { position: relative; }
+.cp-flash { position: absolute; left: 50%; top: 10px; transform: translateX(-50%) scale(0.85); font-family: var(--head); font-weight: 700; font-size: 20px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--c, var(--gold)); text-shadow: 0 0 12px var(--c, var(--gold)), 0 1px 2px rgba(0,0,0,0.8); opacity: 0; transition: opacity 0.15s, transform 0.15s; pointer-events: none; white-space: nowrap; }
+.cp-flash.on { opacity: 1; transform: translateX(-50%) scale(1); animation: cpflash 0.5s ease-out; }
+@keyframes cpflash { 0% { transform: translateX(-50%) scale(1.4); opacity: 0; } 40% { opacity: 1; } 100% { transform: translateX(-50%) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .cp-flash.on { animation: none; } }
+body.phone .cp-flash { font-size: 15px; top: 6px; }

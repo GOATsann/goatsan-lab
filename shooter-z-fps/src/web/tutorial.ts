@@ -29,16 +29,16 @@ const ME = { x: 0, z: 18.5, yaw: 0 };
 const TARGET = { x: 0, z: 10.5, yaw: Math.PI };
 const FIGHTER = { x: 4, z: -2, yaw: Math.PI };
 
-export function tutorialSteps(character: number, touch = false): Step[] {
+export function tutorialSteps(character: number, touch = false, simple = false): Step[] {
   const ch = CHARACTERS[character];
-  const T = (keys: string, tap: string) => (touch ? tap : keys);
+  const T = (keys: string, tap: string, auto = tap) => (touch ? (simple ? auto : tap) : keys);
   const hitBy = (events: readonly GameEvent[], part?: string) => events.some((e) => e.type === "hit" && e.a === 0 && e.v === 1 && !e.blocked && (!part || e.part === part));
   return [
     { title: "Look around", hint: T("Move the mouse to look left and right.", "Drag on the right side of the screen to look around."), target: "none", check: (t) => t.yawTurned > 2.2 },
     { title: "Move", hint: T("Walk with W A S D.", "Put your left thumb down and slide it: that's your stick."), target: "none", check: (t) => t.walked > 5 },
     { title: "Jump and crouch", hint: T("Jump with Space. Crouch by holding C: smaller, steadier, slower.", "Tap Jump, then tap Crouch (tap it again to stand up)."), target: "none", check: (t) => t.jumped && t.crouched },
-    { title: "Shoot the target", hint: T("Aim at the robot ahead and left-click to fire.", "Aim at the robot ahead and hold Fire."), target: "still", check: (_t, ev) => hitBy(ev) },
-    { title: "Headshot", hint: T("Hit the head: 2.5x damage, and a gold marker.", "Put the crosshair on the head and tap Fire: 2.5x damage, and a gold marker."), target: "still", check: (_t, ev) => hitBy(ev, "head") },
+    { title: "Shoot the target", hint: T("Aim at the robot ahead and left-click to fire.", "Aim at the robot ahead and hold Fire (drag while holding it to aim).", "Put the crosshair on the robot ahead: Simple firing shoots for you."), target: "still", check: (_t, ev) => hitBy(ev) },
+    { title: "Headshot", hint: T("Hit the head: 2.5x damage, and a gold marker.", "Put the crosshair on the head and tap Fire: 2.5x damage, and a gold marker.", "Put the crosshair on its head: 2.5x damage, and a gold marker."), target: "still", check: (_t, ev) => hitBy(ev, "head") },
     { title: "Reload", hint: T("Press R to reload (24 shots per clip).", "Tap R to reload (24 shots per clip)."), target: "still", check: (_t, ev) => ev.some((e) => e.type === "reload" && e.a === 0) },
     { title: `Special Move: ${ch.abilityName}`, hint: T(`Press E or right-click. ${ch.blurb}`, `Tap the ${ch.abilityName} button. ${ch.blurb}`), target: "still", check: (_t, ev) => ev.some((e) => e.type === "ability" && e.a === 0) },
     { title: "Eliminate the target", hint: "Take the practice robot down (100 health).", target: "still", check: (_t, ev) => ev.some((e) => e.type === "kill" && e.a === 0) },
@@ -59,9 +59,9 @@ export class Tutorial {
 
   private touch: boolean;
 
-  constructor(match: Match, character: number, parent: HTMLElement, touch = false) {
+  constructor(match: Match, character: number, parent: HTMLElement, touch = false, simple = false) {
     this.touch = touch;
-    this.steps = tutorialSteps(character, touch);
+    this.steps = tutorialSteps(character, touch, simple);
     this.state = { match, yawTurned: 0, walked: 0, jumped: false, crouched: false };
     this.el = document.createElement("div");
     this.el.className = touch ? "tut touch-tut" : "tut";

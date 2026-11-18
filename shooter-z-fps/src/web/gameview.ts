@@ -9,6 +9,12 @@ import type { Match } from "../core/match";
 import { Fx } from "./fx";
 import { buildMap, type MapView } from "./mapview";
 import { charactersLoaded, loadCharacterModels, makeRobot } from "./character";
+import { CHARACTERS } from "../core/characters";
+
+/** Friend-or-foe colours: teammates green, opponents red (markers, outlines, minimap). */
+export const MATE_COLOR = "#3ddc84";
+export const FOE_COLOR = "#ff4b3e";
+const MATE = new THREE.Color(MATE_COLOR), FOE = new THREE.Color(FOE_COLOR);
 import { restPose, type RobotPose, type RobotView } from "./robot";
 import type { Look, Stage } from "./stage";
 
@@ -86,13 +92,14 @@ export class GameView {
         this.addRobots(opts.colors);
       });
     }
-    for (const a of g.agents) {
-      // teammate marker (2v2): a small diamond over the head, always visible
-      const isMate = this.self >= 0 && a.id !== this.self && teams[a.id] === teams[this.self];
-      const mk = new THREE.Sprite(new THREE.SpriteMaterial({ map: diamondTex(), color: this.colors[a.id], depthTest: false, transparent: true }));
-      mk.scale.setScalar(0.32);
+    void teams;
+    for (let i = 0; i < g.agents.length; i++) {
+      // a marker arrow over the head: green over teammates (always), red over opponents only while
+      // you can see them or they are revealed (hit, scan, standing still), never through walls otherwise
+      const mk = new THREE.Sprite(new THREE.SpriteMaterial({ map: arrowTex(), color: FOE, depthTest: false, transparent: true, sizeAttenuation: false }));
+      mk.scale.set(0.036, 0.036, 1); // a fixed size on screen, readable at any distance
       mk.renderOrder = 30;
-      mk.visible = isMate;
+      mk.visible = false;
       scene.add(mk);
       this.markers.push(mk);
     }
@@ -105,14 +112,15 @@ export class GameView {
     this.spawnAt = g.agents.map(() => -99);
     this.specialAt = g.agents.map(() => -99);
     this.airSince = g.agents.map(() => NaN);
-    this.buildViewmodel(opts.colors[Math.max(0, this.self)]);
+    this.buildViewmodel(CHARACTERS[g.agents[Math.max(0, this.self)].character].accent); // your character's own colours
   }
 
   /** The robots (rigged characters where loaded, else stand-ins) and their x-ray copies. */
   private addRobots(colors: string[]): void {
     const scene = this.stage.scene;
     for (const a of this.match.game.agents) {
-      const r = makeRobot(colors[a.id], this.stage.graphics === "normal", a.character);
+      // every character keeps its own art colours (no team tinting); friend or foe is shown by the markers
+      const r = makeRobot(CHARACTERS[a.character].accent, this.stage.graphics === "normal", a.character, true);
       scene.add(r.root);
       this.robots.push(r);
       // x-ray copy of every part: drawn through walls when the reveal rules say so
@@ -251,6 +259,8 @@ export class GameView {
     const cam = this.stage.camera;
     this.viewer = rig.mode === "fp" ? this.self : rig.mode === "pov" ? rig.target : -1;
     const outlineViewer = rig.mode === "fp" ? this.self : rig.mode === "pov" ? rig.target : -1;
+    // whose side the markers take: you, or the robot the spectator camera is on
+    const markerViewer = rig.mode === "fp" ? this.self : rig.mode === "pov" || rig.mode === "follow" ? rig.target : -1;
 
     // ---- robots
     for (const a of g.agents) {
@@ -303,10 +313,30 @@ export class GameView {
         if (mate && g.cloaked(a)) xr = false;
       }
       const pulse = 0.38 + 0.14 * Math.sin(this.time * 10);
-      for (const x of this.xray[a.id]) { x.visible = xr; (x.material as THREE.MeshBasicMaterial).opacity = pulse; }
+      const xrMate = outlineViewer >= 0 && a.team === g.agents[outlineViewer].team;
+      for (const x of this.xray[a.id]) {
+        x.visible = xr;
+        const xm = x.material as THREE.MeshBasicMaterial;
+        xm.opacity = pulse;
+        xm.color.copy(xrMate ? MATE : FOE);
+      }
+      // marker arrow
       const mk = this.markers[a.id];
-      if (mk.visible) mk.position.set(p.x, p.y + 2.25, p.z);
-      if (mk.visible) mk.material.opacity = a.alive ? 0.95 : 0;
+      let show = false, mate = false;
+      if (markerViewer >= 0 && a.alive && a.id !== markerViewer) {
+        const v = g.agents[markerViewer];
+        mate = a.team === v.team;
+        if (mate) show = true;
+        else {
+          const revealed = a.outlineFor[markerViewer] > 0 || a.revealTicks > 0 || a.scanFor[v.team] > 0;
+          show = revealed || (v.alive && this.canSee(v, a));
+        }
+      }
+      mk.visible = show;
+      if (show) {
+        mk.position.set(p.x, p.y + (a.crouch ? 1.75 : 2.25) + Math.sin(this.time * 4) * 0.04, p.z);
+        mk.material.color.copy(mate ? MATE : FOE);
+      }
     }
 
     // ---- camera
@@ -404,25 +434,37 @@ export class GameView {
     }
   }
 
+  /** Can robot v see robot a right now (line of sight to its head or chest; cloaked ones only up close)? */
+  private canSee(v: Game["agents"][number], a: Game["agents"][number]): boolean {
+    const g = this.match.game;
+    const ex = v.x, ey = g.eyeY(v), ez = v.z;
+    const dx = a.x - ex, dz = a.z - ez;
+    if (g.cloaked(a) && dx * dx + dz * dz > CLOAK_SEE_DIST * CLOAK_SEE_DIST) return false;
+    const h = a.crouch ? 0.69 : 1;
+    return g.world.clear(ex, ey, ez, a.x, a.y + 1.6 * h, a.z) || g.world.clear(ex, ey, ez, a.x, a.y + 1.15 * h, a.z);
+  }
+
   /** Protection fraction for the HUD (1 = just spawned). */
   protection(id: number): number {
     return this.match.game.agents[id].protectTicks / PROTECT_TICKS;
   }
 }
 
-let DIAMOND: THREE.CanvasTexture | null = null;
-function diamondTex(): THREE.CanvasTexture {
-  if (DIAMOND) return DIAMOND;
+let ARROW: THREE.CanvasTexture | null = null;
+/** A downward arrow (white, tinted green or red by the sprite), with a dark edge so it reads on any background. */
+function arrowTex(): THREE.CanvasTexture {
+  if (ARROW) return ARROW;
   const c = document.createElement("canvas");
   c.width = c.height = 64;
   const g = c.getContext("2d")!;
   g.fillStyle = "#ffffff";
-  g.strokeStyle = "rgba(0,0,0,0.6)";
+  g.strokeStyle = "rgba(0,0,0,0.65)";
   g.lineWidth = 5;
-  g.beginPath(); g.moveTo(32, 6); g.lineTo(54, 30); g.lineTo(32, 58); g.lineTo(10, 30); g.closePath();
+  g.lineJoin = "round";
+  g.beginPath(); g.moveTo(8, 12); g.lineTo(56, 12); g.lineTo(32, 54); g.closePath();
   g.stroke(); g.fill();
-  DIAMOND = new THREE.CanvasTexture(c);
-  return DIAMOND;
+  ARROW = new THREE.CanvasTexture(c);
+  return ARROW;
 }
 
 export type { Game };
