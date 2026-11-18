@@ -199,6 +199,20 @@ describe("scoring, respawn, protection", () => {
   });
 });
 
+describe("spawn protection", () => {
+  it("ends after exactly PROTECT_TICKS without firing, and at once when firing", () => {
+    const g = new Game(3, { map: "base", mode: "duel" });
+    expect(g.agents[0].protectTicks).toBe(C.PROTECT_TICKS);
+    for (let i = 0; i < C.PROTECT_TICKS - 1; i++) g.step(acts(2));
+    expect(g.agents[0].protectTicks).toBe(1);
+    g.step(acts(2));
+    expect(g.agents[0].protectTicks).toBe(0);
+    const h = new Game(3, { map: "base", mode: "duel" });
+    h.step(fireFrom(h, 0));
+    expect(h.agents[0].protectTicks).toBe(0);
+  });
+});
+
 describe("abilities", () => {
   it("Bulwark's shield stops lasers from the front, not from behind", () => {
     const front = lab({ characters: [0, 1] });

@@ -269,14 +269,16 @@ export class GameView {
       pose.hitAge = this.time - this.hitAt[a.id];
       pose.deadAge = a.alive ? NaN : this.time - this.deadAt[a.id];
       if (!a.alive && Number.isNaN(this.deadAt[a.id])) pose.deadAge = 5; // dead before we started watching
-      pose.protected = a.alive && a.protectTicks > 0;
+      // spawn protection: a faint flicker (not a bubble, so it can't be mistaken for Bulwark's shield)
+      const protecting = a.alive && a.protectTicks > 0;
+      pose.protected = false;
       pose.shield = a.alive && a.ability === "shield" && a.abilityTicks > 0;
       if (a.alive && g.cloaked(a)) {
         // cloaked: a faint shimmer, clearer up close; your own team (and spectators) see a ghost of it
         const friendly = outlineViewer < 0 || g.agents[outlineViewer].team === a.team;
         const d = cam.position.distanceTo(p);
         pose.visibility = friendly ? 0.3 : d < CLOAK_SEE_DIST ? 0.22 : 0.05 + 0.03 * Math.sin(this.time * 7);
-      } else pose.visibility = 1;
+      } else pose.visibility = protecting ? 0.5 + 0.35 * (0.5 + 0.5 * Math.sin(this.time * 24)) : 1;
       r.pose(pose);
       // first person: our own robot only casts its shadow (shown again on the death cam)
       const hidden = a.id === this.viewer && a.alive;

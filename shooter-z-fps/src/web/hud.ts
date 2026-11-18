@@ -42,6 +42,7 @@ export class Hud {
   private toast: HTMLElement;
   private fps: HTMLElement | null;
   private specBar: HTMLElement;
+  private protPill: HTMLElement;
   private abil: HTMLElement;
   private hitT = -1; private hitKind = ""; private toastT = -9;
   /** who eliminated the HUD's robot last (shown on the death cam) */
@@ -73,6 +74,8 @@ export class Hud {
     this.toast = el("div", "toast", this.root);
     this.board = el("div", "board", this.root);
     this.specBar = el("div", "specbar", this.root);
+    // spawn protection: a small countdown pill near the top, well away from the Special Move panel
+    this.protPill = el("div", "protpill", this.root);
     this.abil = el("div", "abil", this.root, `<div class="ring"><div class="fill"></div><span class="key">E</span></div><div class="txt"><span class="sm">Special Move</span><b></b><small></small></div>`);
     this.fps = debugFps ? el("div", "fps", this.root) : null;
   }
@@ -170,9 +173,11 @@ export class Hud {
     if (me && !me.alive && !g.over) {
       const who = this.killer ? `Eliminated by <b style="color:${this.killer.color}">${esc(this.killer.name)}</b>${this.killer.head ? " (headshot)" : ""}<br>` : "";
       msg = `${who}<small>Respawning in ${Math.ceil(me.respawnTicks / C.TICK_HZ)}</small>`;
-    } else if (me && me.protectTicks > 0 && firstPerson) msg = "Spawn shield (ends when you fire)";
-    else if (me && firstPerson && !this.tutorial && me.idleTicks > C.IDLE_REVEAL_AFTER - 4 * C.TICK_HZ) msg = `Standing still: revealed in ${Math.ceil((C.IDLE_REVEAL_AFTER - me.idleTicks) / C.TICK_HZ)}`;
+    } else if (me && firstPerson && !this.tutorial && me.idleTicks > C.IDLE_REVEAL_AFTER - 4 * C.TICK_HZ) msg = `Standing still: revealed in ${Math.ceil((C.IDLE_REVEAL_AFTER - me.idleTicks) / C.TICK_HZ)}`;
     if (this.center.innerHTML !== msg) this.center.innerHTML = msg;
+    const prot = me && me.alive && me.protectTicks > 0 && firstPerson;
+    this.protPill.classList.toggle("on", !!prot);
+    if (prot) this.protPill.textContent = `Spawn protection ${Math.ceil(me.protectTicks / C.TICK_HZ)}s · firing ends it`;
     this.toast.classList.toggle("on", this.now < this.toastT);
     // score
     this.score.innerHTML = this.scoreHtml(ctx);

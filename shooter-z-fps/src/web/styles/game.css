@@ -139,6 +139,10 @@ body.phone .hero h1 { font-size: 62px; }
 .arc { position: absolute; left: 0; top: 0; width: 220px; height: 220px; border-radius: 50%; border: 6px solid transparent; border-top-color: rgba(255,70,50,0.85); }
 .center small { font-size: 16px; color: var(--ink-dim); }
 .center b { font-weight: 700; }
+.protpill { position: absolute; left: 50%; top: 112px; transform: translateX(-50%); padding: 5px 12px; border-radius: 999px; background: rgba(14,17,23,0.6); border: 1px solid rgba(255,255,255,0.3); font-size: 13px; font-weight: 600; letter-spacing: 0.02em; opacity: 0; transition: opacity 0.2s; white-space: nowrap; }
+.protpill.on { opacity: 1; }
+body.touchplay .protpill { top: 64px; }
+@media (max-width: 600px) { .protpill { top: 196px; } }
 .center { position: absolute; left: 50%; top: 60%; transform: translateX(-50%); font-size: 20px; font-weight: 600; text-align: center; }
 .toast { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); font-size: 22px; font-weight: 700; opacity: 0; transition: opacity 0.2s; text-align: center; }
 .toast.on { opacity: 1; }

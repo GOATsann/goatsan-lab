@@ -19,7 +19,9 @@ it; N skips a step.
 
 First to 10 eliminations wins (you can change the limit). No round timer. When you're eliminated the
 camera pulls back so you see your robot go down, the robot that got you is highlighted and named, and
-after 2.5 s you respawn in first person with 2 s of spawn shield (firing ends it).
+after 2.5 s you respawn in first person with 2 s of spawn protection: you take no damage, you flicker
+faintly, and a small "Spawn protection" countdown shows at the top. It always ends after 2 s, or sooner
+when you fire. (It is not a Special Move; Bulwark's shield is.)
 
 | Key | Action |
 |---|---|
@@ -147,7 +149,7 @@ Same architecture as [Lights-Out Surfer](../runner/):
 - **One deterministic core** (`src/core/`): fixed 60 Hz ticks, a seeded random generator, its own
   sin/cos/atan2 (so results are bit-identical in Node and every browser), a state hash. No DOM, no clock.
   - `game.ts` the rules: movement and collision, hitscan lasers against head/torso/legs hitboxes,
-    damage, reload, respawn and spawn shield, reveal timers, scoring, teams, abilities.
+    damage, reload, respawn and spawn protection, reveal timers, scoring, teams, abilities.
   - `maps.ts` both maps as solid boxes, point-symmetric so no side is better. `world.ts` ray casts and
     overlap tests on a broadphase grid. `nav.ts` a walk grid and A* for the bots.
   - `actions.ts` **the action interface** for everyone (human, bot, later the RL agent): move,
