@@ -6,6 +6,7 @@ by [@_goatsan](https://www.instagram.com/_goatsan/). Everything here is free to 
 | Project | What it is | Try it |
 |---|---|---|
 | [runner/](runner/) | **Lights-Out Surfer**, an endless runner with its own AI. A deterministic TypeScript game that runs in the browser and, headless, about 60,000 times faster than real time for training. You can race the trained AI in a split screen. | [surfer.theonlygoatsan.com](https://surfer.theonlygoatsan.com) |
+| [shooter-z-fps/](shooter-z-fps/) | **Shooter Z. Can you beat AI?** A laser-tag first-person shooter against AI robots in the browser: 1v1, 2v2 and 1 vs 3, two maps, four characters with one ability each. Fair bots that see only what a player sees, and a deterministic core that runs headless for training (phase 1: the game; the learning AI comes next). | Run it locally (see its README) |
 | [car-racing/](car-racing/) | **The car that taught itself to drive.** PPO on Gymnasium's CarRacing from pixels, with a benchmark that compares reward ideas fairly on the same 100 tracks. | Run it locally (see its README) |
 
 All my free builds: [theonlygoatsan.com/free](https://www.theonlygoatsan.com/free)

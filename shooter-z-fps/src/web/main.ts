@@ -1,0 +1,366 @@
+// Shooter Z in the browser: menu, playing (first person, pointer lock), watching AI vs AI (spectator
+// cameras), free camera for filming. Fixed 60 Hz core ticks; a frame is drawn every animation frame.
+import { BRAND } from "../brand";
+import { type Action, noop } from "../core/actions";
+import type { SkillName } from "../core/bot";
+import { CHARACTERS } from "../core/characters";
+import { TICK_HZ } from "../core/config";
+import { MODES, type GameEvent, type Mode } from "../core/game";
+import type { MapId } from "../core/maps";
+import { Match, standardSlots, type Slot } from "../core/match";
+import { Sfx } from "./audio";
+import { GameView, newRig, type CameraRig, type CamMode } from "./gameview";
+import { Hud, type HudContext } from "./hud";
+import { Input } from "./input";
+import { Stage, type Graphics } from "./stage";
+import * as THREE from "three";
+
+const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+const params = new URLSearchParams(location.search);
+const store = {
+  get: (k: string) => { try { return localStorage.getItem(`shooter-z:${k}`); } catch { return null; } },
+  set: (k: string, v: string) => { try { localStorage.setItem(`shooter-z:${k}`, v); } catch { /* private mode */ } },
+};
+
+// phones and tablets: watch only (the game needs a mouse and keyboard)
+const phone = params.has("phone") || (matchMedia("(pointer: coarse)").matches && !matchMedia("(pointer: fine)").matches) || window.innerWidth < 760;
+document.body.classList.toggle("phone", phone);
+document.title = `${BRAND.gameName}: ${BRAND.tagline}`;
+
+// ---- settings (remembered)
+const settings = {
+  mode: (store.get("mode") ?? "duel") as Mode,
+  map: (store.get("map") ?? "base") as MapId,
+  skill: (store.get("skill") ?? "normal") as SkillName,
+  character: Number(store.get("character") ?? 0),
+  limit: Number(store.get("limit") ?? 10),
+  graphics: ((params.get("graphics") ?? store.get("graphics")) === "low" ? "low" : "normal") as Graphics,
+  sens: Number(store.get("sens") ?? 1),
+};
+if (!MODES[settings.mode]) settings.mode = "duel";
+if (!(settings.character >= 0 && settings.character < CHARACTERS.length)) settings.character = 0;
+
+const canvas = $<HTMLCanvasElement>("view");
+const stage = new Stage(canvas, { graphics: settings.graphics });
+const input = new Input(canvas);
+input.forceLocked = params.has("autotest");
+input.sensitivity = 0.0022 * settings.sens;
+const sfx = new Sfx();
+const debugFps = params.has("debug") || params.has("fps");
+const fixedSeed = params.has("seed") ? Number(params.get("seed")) : null;
+const newSeed = () => fixedSeed ?? Math.floor(Math.random() * 1e9); // UI only: the core never uses Math.random
+
+// ---- colours: you are blue; in 2v2 your teammate is teal and the other team orange/red
+function slotColors(mode: Mode): string[] {
+  if (mode === "team") return ["#3d8bff", "#2fc9b5", "#ff8a2a", "#e2503f"];
+  if (mode === "duel") return ["#3d8bff", "#ff8a2a"];
+  return ["#3d8bff", "#ff8a2a", "#7bd04b", "#d65ad8"];
+}
+
+// ------------------------------------------------------------------------------------- session
+interface Session {
+  match: Match;
+  view: GameView;
+  hud: Hud;
+  rig: CameraRig;
+  spectator: boolean;
+  self: number; // the human's slot, or -1
+  colors: string[];
+  slots: Slot[];
+  endedAt: number;
+  backdrop: boolean; // the live match behind the menu
+}
+let S: Session | null = null;
+let state: "menu" | "play" | "watch" = "menu";
+let hudVisible = true;
+let autoDirector = true;
+const idle: Action = noop();
+
+function startMatch(kind: "play" | "watch" | "backdrop", mapOverride?: MapId): void {
+  if (S) { S.hud.root.remove(); }
+  stage.reset();
+  const seed = newSeed();
+  const spectate = kind !== "play";
+  const mode = kind === "backdrop" ? "ffa" : settings.mode;
+  const map = mapOverride ?? settings.map;
+  const slots = standardSlots(mode, kind === "backdrop" ? "normal" : settings.skill, { spectate, seed, character: settings.character });
+  const match = new Match(seed, { map, mode, scoreLimit: kind === "backdrop" ? 50 : settings.limit, slots });
+  const colors = slotColors(mode);
+  const self = spectate ? -1 : 0;
+  const view = new GameView(stage, match, { look: "final", self, colors });
+  const hud = new Hud(document.body, debugFps);
+  const rig = newRig();
+  rig.mode = spectate ? (kind === "backdrop" ? "overview" : "follow") : "fp";
+  rig.target = 0;
+  S = { match, view, hud, rig, spectator: spectate, self, colors, slots, endedAt: -1, backdrop: kind === "backdrop" };
+  hud.setVisible(kind !== "backdrop" && hudVisible);
+  (window as unknown as { shooterZ: unknown }).shooterZ = { match, view, rig, input, hud, get state() { return state; } }; // for tests and debugging
+  updateSpecBar();
+  acc = 0;
+}
+
+function hudCtx(): HudContext {
+  const s = S!;
+  const viewer = s.rig.mode === "fp" ? s.self : s.rig.mode === "pov" || s.rig.mode === "follow" ? s.rig.target : -1;
+  return { game: s.match.game, slots: s.slots, colors: s.colors, self: s.spectator ? viewer : s.self, spectator: s.spectator || s.rig.mode !== "fp" };
+}
+
+// ------------------------------------------------------------------------------------- events -> sound
+const camPos = new THREE.Vector3();
+function onEvents(events: readonly GameEvent[]): void {
+  const s = S!;
+  s.view.onEvents(events);
+  if (!s.backdrop) s.hud.onEvents(events, hudCtx());
+  if (s.backdrop) return;
+  const g = s.match.game;
+  camPos.copy(stage.camera.position);
+  const dist = (id: number) => { const a = g.agents[id]; return Math.hypot(a.x - camPos.x, a.y - camPos.y, a.z - camPos.z); };
+  const me = s.spectator ? (s.rig.mode === "free" || s.rig.mode === "overview" ? -1 : s.rig.target) : s.self;
+  for (const e of events) {
+    if (e.type === "shot") sfx.laser(dist(e.a), e.a === me);
+    else if (e.type === "hit" && e.a === me) sfx.hit(e.part === "head");
+    else if (e.type === "hit" && e.v === me && !e.blocked) sfx.hurt();
+    else if (e.type === "kill") { if (e.a === me) sfx.kill(); sfx.eliminated(dist(e.v)); }
+    else if (e.type === "reload" && e.a === me) sfx.reload();
+    else if (e.type === "jump" && e.a === me) sfx.jump();
+    else if (e.type === "spawn" && e.a === me) sfx.spawn();
+    else if (e.type === "ability" && dist(e.a) < 25) sfx.spawn();
+    // spectator auto-director: cut to whoever just made an elimination
+    if (e.type === "kill" && s.spectator && autoDirector && (s.rig.mode === "follow" || s.rig.mode === "pov")) {
+      const killer = e.a;
+      setTimeout(() => { if (S === s && autoDirector) { s.rig.target = killer; updateSpecBar(); } }, 900);
+    }
+  }
+}
+
+// ------------------------------------------------------------------------------------- loop
+const STEP = 1000 / TICK_HZ;
+let acc = 0, last = performance.now();
+const proj = new THREE.Vector3();
+
+function frame(now: number): void {
+  requestAnimationFrame(frame);
+  const dtMs = Math.min(100, now - last);
+  last = now;
+  const dt = dtMs / 1000;
+  if (!S) return;
+  const s = S;
+  const g = s.match.game;
+  const paused = state === "play" && !input.locked && !g.over;
+  $("pause").hidden = !(paused && pausedByUser);
+  $("clickHint").hidden = !(state === "play" && !input.locked && !pausedByUser && !g.over);
+  if (!paused && !g.over) {
+    acc += dtMs;
+    let steps = 0;
+    while (acc >= STEP && steps < 6) {
+      const act = s.self >= 0 ? (s.rig.mode === "fp" ? input.action() : idle) : null;
+      s.view.snapshot();
+      s.match.step([act]);
+      onEvents(g.events);
+      acc -= STEP;
+      steps++;
+    }
+    if (steps === 6) acc = 0; // fell far behind (tab was hidden): don't fast-forward
+  }
+  // cameras
+  if (s.rig.mode === "fp") {
+    s.rig.pendingYaw = input.pendingYaw();
+    s.rig.pendingPitch = input.pendingPitch();
+  } else if (s.rig.mode === "free") flyFree(s.rig, dt);
+  s.view.render(paused || g.over ? 1 : acc / STEP, dt, s.rig);
+  if (!s.backdrop) {
+    const cam = stage.camera;
+    const w = window.innerWidth, h = window.innerHeight;
+    s.hud.update(dt, hudCtx(), (x, y, z) => {
+      proj.set(x, y, z).project(cam);
+      if (proj.z > 1) return null;
+      return { x: (proj.x * 0.5 + 0.5) * w, y: (-proj.y * 0.5 + 0.5) * h };
+    }, cam.rotation.y);
+  }
+  // end of match
+  if (g.over && s.endedAt < 0) {
+    s.endedAt = now;
+    if (state === "play") input.unlock();
+  }
+  if (g.over && s.spectator && now - s.endedAt > 7000) {
+    // next AI vs AI match, the other map
+    startMatch(s.backdrop ? "backdrop" : "watch", g.map.id === "base" ? "ship" : "base");
+  }
+}
+requestAnimationFrame(frame);
+
+/** Free camera: WASD fly, mouse look (click to lock), Space up, C down, Shift faster. */
+function flyFree(rig: CameraRig, dt: number): void {
+  const m = input.takeMouse();
+  rig.yaw -= m.dx * input.sensitivity;
+  rig.pitch = Math.max(-1.5, Math.min(1.5, rig.pitch - m.dy * input.sensitivity));
+  const k = input.keys;
+  const sp = (k.has("ShiftLeft") || k.has("ShiftRight") ? 16 : 6) * dt;
+  const f = (k.has("KeyW") ? 1 : 0) - (k.has("KeyS") ? 1 : 0), r = (k.has("KeyD") ? 1 : 0) - (k.has("KeyA") ? 1 : 0);
+  const u = (k.has("Space") || k.has("KeyE") ? 1 : 0) - (k.has("KeyC") || k.has("KeyQ") ? 1 : 0);
+  const cp = Math.cos(rig.pitch);
+  rig.x += (-Math.sin(rig.yaw) * cp * f + Math.cos(rig.yaw) * r) * sp;
+  rig.z += (-Math.cos(rig.yaw) * cp * f - Math.sin(rig.yaw) * r) * sp;
+  rig.y = Math.max(0.3, rig.y + (Math.sin(rig.pitch) * f + u) * sp);
+}
+
+function setCam(mode: CamMode): void {
+  if (!S) return;
+  const rig = S.rig;
+  if (mode === "free" && rig.mode !== "free") {
+    // start the free camera where the current view is
+    const c = stage.camera;
+    rig.x = c.position.x; rig.y = c.position.y; rig.z = c.position.z;
+    const e = new THREE.Euler().setFromQuaternion(c.quaternion, "YXZ");
+    rig.yaw = e.y; rig.pitch = e.x;
+  }
+  rig.mode = mode;
+  updateSpecBar();
+}
+
+function updateSpecBar(): void {
+  if (!S) return;
+  const s = S;
+  if (!s.spectator) {
+    s.hud.setSpectatorBar(s.rig.mode === "free" ? `<span class="keys">Free camera: WASD fly, mouse look, Space/C up and down, Shift faster. Press V to go back to your robot.</span>` : "");
+    return;
+  }
+  const t = s.rig.target;
+  const ch = CHARACTERS[s.match.game.agents[t].character];
+  const labels: Record<CamMode, string> = { fp: "", pov: "Robot's eyes", follow: "Follow", free: "Free camera", overview: "Overview" };
+  s.hud.setSpectatorBar(`
+    <button data-sb="prev" aria-label="Previous robot">&#9664;</button>
+    <span class="who" style="--c:${s.colors[t]}">${s.slots[t].name} · ${ch.name}</span>
+    <button data-sb="next" aria-label="Next robot">&#9654;</button>
+    <button data-sb="cam">${labels[s.rig.mode]}</button>
+    <button data-sb="menu">Menu</button>
+    ${phone ? "" : `<span class="keys">1-4 pick a robot · F follow · P robot's eyes · O overview · V free camera · Tab scores · H hide HUD · Esc menu</span>`}`);
+}
+
+document.body.addEventListener("click", (e) => {
+  const b = (e.target as HTMLElement).closest("[data-sb]") as HTMLElement | null;
+  if (!b || !S) return;
+  const s = S, n = s.match.game.n;
+  const v = b.dataset.sb;
+  if (v === "prev" || v === "next") { s.rig.target = (s.rig.target + (v === "next" ? 1 : n - 1)) % n; autoDirector = false; if (s.rig.mode === "overview" || s.rig.mode === "free") s.rig.mode = "follow"; }
+  if (v === "cam") { const order: CamMode[] = ["follow", "pov", "overview", ...(phone ? [] : ["free" as CamMode])]; setCam(order[(order.indexOf(s.rig.mode) + 1) % order.length]); }
+  if (v === "menu") showMenu();
+  updateSpecBar();
+});
+
+// ------------------------------------------------------------------------------------- keys
+let pausedByUser = false;
+input.onKey = (code) => {
+  if (!S || state === "menu") return;
+  const s = S;
+  if (code === "Tab") s.hud.showBoard = true;
+  if (code === "KeyH") { hudVisible = !hudVisible; s.hud.setVisible(hudVisible); }
+  if (code === "KeyM") sfx.setMuted(!sfx.muted);
+  if (code === "Enter" && s.match.game.over && state === "play") { startMatch("play"); state = "play"; lockAndGo(); }
+  if (code === "Escape" && (s.spectator || s.match.game.over)) showMenu();
+  if (state === "play") {
+    if (code === "KeyV") setCam(s.rig.mode === "free" ? "fp" : "free");
+    return;
+  }
+  // spectator keys
+  const n = s.match.game.n;
+  if (code.startsWith("Digit")) { const d = Number(code.slice(5)) - 1; if (d >= 0 && d < n) { s.rig.target = d; autoDirector = false; if (s.rig.mode !== "pov") setCam("follow"); } }
+  if (code === "KeyF") setCam("follow");
+  if (code === "KeyP") setCam("pov");
+  if (code === "KeyO") setCam("overview");
+  if (code === "KeyV") setCam(s.rig.mode === "free" ? "follow" : "free");
+  if (code === "KeyA" && s.rig.mode !== "free") autoDirector = true;
+  updateSpecBar();
+};
+input.onKeyUp = (code) => { if (code === "Tab" && S) S.hud.showBoard = false; };
+
+document.addEventListener("pointerlockchange", () => {
+  if (state === "play" && !input.locked && S && !S.match.game.over) { pausedByUser = true; input.clear(); }
+  if (input.locked) pausedByUser = false;
+});
+canvas.addEventListener("click", () => {
+  if (state === "play" || (state === "watch" && S?.rig.mode === "free")) { sfx.unlock(); input.lock(); }
+});
+$("resume").addEventListener("click", () => { pausedByUser = false; lockAndGo(); });
+$("quit").addEventListener("click", () => showMenu());
+
+function lockAndGo(): void {
+  sfx.unlock();
+  input.lock();
+}
+
+// ------------------------------------------------------------------------------------- menu
+function showMenu(): void {
+  input.unlock();
+  state = "menu";
+  pausedByUser = false;
+  $("menu").hidden = false;
+  $("pause").hidden = true;
+  startMatch("backdrop", settings.map);
+}
+
+function hideMenu(): void { $("menu").hidden = true; }
+
+function refreshMenu(): void {
+  for (const seg of document.querySelectorAll<HTMLElement>(".seg[data-setting]")) {
+    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics";
+    for (const b of seg.querySelectorAll<HTMLButtonElement>("button")) b.classList.toggle("on", b.dataset.v === String(settings[key]));
+  }
+  const notes: Record<Mode, string> = {
+    duel: "You against one AI robot.",
+    team: "You and an AI teammate against two AI robots. No friendly fire.",
+    ffa: "Free-for-all: you against three AI robots, everyone for themselves.",
+  };
+  $("modeNote").textContent = notes[settings.mode];
+  for (const b of document.querySelectorAll<HTMLButtonElement>("#chars button")) b.classList.toggle("on", Number(b.dataset.c) === settings.character);
+  $<HTMLSelectElement>("limit").value = String(settings.limit);
+  $<HTMLInputElement>("sens").value = String(settings.sens);
+}
+
+$("chars").innerHTML = CHARACTERS.map((c) => `<button data-c="${c.id}" style="--c:${c.accent}"><b>${c.name}</b><em>${c.abilityName}</em><small>${c.blurb}</small></button>`).join("");
+document.querySelector("#chars")!.addEventListener("click", (e) => {
+  const b = (e.target as HTMLElement).closest("button") as HTMLButtonElement | null;
+  if (!b) return;
+  settings.character = Number(b.dataset.c);
+  store.set("character", String(settings.character));
+  refreshMenu();
+});
+for (const seg of document.querySelectorAll<HTMLElement>(".seg[data-setting]")) {
+  seg.addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest("button") as HTMLButtonElement | null;
+    if (!b) return;
+    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics";
+    const v = b.dataset.v!;
+    if (key === "graphics") {
+      if (v !== settings.graphics) { store.set("graphics", v); location.reload(); }
+      return;
+    }
+    (settings as Record<string, unknown>)[key] = v;
+    store.set(key, v);
+    refreshMenu();
+    if (key === "map" && state === "menu") startMatch("backdrop", settings.map);
+  });
+}
+$<HTMLSelectElement>("limit").addEventListener("change", (e) => { settings.limit = Number((e.target as HTMLSelectElement).value); store.set("limit", String(settings.limit)); });
+$<HTMLInputElement>("sens").addEventListener("input", (e) => { settings.sens = Number((e.target as HTMLInputElement).value); store.set("sens", String(settings.sens)); input.sensitivity = 0.0022 * settings.sens; });
+
+$("play").addEventListener("click", () => {
+  hideMenu();
+  state = "play";
+  startMatch("play");
+  lockAndGo();
+});
+const watch = () => {
+  hideMenu();
+  state = "watch";
+  autoDirector = true;
+  sfx.unlock();
+  startMatch("watch");
+};
+$("watch").addEventListener("click", watch);
+$("watchPhone").addEventListener("click", watch);
+
+refreshMenu();
+if (params.get("start") === "play" && !phone) { hideMenu(); state = "play"; startMatch("play"); }
+else if (params.get("start") === "watch") watch();
+else showMenu();

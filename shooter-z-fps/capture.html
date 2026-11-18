@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shooter Z capture</title>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/src/web/styles/game.css">
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}
+.cap-label{position:fixed;left:40px;top:36px;z-index:30;font-family:"Chakra Petch",sans-serif;font-weight:700;font-size:44px;color:#f3eee3;text-shadow:0 2px 8px rgba(0,0,0,.7);letter-spacing:.02em}
+.cap-label small{display:block;font-size:24px;font-weight:600;color:#ffd166;margin-top:4px}
+.cap-big{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#12161d;color:#f3eee3;font-family:"Chakra Petch",sans-serif;z-index:40;text-align:center}
+.cap-big b{font-size:150px;line-height:1;color:#ff6a3d}
+.cap-big span{font-size:44px;margin-top:18px}
+.cap-big small{font-size:28px;color:#b9b4a8;margin-top:28px;font-family:Inter,sans-serif;max-width:80%}</style>
+</head>
+<body>
+<!-- Frame-exact renders of build stages for the process clips (test/tools/capture.mjs drives it). -->
+<script type="module" src="/src/web/capture.ts"></script>
+</body>
+</html>

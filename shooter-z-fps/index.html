@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Shooter Z</title>
+<meta name="description" content="Shooter Z: a laser-tag first-person shooter against AI robots, free in your browser. Can you beat AI?">
+<meta name="theme-color" content="#14181f">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/src/web/styles/game.css">
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div class="overlay menu" id="menu">
+  <div class="menu-grid">
+    <section class="hero">
+      <p class="kicker">BULSHY.FM · Build</p>
+      <h1>Shooter <span>Z</span></h1>
+      <p class="tagline">Can you beat AI?</p>
+      <p class="pitch">Laser tag with robots. Every opponent is an AI that sees only what you could see: no wall hacks.</p>
+      <div class="cta desktop-only">
+        <button class="primary" id="play">Play</button>
+        <button id="watch">Watch AI vs AI</button>
+      </div>
+      <div class="cta phone-only">
+        <button class="primary" id="watchPhone">Watch AI vs AI</button>
+        <p class="pc-note">Play it on a computer: it needs a mouse and keyboard.</p>
+      </div>
+      <p class="controls desktop-only"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · mouse aim · click shoot · <kbd>E</kbd> or right-click ability · <kbd>R</kbd> reload · <kbd>Space</kbd> jump · <kbd>C</kbd> crouch · <kbd>Tab</kbd> scores · <kbd>V</kbd> free camera · <kbd>H</kbd> hide HUD</p>
+      <a class="gh" href="https://github.com/GOATsann/goatsan-lab/tree/main/shooter-z-fps" target="_blank" rel="noopener noreferrer">Source code on GitHub</a>
+    </section>
+    <section class="setup">
+      <div class="field">
+        <span class="label">Mode</span>
+        <div class="seg" data-setting="mode">
+          <button data-v="duel">1v1</button><button data-v="team">2v2</button><button data-v="ffa">1 vs 3</button>
+        </div>
+        <p class="note" id="modeNote"></p>
+      </div>
+      <div class="field">
+        <span class="label">Map</span>
+        <div class="seg maps" data-setting="map">
+          <button data-v="base"><b>Army training base</b><small>Containers, sandbags, a watchtower</small></button>
+          <button data-v="ship"><b>Spaceship</b><small>Corridors, a cargo bay, windows onto space</small></button>
+        </div>
+      </div>
+      <div class="field desktop-only">
+        <span class="label">Your character</span>
+        <div class="chars" id="chars"></div>
+      </div>
+      <div class="field">
+        <span class="label">AI level</span>
+        <div class="seg" data-setting="skill">
+          <button data-v="easy">Easy</button><button data-v="normal">Normal</button><button data-v="hard">Hard</button>
+        </div>
+      </div>
+      <div class="row">
+        <label class="field small">
+          <span class="label">First to</span>
+          <select id="limit"><option>5</option><option selected>10</option><option>15</option><option>20</option></select>
+        </label>
+        <div class="field small">
+          <span class="label">Graphics</span>
+          <div class="seg" data-setting="graphics"><button data-v="normal">Normal</button><button data-v="low">Low</button></div>
+        </div>
+        <label class="field small desktop-only">
+          <span class="label">Mouse speed</span>
+          <input type="range" id="sens" min="0.5" max="3" step="0.05" value="1">
+        </label>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="overlay pause" id="pause" hidden>
+  <div class="card">
+    <h2>Paused</h2>
+    <p>Click to jump back in.</p>
+    <div class="cta"><button class="primary" id="resume">Resume</button><button id="quit">Leave match</button></div>
+  </div>
+</div>
+
+<div class="hint-click" id="clickHint" hidden>Click to lock the mouse and play</div>
+
+<script type="module" src="/src/web/main.ts"></script>
+</body>
+</html>
