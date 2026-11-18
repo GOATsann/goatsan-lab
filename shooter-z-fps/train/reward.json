@@ -4,7 +4,7 @@
     "Terms marked helper fade from 100% to 0% over the second half of self-play, so the final AI plays to win, not to farm points.",
     "Every term is logged on its own (reward/<name>), so you can see which part drives the agent.",
     "The benchmark never uses this file: it reports wins, K/D, headshots and damage directly.",
-    "Wasted-move costs are small next to combat: a torso hit (20 HP) is +0.2, so 20 wasted moves cost what one hit earns. Counts per minute are on the dashboard."
+    "Wasted-move costs are small next to combat: a torso hit (20 HP) is +0.2, so 100 wasted moves cost what one hit earns. (-0.01 each was too much: at ~600 wasted moves/min at first it outweighed the damage reward and the AI got weaker.) Counts per minute are on the dashboard."
   ],
   "weights": {
     "won": {
@@ -53,27 +53,27 @@
       "doc": "per headshot hit, on top of the higher damage (off at first)."
     },
     "crouchSpam": {
-      "w": -0.01,
+      "w": -0.002,
       "helper": false,
       "doc": "per crouch/stand toggle that undoes the last one within 0.5 s with no shot fired or taken in between (squat spam). Crouch-peeking in a fight stays free."
     },
     "jumpSpam": {
-      "w": -0.01,
+      "w": -0.002,
       "helper": false,
       "doc": "per jump with no combat (shots, damage dealt or taken) in the last second. Jumps in a fight stay free; a climbing jump costs this small amount too."
     },
     "strafeJitter": {
-      "w": -0.01,
+      "w": -0.002,
       "helper": false,
       "doc": "per left/right strafe reversal within 0.5 s of the last one, while not hit in the last second. Strafe-dodging under fire stays free."
     },
     "turnJitter": {
-      "w": -0.01,
+      "w": -0.002,
       "helper": false,
       "doc": "per big turn (1/4 of the turn cap or more) that reverses the last big one within 0.5 s, with no enemy on screen."
     },
     "abilityWasted": {
-      "w": -0.02,
+      "w": -0.004,
       "helper": false,
       "doc": "per ability use with no enemy seen and no combat in the last 2 s."
     }
