@@ -102,7 +102,8 @@ def main() -> None:
         for name, (run, stem, _) in specs.items():
             (run / f"{stem}.json").write_text(json.dumps({"label": name, **out[name]}, indent=2))
             with (run / f"{stem}.csv").open("w", newline="") as f:
-                w = csv.DictWriter(f, fieldnames=list(rows[name][0]))
+                fields = list(dict.fromkeys(k for r in rows[name] for k in r))  # frozen-opponent rows add "snapshot"
+                w = csv.DictWriter(f, fieldnames=fields)
                 w.writeheader()
                 w.writerows(rows[name])
     finally:
