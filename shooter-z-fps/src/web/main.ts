@@ -136,7 +136,9 @@ function onEvents(events: readonly GameEvent[]): void {
     // spectator auto-director: cut to whoever just made an elimination
     if (e.type === "kill" && s.spectator && autoDirector && (s.rig.mode === "follow" || s.rig.mode === "pov")) {
       const killer = e.a;
-      setTimeout(() => { if (S === s && autoDirector) { s.rig.target = killer; updateSpecBar(); } }, 900);
+      // if the robot we're watching went down, let its death cam play before cutting to the killer
+      const wait = e.v === s.rig.target ? 2300 : 900;
+      setTimeout(() => { if (S === s && autoDirector) { s.rig.target = killer; updateSpecBar(); } }, wait);
     }
   }
 }
@@ -398,6 +400,6 @@ $("watchPhone").addEventListener("click", watch);
 
 refreshMenu();
 if (params.get("start") === "play" && !phone) { hideMenu(); state = "play"; startMatch("play"); }
-else if (params.get("start") === "tutorial" && !phone) { hideMenu(); state = "play"; startMatch("tutorial"); }
+else if (params.get("start") === "tutorial" && (!phone || params.has("autotest"))) { hideMenu(); state = "play"; startMatch("tutorial"); }
 else if (params.get("start") === "watch") watch();
 else showMenu();

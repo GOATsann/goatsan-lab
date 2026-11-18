@@ -205,3 +205,45 @@ body.phone .score .lim { display: none; }
 .tut-card.done { border-color: #7bd88f; }
 .tut-card.done b { color: #7bd88f; font-size: 32px; }
 .tut-flash .tut-card { border-color: #7bd88f; }
+
+/* ---- phones: character select, preview, tutorial card, tap targets */
+body.phone .chars { grid-template-columns: repeat(2, 1fr); }
+body.phone .chars button { min-height: 52px; }
+body.phone .char-preview { grid-template-columns: 120px 1fr; gap: 12px; }
+body.phone .char-preview canvas { width: 120px; height: 140px; }
+body.phone .cp-name { font-size: 22px; }
+body.phone .seg button { min-height: 44px; }
+body.phone .specbar button { min-height: 44px; min-width: 44px; }
+body.phone .gh { display: inline-block; padding: 14px 0; min-height: 44px; }
+body.phone .cta button { min-height: 48px; }
+.tut-card { min-width: min(420px, 92vw); max-width: min(560px, 94vw); }
+body.phone .tut { top: 200px; }
+body.phone .board { padding: 16px 14px; }
+body.phone .board table { font-size: 13px; }
+@media (orientation: landscape) and (max-height: 500px) {
+  body.phone .menu-grid { grid-template-columns: 1fr 1fr; gap: 18px; padding: 18px 20px; }
+  body.phone .hero h1 { font-size: 48px; }
+  body.phone .hero .tagline { font-size: 22px; margin: 8px 0 6px; }
+  body.phone .hero .pitch { font-size: 14px; margin-bottom: 14px; }
+  body.phone .mini { width: 96px; height: 96px; }
+  body.phone .score { top: 8px; }
+  body.phone .center { top: 56%; font-size: 16px; }
+  body.phone .specbar { bottom: 8px; }
+  body.phone .specbar .who { padding: 6px 10px; }
+}
+body.phone .row .field.small { flex: 1 1 100%; }
+.pill { white-space: nowrap; }
+body.phone .lbl, body.phone .abil .txt .sm, body.phone .abil .txt small, body.phone .kf .gun, body.phone .score .lim { font-size: 12px; }
+body.phone kbd { font-size: 12px; }
+body.phone .tut-card .keys { font-size: 13px; }
+@media (max-width: 600px) {
+  .health, .ammo { min-width: 0; padding: 8px 12px; bottom: 14px; }
+  .health { left: 12px; width: 140px; }
+  .ammo { right: 12px; }
+  .health b, .ammo b { font-size: 28px; }
+  .abil { bottom: 104px; }
+  .tut { top: 196px; }
+  .tut-card { padding: 12px 14px; }
+  .tut-card b { font-size: 22px; }
+  .score { top: 140px; }
+}
