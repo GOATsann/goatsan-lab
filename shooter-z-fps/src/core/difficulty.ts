@@ -5,7 +5,8 @@
 //
 // Ticks are 1/60 s. Turn speeds are radians per tick (x 60 = radians per second).
 
-export type SkillName = "easy" | "normal" | "hard";
+/** "training" is the tutorial's slow bot; it is not offered on the menu. */
+export type SkillName = "easy" | "normal" | "hard" | "training";
 export const SKILL_NAMES: SkillName[] = ["easy", "normal", "hard"];
 
 export interface BotSkill {
@@ -32,6 +33,7 @@ export interface BotSkill {
 }
 
 export const SKILLS: Record<SkillName, BotSkill> = {
+  training: { reactionTicks: 50, turnPerTick: 1.6 / 60, aimNoise: 0.05, firstShotNoise: 0.12, headDist: 0, fireTol: 2.2, strafeChance: 0.15, crouchFire: 0, coverHealth: 0, lead: 0 },
   easy: { reactionTicks: 30, turnPerTick: 2.6 / 60, aimNoise: 0.03, firstShotNoise: 0.09, headDist: 0, fireTol: 1.7, strafeChance: 0.3, crouchFire: 0, coverHealth: 30, lead: 0 },
   normal: { reactionTicks: 17, turnPerTick: 5 / 60, aimNoise: 0.014, firstShotNoise: 0.055, headDist: 9, fireTol: 1.25, strafeChance: 0.75, crouchFire: 0.2, coverHealth: 40, lead: 0.5 },
   hard: { reactionTicks: 10, turnPerTick: 8.5 / 60, aimNoise: 0.007, firstShotNoise: 0.03, headDist: 22, fireTol: 1.0, strafeChance: 1, crouchFire: 0.35, coverHealth: 45, lead: 1 },

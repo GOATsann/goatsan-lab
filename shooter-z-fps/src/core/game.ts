@@ -445,6 +445,13 @@ export class Game {
     }
   }
 
+  /** Put a robot somewhere, standing still (tutorial and tests only; not used in normal matches). */
+  teleport(id: number, x: number, z: number, yaw: number): void {
+    const a = this.agents[id];
+    a.x = x; a.z = z; a.y = 0; a.vx = a.vy = a.vz = 0; a.yaw = yaw; a.pitch = 0;
+    a.grounded = true; a.protectTicks = 0; a.idleTicks = 0;
+  }
+
   // ------------------------------------------------------------------------------------ spawning
   private spawn(a: Agent): void {
     // the spawn point farthest from living enemies (a little randomness so it is not predictable)

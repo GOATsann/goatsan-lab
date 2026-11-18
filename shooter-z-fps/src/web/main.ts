@@ -13,6 +13,8 @@ import { GameView, newRig, type CameraRig, type CamMode } from "./gameview";
 import { Hud, type HudContext } from "./hud";
 import { Input } from "./input";
 import { Stage, type Graphics } from "./stage";
+import { CharPreview } from "./charpreview";
+import { Tutorial, TUTORIAL_MAP } from "./tutorial";
 import * as THREE from "three";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -69,6 +71,7 @@ interface Session {
   slots: Slot[];
   endedAt: number;
   backdrop: boolean; // the live match behind the menu
+  tutorial: Tutorial | null;
 }
 let S: Session | null = null;
 let state: "menu" | "play" | "watch" = "menu";
@@ -76,15 +79,17 @@ let hudVisible = true;
 let autoDirector = true;
 const idle: Action = noop();
 
-function startMatch(kind: "play" | "watch" | "backdrop", mapOverride?: MapId): void {
+function startMatch(kind: "play" | "watch" | "backdrop" | "tutorial", mapOverride?: MapId): void {
   if (S) { S.hud.root.remove(); }
   stage.reset();
   const seed = newSeed();
-  const spectate = kind !== "play";
-  const mode = kind === "backdrop" ? "ffa" : settings.mode;
-  const map = mapOverride ?? settings.map;
-  const slots = standardSlots(mode, kind === "backdrop" ? "normal" : settings.skill, { spectate, seed, character: settings.character });
-  const match = new Match(seed, { map, mode, scoreLimit: kind === "backdrop" ? 50 : settings.limit, slots });
+  const spectate = kind === "watch" || kind === "backdrop";
+  const tut = kind === "tutorial";
+  const mode = kind === "backdrop" ? "ffa" : tut ? "duel" : settings.mode;
+  const map = tut ? TUTORIAL_MAP : mapOverride ?? settings.map;
+  const slots = standardSlots(mode, kind === "backdrop" ? "normal" : tut ? "training" : settings.skill, { spectate, seed, character: settings.character });
+  if (tut) slots[1].name = "Practice bot";
+  const match = new Match(seed, { map, mode, scoreLimit: kind === "backdrop" ? 50 : tut ? 999 : settings.limit, slots });
   const colors = slotColors(mode);
   const self = spectate ? -1 : 0;
   const view = new GameView(stage, match, { look: "final", self, colors });
@@ -92,9 +97,12 @@ function startMatch(kind: "play" | "watch" | "backdrop", mapOverride?: MapId): v
   const rig = newRig();
   rig.mode = spectate ? (kind === "backdrop" ? "overview" : "follow") : "fp";
   rig.target = 0;
-  S = { match, view, hud, rig, spectator: spectate, self, colors, slots, endedAt: -1, backdrop: kind === "backdrop" };
+  const tutorial = tut ? new Tutorial(match, settings.character, hud.root) : null;
+  hud.tutorial = tut;
+  S = { match, view, hud, rig, spectator: spectate, self, colors, slots, endedAt: -1, backdrop: kind === "backdrop", tutorial };
+  if (tutorial) view.snapshot();
   hud.setVisible(kind !== "backdrop" && hudVisible);
-  (window as unknown as { shooterZ: unknown }).shooterZ = { match, view, rig, input, hud, get state() { return state; } }; // for tests and debugging
+  (window as unknown as { shooterZ: unknown }).shooterZ = { match, view, rig, input, hud, get state() { return state; }, get tutorial() { return S?.tutorial ?? null; } }; // for tests and debugging
   updateSpecBar();
   acc = 0;
 }
@@ -157,6 +165,10 @@ function frame(now: number): void {
       s.view.snapshot();
       s.match.step([act]);
       onEvents(g.events);
+      if (s.tutorial && !s.tutorial.done) {
+        s.tutorial.update(g.events, STEP / 1000);
+        if (s.tutorial.done) store.set("tutorialDone", "1");
+      }
       acc -= STEP;
       steps++;
     }
@@ -256,8 +268,9 @@ input.onKey = (code) => {
   if (code === "Tab") s.hud.showBoard = true;
   if (code === "KeyH") { hudVisible = !hudVisible; s.hud.setVisible(hudVisible); }
   if (code === "KeyM") sfx.setMuted(!sfx.muted);
-  if (code === "Enter" && s.match.game.over && state === "play") { startMatch("play"); state = "play"; lockAndGo(); }
-  if (code === "Escape" && (s.spectator || s.match.game.over)) showMenu();
+  if (code === "Enter" && state === "play" && (s.match.game.over || s.tutorial?.done)) { startMatch("play"); state = "play"; lockAndGo(); }
+  if (code === "KeyN" && s.tutorial && !s.tutorial.done && state === "play") { s.tutorial.next(); if (s.tutorial.done) store.set("tutorialDone", "1"); }
+  if (code === "Escape" && (s.spectator || s.match.game.over || s.tutorial?.done)) showMenu();
   if (state === "play") {
     if (code === "KeyV") setCam(s.rig.mode === "free" ? "fp" : "free");
     return;
@@ -296,15 +309,20 @@ function showMenu(): void {
   pausedByUser = false;
   $("menu").hidden = false;
   $("pause").hidden = true;
+  preview.running = true;
+  const first = !store.get("tutorialDone");
+  $("firstVisit").hidden = !first;
+  $("menu").classList.toggle("first", first);
   startMatch("backdrop", settings.map);
 }
 
-function hideMenu(): void { $("menu").hidden = true; }
+function hideMenu(): void { $("menu").hidden = true; preview.running = false; }
 
 function refreshMenu(): void {
   for (const seg of document.querySelectorAll<HTMLElement>(".seg[data-setting]")) {
-    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics";
-    for (const b of seg.querySelectorAll<HTMLButtonElement>("button")) b.classList.toggle("on", b.dataset.v === String(settings[key]));
+    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics" | "limit";
+    seg.setAttribute("role", "radiogroup");
+    for (const b of seg.querySelectorAll<HTMLButtonElement>("button")) { b.classList.toggle("on", b.dataset.v === String(settings[key])); b.setAttribute("role", "radio"); }
   }
   const notes: Record<Mode, string> = {
     duel: "You against one AI robot.",
@@ -312,12 +330,25 @@ function refreshMenu(): void {
     ffa: "Free-for-all: you against three AI robots, everyone for themselves.",
   };
   $("modeNote").textContent = notes[settings.mode];
-  for (const b of document.querySelectorAll<HTMLButtonElement>("#chars button")) b.classList.toggle("on", Number(b.dataset.c) === settings.character);
-  $<HTMLSelectElement>("limit").value = String(settings.limit);
+  for (const b of document.querySelectorAll<HTMLButtonElement>("#chars button")) {
+    const on = Number(b.dataset.c) === settings.character;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-checked", String(on));
+  }
+  for (const b of document.querySelectorAll<HTMLButtonElement>(".seg[data-setting] button")) b.setAttribute("aria-checked", String(b.classList.contains("on")));
+  const ch = CHARACTERS[settings.character];
+  if (previewShown !== settings.character) { preview.show(settings.character, "#3d8bff"); previewShown = settings.character; }
+  $("cpName").textContent = ch.name;
+  $("cpMove").textContent = ch.abilityName;
+  $("charPreview").style.setProperty("--c", ch.accent);
+  $("cpDesc").textContent = ch.blurb;
+  $("cpCd").textContent = `Cooldown ${Math.round(ch.cooldown / TICK_HZ)} s · press E or right-click`;
   $<HTMLInputElement>("sens").value = String(settings.sens);
 }
 
-$("chars").innerHTML = CHARACTERS.map((c) => `<button data-c="${c.id}" style="--c:${c.accent}"><b>${c.name}</b><em>${c.abilityName}</em><small>${c.blurb}</small></button>`).join("");
+$("chars").innerHTML = CHARACTERS.map((c) => `<button data-c="${c.id}" role="radio" style="--c:${c.accent}"><b>${c.name}</b><em>${c.abilityName}</em></button>`).join("");
+const preview = new CharPreview($<HTMLCanvasElement>("charCanvas"));
+let previewShown = -1;
 document.querySelector("#chars")!.addEventListener("click", (e) => {
   const b = (e.target as HTMLElement).closest("button") as HTMLButtonElement | null;
   if (!b) return;
@@ -329,19 +360,18 @@ for (const seg of document.querySelectorAll<HTMLElement>(".seg[data-setting]")) 
   seg.addEventListener("click", (e) => {
     const b = (e.target as HTMLElement).closest("button") as HTMLButtonElement | null;
     if (!b) return;
-    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics";
+    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics" | "limit";
     const v = b.dataset.v!;
     if (key === "graphics") {
       if (v !== settings.graphics) { store.set("graphics", v); location.reload(); }
       return;
     }
-    (settings as Record<string, unknown>)[key] = v;
+    (settings as Record<string, unknown>)[key] = key === "limit" ? Number(v) : v;
     store.set(key, v);
     refreshMenu();
     if (key === "map" && state === "menu") startMatch("backdrop", settings.map);
   });
 }
-$<HTMLSelectElement>("limit").addEventListener("change", (e) => { settings.limit = Number((e.target as HTMLSelectElement).value); store.set("limit", String(settings.limit)); });
 $<HTMLInputElement>("sens").addEventListener("input", (e) => { settings.sens = Number((e.target as HTMLInputElement).value); store.set("sens", String(settings.sens)); input.sensitivity = 0.0022 * settings.sens; });
 
 $("play").addEventListener("click", () => {
@@ -358,9 +388,16 @@ const watch = () => {
   startMatch("watch");
 };
 $("watch").addEventListener("click", watch);
+$("tutorial").addEventListener("click", () => {
+  hideMenu();
+  state = "play";
+  startMatch("tutorial");
+  lockAndGo();
+});
 $("watchPhone").addEventListener("click", watch);
 
 refreshMenu();
 if (params.get("start") === "play" && !phone) { hideMenu(); state = "play"; startMatch("play"); }
+else if (params.get("start") === "tutorial" && !phone) { hideMenu(); state = "play"; startMatch("tutorial"); }
 else if (params.get("start") === "watch") watch();
 else showMenu();

@@ -62,6 +62,8 @@ export class Match {
   private actions: Action[];
   private lastPacked: (PackedAction | null)[];
   private inputs: Replay["inputs"] = [];
+  /** tutorial only: a paused bot does nothing (not recorded in replays) */
+  readonly paused: boolean[];
 
   constructor(seed: number, options: MatchOptions) {
     this.seed = seed >>> 0;
@@ -76,6 +78,7 @@ export class Match {
     this.held = options.slots.map(() => noop());
     this.actions = options.slots.map(() => noop());
     this.lastPacked = options.slots.map(() => null);
+    this.paused = options.slots.map(() => false);
   }
 
   get tick(): number { return this.game.tick; }
@@ -87,7 +90,9 @@ export class Match {
     if (g.over) return;
     for (let i = 0; i < this.bots.length; i++) {
       const bot = this.bots[i];
-      if (bot) {
+      if (bot && this.paused[i]) {
+        this.actions[i] = NOOP;
+      } else if (bot) {
         // bots decide every DECISION_TICKS ticks, staggered so they don't all think on the same tick
         if ((g.tick + i) % C.DECISION_TICKS === 0) {
           observe(g, i, this.obs[i]);

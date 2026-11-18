@@ -12,6 +12,11 @@ AI that sees only what you could see: no wall hacks. Two small maps, 1v1, 2v2 (y
 
 ## How to play
 
+New here? Press **Start tutorial** on the menu (it is suggested on your first visit): nine short steps on
+the army base (look, move, jump and crouch, shoot a target, a headshot, reload, your Special Move,
+eliminate a still target, then a slow training bot that shoots back). Each step completes when you do
+it; N skips a step.
+
 First to 10 eliminations wins (you can change the limit). No round timer. When you're eliminated the
 camera pulls back so you see your robot go down, the robot that got you is highlighted and named, and
 after 2.5 s you respawn in first person with 2 s of spawn shield (firing ends it).
@@ -24,7 +29,7 @@ after 2.5 s you respawn in first person with 2 s of spawn shield (firing ends it
 | Space | jump |
 | C (or Ctrl) | crouch (hold). Ctrl+W closes the browser tab, so C is the safer key |
 | R | reload |
-| E or right click | your character's ability |
+| E or right click | your character's Special Move |
 | Tab | scoreboard |
 | V | free camera (for filming); V again to go back |
 | H | hide the HUD |
@@ -40,9 +45,10 @@ crouching more.
 - Standing still without firing for 15 s reveals you to everyone for 2 s.
 - In 2v2 your teammate is always outlined and on your minimap. There is no friendly fire.
 
-**Characters** (same health, speed and laser; the ability is the only difference):
+**Characters** (same health, speed and laser; the Special Move is the only difference). Click a character
+on the menu to see it turning, with its Special Move and cooldown.
 
-| Character | Ability | What it does | Cooldown |
+| Character | Special Move | What it does | Cooldown |
 |---|---|---|---|
 | Dash | Dash | A quick burst (~2.8 m) in the direction you're moving | 6 s |
 | Bulwark | Shield | A frontal energy shield for 2 s that stops lasers; you can still shoot | 12 s |
@@ -137,7 +143,8 @@ Same architecture as [Lights-Out Surfer](../runner/):
   - `match.ts` a match = game + who controls each robot; **replays** are the seed, the options and the
     non-bot inputs, and rebuild the exact match.
 - **Browser** (`src/web/`): three.js renderer (`gameview.ts`, `mapview.ts`, `robot.ts`, `fx.ts`), HUD,
-  input with pointer lock, synthesized sound, spectator and free cameras. `capture.html` renders build
+  input with pointer lock, synthesized sound, spectator and free cameras, the tutorial (`tutorial.ts`)
+  and the character preview (`charpreview.ts`). `capture.html` renders build
   stages and matches frame by frame for videos (`test/tools/capture.mjs`).
 - **Headless** (`src/headless/`): the speed test, a match runner with replay check, and the batch server
   for training (protocol in [PROTOCOL.md](PROTOCOL.md)).

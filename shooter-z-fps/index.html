@@ -24,13 +24,26 @@
       <p class="pitch">Laser tag with robots. Every opponent is an AI that sees only what you could see: no wall hacks.</p>
       <div class="cta desktop-only">
         <button class="primary" id="play">Play</button>
+        <button id="tutorial">Start tutorial</button>
         <button id="watch">Watch AI vs AI</button>
       </div>
+      <p class="first-visit desktop-only" id="firstVisit" hidden>New here? Start with the tutorial: nine short steps, about two minutes.</p>
       <div class="cta phone-only">
         <button class="primary" id="watchPhone">Watch AI vs AI</button>
         <p class="pc-note">Play it on a computer: it needs a mouse and keyboard.</p>
       </div>
-      <p class="controls desktop-only"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · mouse aim · click shoot · <kbd>E</kbd> or right-click ability · <kbd>R</kbd> reload · <kbd>Space</kbd> jump · <kbd>C</kbd> crouch · <kbd>Tab</kbd> scores · <kbd>V</kbd> free camera · <kbd>H</kbd> hide HUD</p>
+      <div class="controls-card desktop-only" aria-label="Controls">
+        <div class="ctl"><span class="keys wasd"><kbd>W</kbd><span><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span></span><b>Move</b></div>
+        <div class="ctl"><span class="keys"><svg class="mouse" viewBox="0 0 24 34" aria-hidden="true"><rect x="2" y="2" width="20" height="30" rx="10" fill="none" stroke="currentColor" stroke-width="2"/><line x1="12" y1="2" x2="12" y2="14" stroke="currentColor" stroke-width="2"/><path d="M7 22 l5 -4 l5 4" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M7 26 l5 4 l5 -4" fill="none" stroke="var(--accent)" stroke-width="2" transform="translate(0,-4)"/></svg></span><b>Aim</b></div>
+        <div class="ctl"><span class="keys"><svg class="mouse" viewBox="0 0 24 34" aria-hidden="true"><rect x="2" y="2" width="20" height="30" rx="10" fill="none" stroke="currentColor" stroke-width="2"/><line x1="12" y1="2" x2="12" y2="14" stroke="currentColor" stroke-width="2"/><path d="M12 2 A10 10 0 0 0 2 12 V14 H12 Z" fill="var(--accent)"/></svg></span><b>Shoot</b><small>hold for more</small></div>
+        <div class="ctl"><span class="keys"><kbd class="wide">E</kbd><i>or</i><svg class="mouse" viewBox="0 0 24 34" aria-hidden="true"><rect x="2" y="2" width="20" height="30" rx="10" fill="none" stroke="currentColor" stroke-width="2"/><line x1="12" y1="2" x2="12" y2="14" stroke="currentColor" stroke-width="2"/><path d="M12 2 A10 10 0 0 1 22 12 V14 H12 Z" fill="var(--accent)"/></svg></span><b>Special Move</b></div>
+        <div class="ctl"><span class="keys"><kbd class="space">Space</kbd></span><b>Jump</b></div>
+        <div class="ctl"><span class="keys"><kbd>C</kbd></span><b>Crouch</b><small>hold</small></div>
+        <div class="ctl"><span class="keys"><kbd>R</kbd></span><b>Reload</b></div>
+        <div class="ctl"><span class="keys"><kbd class="wide">Tab</kbd></span><b>Scores</b></div>
+        <div class="ctl"><span class="keys"><kbd class="wide">Esc</kbd></span><b>Pause</b></div>
+      </div>
+      <p class="more-keys desktop-only"><kbd>V</kbd> free camera for filming · <kbd>H</kbd> hide the HUD · <kbd>M</kbd> mute</p>
       <a class="gh" href="https://github.com/GOATsann/goatsan-lab/tree/main/shooter-z-fps" target="_blank" rel="noopener noreferrer">Source code on GitHub</a>
     </section>
     <section class="setup">
@@ -50,7 +63,17 @@
       </div>
       <div class="field desktop-only">
         <span class="label">Your character</span>
-        <div class="chars" id="chars"></div>
+        <div class="chars" id="chars" role="radiogroup" aria-label="Character"></div>
+        <div class="char-preview" id="charPreview">
+          <canvas id="charCanvas" width="360" height="420" aria-hidden="true"></canvas>
+          <div class="cp-text">
+            <b class="cp-name" id="cpName"></b>
+            <span class="label">Special Move</span>
+            <b class="cp-move" id="cpMove"></b>
+            <p id="cpDesc"></p>
+            <small id="cpCd"></small>
+          </div>
+        </div>
       </div>
       <div class="field">
         <span class="label">AI level</span>
@@ -59,10 +82,10 @@
         </div>
       </div>
       <div class="row">
-        <label class="field small">
+        <div class="field small">
           <span class="label">First to</span>
-          <select id="limit"><option>5</option><option selected>10</option><option>15</option><option>20</option></select>
-        </label>
+          <div class="seg" data-setting="limit" role="radiogroup" aria-label="Eliminations to win"><button data-v="5">5</button><button data-v="10">10</button><button data-v="15">15</button><button data-v="20">20</button></div>
+        </div>
         <div class="field small">
           <span class="label">Graphics</span>
           <div class="seg" data-setting="graphics"><button data-v="normal">Normal</button><button data-v="low">Low</button></div>

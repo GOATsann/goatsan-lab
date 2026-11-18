@@ -48,6 +48,8 @@ export class Hud {
   private now = 0;
   private frames: number[] = [];
   showBoard = false;
+  /** tutorial: no score limit line, no idle-reveal nagging */
+  tutorial = false;
 
   constructor(parent: HTMLElement, debugFps: boolean) {
     this.root = el("div", "hud", parent);
@@ -68,7 +70,7 @@ export class Hud {
     this.toast = el("div", "toast", this.root);
     this.board = el("div", "board", this.root);
     this.specBar = el("div", "specbar", this.root);
-    this.abil = el("div", "abil", this.root, `<div class="ring"><div class="fill"></div><span class="key">E</span></div><div class="txt"><b></b><small></small></div>`);
+    this.abil = el("div", "abil", this.root, `<div class="ring"><div class="fill"></div><span class="key">E</span></div><div class="txt"><span class="sm">Special Move</span><b></b><small></small></div>`);
     this.fps = debugFps ? el("div", "fps", this.root) : null;
   }
 
@@ -89,7 +91,7 @@ export class Hud {
       }
       if (e.type === "kill") this.killFeed(e, ctx);
       if (e.type === "kill" && e.v === ctx.self) this.killer = { name: ctx.slots[e.a].name, color: ctx.colors[e.a], head: e.part === "head" };
-      if (e.type === "reveal" && e.a === ctx.self && !ctx.spectator) this.say("You stood still too long: everyone can see you. Move!", 2.5);
+      if (e.type === "reveal" && e.a === ctx.self && !ctx.spectator && !this.tutorial) this.say("You stood still too long: everyone can see you. Move!", 2.5);
       if (e.type === "blocked" && e.a === ctx.self && !ctx.spectator) { this.hitT = this.now; this.hitKind = "blocked"; }
       if (e.type === "blocked" && e.v === ctx.self && !ctx.spectator) this.say("Shield blocked a laser", 0.8);
     }
@@ -157,7 +159,7 @@ export class Hud {
       this.abil.classList.toggle("ready", ready);
       this.abil.classList.toggle("active", active);
       (this.abil.querySelector(".fill") as HTMLElement).style.setProperty("--p", String(ready ? 1 : 1 - me.abilityCooldown / ch.cooldown));
-      this.abil.querySelector("b")!.textContent = ch.name === ch.abilityName ? ch.name : `${ch.name}: ${ch.abilityName}`;
+      this.abil.querySelector("b")!.textContent = ch.abilityName;
       this.abil.querySelector("small")!.textContent = active ? "active" : ready ? "ready (E or right-click)" : `${Math.ceil(me.abilityCooldown / C.TICK_HZ)} s`;
     }
     // centre message
@@ -166,7 +168,7 @@ export class Hud {
       const who = this.killer ? `Eliminated by <b style="color:${this.killer.color}">${esc(this.killer.name)}</b>${this.killer.head ? " (headshot)" : ""}<br>` : "";
       msg = `${who}<small>Respawning in ${Math.ceil(me.respawnTicks / C.TICK_HZ)}</small>`;
     } else if (me && me.protectTicks > 0 && firstPerson) msg = "Spawn shield (ends when you fire)";
-    else if (me && firstPerson && me.idleTicks > C.IDLE_REVEAL_AFTER - 4 * C.TICK_HZ) msg = `Standing still: revealed in ${Math.ceil((C.IDLE_REVEAL_AFTER - me.idleTicks) / C.TICK_HZ)}`;
+    else if (me && firstPerson && !this.tutorial && me.idleTicks > C.IDLE_REVEAL_AFTER - 4 * C.TICK_HZ) msg = `Standing still: revealed in ${Math.ceil((C.IDLE_REVEAL_AFTER - me.idleTicks) / C.TICK_HZ)}`;
     if (this.center.innerHTML !== msg) this.center.innerHTML = msg;
     this.toast.classList.toggle("on", this.now < this.toastT);
     // score
@@ -215,7 +217,7 @@ export class Hud {
     }
     const teams = MODES[mode].teams;
     const tColor = (t: number) => ctx.colors[teams.indexOf(t)];
-    return `<div class="lim">First to ${lim}</div><span class="pill big" style="--c:${tColor(0)}">${esc(this.teamName(0, ctx))} <b>${g.teamScore[0]}</b></span><span class="vs">vs</span><span class="pill big" style="--c:${tColor(1)}"><b>${g.teamScore[1]}</b> ${esc(this.teamName(1, ctx))}</span>`;
+    return `<div class="lim">${this.tutorial ? "Tutorial" : `First to ${lim}`}</div><span class="pill big" style="--c:${tColor(0)}">${esc(this.teamName(0, ctx))} <b>${g.teamScore[0]}</b></span><span class="vs">vs</span><span class="pill big" style="--c:${tColor(1)}"><b>${g.teamScore[1]}</b> ${esc(this.teamName(1, ctx))}</span>`;
   }
 
   private boardHtml(ctx: HudContext): string {
