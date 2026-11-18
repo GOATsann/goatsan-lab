@@ -33,6 +33,15 @@ TAGS = {
     "train/approx_kl": "update_size",
     "train/value_loss": "coach_loss",
     "time/fps": "fps",
+    "moves/crouchToggles_per_min": "crouch_per_min",
+    "moves/jumps_per_min": "jumps_per_min",
+    "moves/strafeReversals_per_min": "strafe_rev_per_min",
+    "moves/turnReversals_per_min": "turn_rev_per_min",
+    "moves/crouchSpam_per_min": "crouch_spam_per_min",
+    "moves/jumpSpam_per_min": "jump_spam_per_min",
+    "moves/strafeJitter_per_min": "strafe_jitter_per_min",
+    "moves/turnJitter_per_min": "turn_jitter_per_min",
+    "moves/abilityWasted_per_min": "ability_wasted_per_min",
 }
 
 
