@@ -1,5 +1,5 @@
 {
-  "repo": "TheOnlyGoatsan/shooter-z-ppo",
+  "repo": "TheOnlyGoatsan/shooter-z-ppo-lstm",
   "revision": "d11d8df762355c06e6533686e24ab3e84f4659b7",
   "model": "A-curriculum@34007040",
   "files": {

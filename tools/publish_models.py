@@ -250,7 +250,7 @@ def stage_shooter(root: Path, model: str) -> Path:
     src = LAB / "shooter-z-fps" / "runs" / run_name
     stem = f"policy_{int(steps)}" if steps else "policy"
     bench_file = src / (f"bench_{int(steps)}.json" if steps else "bench.json")
-    out = root / "shooter-z-ppo"
+    out = root / "shooter-z-ppo-lstm"
     out.mkdir(parents=True)
     sys.path.insert(0, str(LAB / "shooter-z-fps" / "train"))
     from szpolicy import load_model  # the Shooter Z network classes
@@ -287,14 +287,14 @@ def stage_shooter(root: Path, model: str) -> Path:
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--dry-run", action="store_true")
-    p.add_argument("--only", choices=["car-racing-ppo", "lights-out-surfer-ppo", "shooter-z-ppo"], help="publish one repo")
+    p.add_argument("--only", choices=["car-racing-ppo", "lights-out-surfer-ppo", "shooter-z-ppo-lstm"], help="publish one repo")
     p.add_argument("--shooter-model", help="Shooter Z model to publish: <run> or <run>@<steps> (shooter-z-fps/runs/)")
     args = p.parse_args()
     root = Path(tempfile.mkdtemp(prefix="hf-stage-"))
-    if args.only == "shooter-z-ppo":
+    if args.only == "shooter-z-ppo-lstm":
         if not args.shooter_model:
-            raise SystemExit("--shooter-model is required for shooter-z-ppo")
-        folders = {"shooter-z-ppo": stage_shooter(root, args.shooter_model)}
+            raise SystemExit("--shooter-model is required for shooter-z-ppo-lstm")
+        folders = {"shooter-z-ppo-lstm": stage_shooter(root, args.shooter_model)}
     else:
         folders = {k: v for k, v in stage(root).items() if not args.only or k == args.only}
     for name, folder in folders.items():
@@ -310,7 +310,7 @@ def main() -> None:
         api.create_repo(repo, repo_type="model", private=False, exist_ok=True)
         info = api.upload_folder(repo_id=repo, folder_path=str(folder), commit_message="Publish trained model, benchmark and model card")
         print(f"uploaded https://huggingface.co/{repo} (revision {info.oid})")
-        if name == "shooter-z-ppo":  # the game pins this exact revision and checks the files
+        if name == "shooter-z-ppo-lstm":  # the game pins this exact revision and checks the files
             lock = {"repo": repo, "revision": info.oid, "model": json.loads((folder / "policy.json").read_text())["model"],
                     "files": {f: hashlib.sha256((folder / f).read_bytes()).hexdigest() for f in ("policy.onnx", "policy.json")}}
             (LAB / "shooter-z-fps" / "models.lock.json").write_text(json.dumps(lock, indent=2) + "\n")
