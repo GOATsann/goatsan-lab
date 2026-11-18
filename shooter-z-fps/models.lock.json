@@ -1,9 +1,27 @@
 {
   "repo": "TheOnlyGoatsan/shooter-z-ppo-lstm",
-  "revision": "d11d8df762355c06e6533686e24ab3e84f4659b7",
+  "revision": "1dd7f25173d83e223d23a10c2d730a5168aa5ece",
   "model": "A-curriculum@34007040",
   "files": {
     "policy.onnx": "c76312cd762ec1d31f300d851832960411949a929f87bb6c1fc0db1a8baa5f5b",
-    "policy.json": "ed88466629294205b8d4ef7e8f17a3190f5123093758dd794bfd11217fdb1cbb"
+    "policy.json": "ed88466629294205b8d4ef7e8f17a3190f5123093758dd794bfd11217fdb1cbb",
+    "easy/policy.onnx": "6a922dd89b6d178fce7e6a9451609f12bf19072f78a25df1f132b81800ee8b39",
+    "easy/policy.json": "bf1cc1211952f5bdd050523f59ff3c8703e5ffebbe219cea1314fc379b919d09"
+  },
+  "levels": {
+    "hard": {
+      "model": "A-curriculum@34007040",
+      "files": [
+        "policy.onnx",
+        "policy.json"
+      ]
+    },
+    "easy": {
+      "model": "A-curriculum@28006400",
+      "files": [
+        "easy/policy.onnx",
+        "easy/policy.json"
+      ]
+    }
   }
 }

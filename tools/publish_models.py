@@ -213,7 +213,9 @@ The AI of **Shooter Z**, an open-source 1v1 arena shooter built for the BULSHY.F
 the game is this model. It sees the world as 256 labelled rays (what a player sees, no wall hacks), keeps
 an LSTM memory of the match and decides 20 times per second.
 
-Model: `{label}` ({steps:,} decisions of training).
+The game has two levels: **Hard** = the files at the top level, model `{label}` ({steps:,} decisions of
+training), and **Easy** = `easy/`, an earlier checkpoint{easy_note}. The benchmark below is Hard's; Easy's
+is in `easy/bench.json`.
 
 ## Benchmark
 
@@ -239,12 +241,13 @@ for wasted shots and long idle stretches (see `reward.json`).
   float32 [batch, 40] (9 action parts back to back) and `h_out`, `c_out`. Start each robot with h = c = 0
   at match start, feed the outputs back every decision. `policy.json` has the action decoding.
 - `final.zip`: the SB3 model. `reward.json`: the training reward. `bench.json`: the benchmark.
+- `easy/`: the same files for the Easy level.
 
 Code: https://github.com/GOATsann/goatsan-lab (shooter-z-fps/). Made by @_goatsan.
 """
 
 
-def stage_shooter(root: Path, model: str) -> Path:
+def stage_shooter(root: Path, model: str, easy: str | None = None) -> Path:
     """model: <run> or <run>@<steps> inside shooter-z-fps/runs/ (exported with train/export_onnx.py, benchmarked)."""
     run_name, _, steps = model.partition("@")
     src = LAB / "shooter-z-fps" / "runs" / run_name
@@ -280,7 +283,32 @@ def stage_shooter(root: Path, model: str) -> Path:
         rows.append(f"| {name} | {r['win_rate']:.0%} | {r['win_ci'][0]:.0%}-{r['win_ci'][1]:.0%} | {'' if ks is None else f'{ks:.0%}'} | "
                     f"{r['kd']:.2f} | {r['headshot_share']:.0%} |" if "kd" in r else f"| {name} | - (time limit) | - | {'' if ks is None else f'{ks:.0%}'} | - | - |")
     extra = "Then AI-only self-play (80% against itself, 20% against past snapshots picked by difficulty). " if "selfplay" in run_name else ""
-    (out / "README.md").write_text(SHOOTER_CARD.format(label=label, steps=meta["steps"], rows="\n".join(rows), extra=extra))
+    easy_note = ""
+    if easy:  # the Easy level: an earlier checkpoint, files byte-identical to what the game ships (easy/)
+        e_run, _, e_steps = easy.partition("@")
+        e_src = LAB / "shooter-z-fps" / "runs" / e_run
+        e_dir = out / "easy"
+        e_dir.mkdir()
+        shutil.copy(e_src / f"policy_{int(e_steps)}.onnx", e_dir / "policy.onnx")
+        shutil.copy(e_src / f"policy_{int(e_steps)}.json", e_dir / "policy.json")
+        e_bench = json.loads((e_src / f"bench_{int(e_steps)}.json").read_text())
+        e_label = e_bench.pop("label", easy)
+        (e_dir / "bench.json").write_text(json.dumps(e_bench, indent=2))
+        em = load_model(e_src / "final.zip", snapshot=e_src / "snapshots" / f"policy_{int(e_steps):010d}.pt")
+        em.tensorboard_log = None
+        em.save(e_dir / "final.tmp.zip")
+        with zipfile.ZipFile(e_dir / "final.tmp.zip") as zin, zipfile.ZipFile(e_dir / "final.zip", "w", zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                data = zin.read(item.filename)
+                if item.filename == "system_info.txt":
+                    data = b"\n".join(l for l in data.splitlines() if not l.startswith(b"- OS:")) + b"\n"
+                zout.writestr(item, data)
+        (e_dir / "final.tmp.zip").unlink()
+        n = e_bench.get("normal", {})
+        easy_note = f" (`{e_label}`, {int(e_steps):,} decisions; Hard beats it with a 59% kill share)"
+        if n:
+            easy_note += f". Vs Normal bots: {n['win_rate']:.0%} wins, K/D {n['kd']:.2f}"
+    (out / "README.md").write_text(SHOOTER_CARD.format(label=label, steps=meta["steps"], rows="\n".join(rows), extra=extra, easy_note=easy_note))
     return out
 
 
@@ -288,13 +316,14 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--only", choices=["car-racing-ppo", "lights-out-surfer-ppo", "shooter-z-ppo-lstm"], help="publish one repo")
+    p.add_argument("--shooter-easy", help="Shooter Z Easy level: <run>@<steps>, published in easy/ (files byte-identical to the game's)")
     p.add_argument("--shooter-model", help="Shooter Z model to publish: <run> or <run>@<steps> (shooter-z-fps/runs/)")
     args = p.parse_args()
     root = Path(tempfile.mkdtemp(prefix="hf-stage-"))
     if args.only == "shooter-z-ppo-lstm":
         if not args.shooter_model:
             raise SystemExit("--shooter-model is required for shooter-z-ppo-lstm")
-        folders = {"shooter-z-ppo-lstm": stage_shooter(root, args.shooter_model)}
+        folders = {"shooter-z-ppo-lstm": stage_shooter(root, args.shooter_model, args.shooter_easy)}
     else:
         folders = {k: v for k, v in stage(root).items() if not args.only or k == args.only}
     for name, folder in folders.items():
@@ -312,7 +341,11 @@ def main() -> None:
         print(f"uploaded https://huggingface.co/{repo} (revision {info.oid})")
         if name == "shooter-z-ppo-lstm":  # the game pins this exact revision and checks the files
             lock = {"repo": repo, "revision": info.oid, "model": json.loads((folder / "policy.json").read_text())["model"],
-                    "files": {f: hashlib.sha256((folder / f).read_bytes()).hexdigest() for f in ("policy.onnx", "policy.json")}}
+                    "files": {f: hashlib.sha256((folder / f).read_bytes()).hexdigest()
+                              for f in ("policy.onnx", "policy.json", "easy/policy.onnx", "easy/policy.json") if (folder / f).exists()}}
+            if (folder / "easy").exists():
+                lock["levels"] = {"hard": {"model": lock["model"], "files": ["policy.onnx", "policy.json"]},
+                                  "easy": {"model": args.shooter_easy, "files": ["easy/policy.onnx", "easy/policy.json"]}}
             (LAB / "shooter-z-fps" / "models.lock.json").write_text(json.dumps(lock, indent=2) + "\n")
             print("wrote shooter-z-fps/models.lock.json")
     shutil.rmtree(root)
