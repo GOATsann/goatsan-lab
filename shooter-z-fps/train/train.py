@@ -265,7 +265,7 @@ class Trainer(BaseCallback):
               f"K/D {res['kd']:.2f}, headshots {res['headshot_share']:.0%}, damage/min {res['damage_per_min']:.0f}", flush=True)
 
 
-def play_matches(policy, port: int, skill: str, n: int, seed0: int, max_ticks: int, opponent_policy=None) -> dict:
+def play_matches(policy, port: int, skill: str, n: int, seed0: int, max_ticks: int, opponent_policy=None, records: list | None = None) -> dict:
     """n deterministic matches (fixed seeds) of `policy` against `skill` bots, or against another policy
     (opponent_policy, skill = 'policy'). Returns win rate, K/D, hit rate, headshot share, damage/min."""
     if opponent_policy is not None:
@@ -286,7 +286,9 @@ def play_matches(policy, port: int, skill: str, n: int, seed0: int, max_ticks: i
             if i not in results:
                 results[i] = infos[i]["episode_end"]
     env.close()
-    e = list(results.values())
+    e = [results[i] for i in range(n)]
+    if records is not None:
+        records.extend(e)
     kills, deaths = sum(x["kills"] for x in e), sum(x["deaths"] for x in e)
     return {
         "win_rate": float(np.mean([x["won"] for x in e])), "kd": kills / max(deaths, 1),
