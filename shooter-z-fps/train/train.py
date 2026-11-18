@@ -30,16 +30,14 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from gymnasium import spaces
 from sb3_contrib import RecurrentPPO
 from stable_baselines3.common.callbacks import BaseCallback
-from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
-from torch import nn
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
 from szenv import MultiShooterVecEnv, ShooterVecEnv, load_reward  # noqa: E402
+from szpolicy import POLICY_KWARGS, Encoder, load_model  # noqa: E402,F401
 
 MAX_TICKS = 60 * 60 * 3  # training cut-off: 3 minutes of game time (truncation, not a loss)
 EVAL_SEED = 777_000
@@ -56,18 +54,6 @@ STAGES = [  # (name, handshake for the stage's servers, pass rule, time cap as a
     ("bot-hard", {"opponent": "bot", "options": {"opponent_skill": "hard"}}, "bots", 1),
     ("self-play", None, None, None),
 ]
-
-
-class Encoder(BaseFeaturesExtractor):
-    """2874 observation numbers (256 labelled rays x 11, enemy memory slots, own state) -> 256 features.
-    The LSTM comes right after this (in sb3-contrib's RecurrentActorCriticPolicy)."""
-
-    def __init__(self, observation_space: spaces.Box, features_dim: int = 256):
-        super().__init__(observation_space, features_dim)
-        self.net = nn.Sequential(nn.Linear(observation_space.shape[0], 256), nn.ReLU(), nn.Linear(256, features_dim), nn.ReLU())
-
-    def forward(self, obs: torch.Tensor) -> torch.Tensor:
-        return self.net(obs)
 
 
 class GameServers:
@@ -366,7 +352,7 @@ def main() -> None:
                  | {"seed_base": 1_000_000 + 10_000_000 * k, "max_ticks": MAX_TICKS, "reward": reward} for k, pt in enumerate(trainer_ports)]
         env = MultiShooterVecEnv(specs)
         if args.resume:
-            model = RecurrentPPO.load(run_dir / "final.zip", env=env, device="cpu")
+            model = load_model(run_dir / "final.zip", env=env)
             model.tensorboard_log = str(run_dir / "tb")
             keep = run_dir / f"checkpoint_{model.num_timesteps}.zip"
             if not keep.exists():
@@ -377,9 +363,7 @@ def main() -> None:
               "MlpLstmPolicy", env,
               n_steps=128, batch_size=5120, n_epochs=3, learning_rate=3e-4,  # batch 5120 x 3 epochs: about 2x faster than 2048 x 4 on CPU
               gamma=0.995, gae_lambda=0.95, clip_range=0.2, ent_coef=0.01, vf_coef=0.5, max_grad_norm=0.5,
-              policy_kwargs=dict(features_extractor_class=Encoder, features_extractor_kwargs=dict(features_dim=256),
-                                 lstm_hidden_size=256, n_lstm_layers=1, enable_critic_lstm=True,
-                                 net_arch=dict(pi=[128], vf=[128])),
+              policy_kwargs=POLICY_KWARGS,
               tensorboard_log=str(run_dir / "tb"), device="cpu", verbose=1, seed=args.seed,
             )
         resumed = {"resumed_from": json.loads((run_dir / "meta.json").read_text())} if args.resume else {}

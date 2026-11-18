@@ -15,11 +15,10 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import torch
-from sb3_contrib import RecurrentPPO
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+from szpolicy import load_model  # noqa: E402
 from train import MAX_TICKS, GameServers, play_matches  # noqa: E402
 
 SEED0 = 5000
@@ -65,10 +64,7 @@ def main() -> None:
                 specs[run.name] = (run, "bench", None)
         models = {}
         for label, (run, _, snap) in specs.items():
-            m = RecurrentPPO.load(run / args.model, device="cpu")
-            if snap is not None:
-                m.policy.load_state_dict(torch.load(snap, map_location="cpu"))
-            models[label] = m
+            models[label] = load_model(run / args.model, snapshot=snap)
         out: dict[str, dict] = {name: {} for name in models}
         rows: dict[str, list] = {name: [] for name in models}
         for name, m in models.items():
