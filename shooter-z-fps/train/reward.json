@@ -4,7 +4,7 @@
     "Terms marked helper fade from 100% to 0% over the second half of self-play, so the final AI plays to win, not to farm points.",
     "Every term is logged on its own (reward/<name>), so you can see which part drives the agent.",
     "The benchmark never uses this file: it reports wins, K/D, headshots and damage directly.",
-    "Wasted-move costs are small next to combat: a torso hit (20 HP) is +0.2, so 100 wasted moves cost what one hit earns. (-0.01 each was too much: at ~600 wasted moves/min at first it outweighed the damage reward and the AI got weaker.) Counts per minute are on the dashboard."
+    "Wasted-move costs (marked ramp) start at 0 and grow linearly to their full weight at --ramp-end (default 80% of the run), then stay full: the AI first gets strong, then cleans up its movement. Full from the start, -0.01 outweighed the damage reward (~600 wasted moves/min at first) and the AI got weaker; -0.002 throughout did not stop the spam. Counts per minute are on the dashboard."
   ],
   "weights": {
     "won": {
@@ -53,29 +53,34 @@
       "doc": "per headshot hit, on top of the higher damage (off at first)."
     },
     "crouchSpam": {
-      "w": -0.002,
+      "w": -0.01,
       "helper": false,
-      "doc": "per crouch/stand toggle that undoes the last one within 0.5 s with no shot fired or taken in between (squat spam). Crouch-peeking in a fight stays free."
+      "doc": "per crouch/stand toggle that undoes the last one within 0.5 s with no shot fired or taken in between (squat spam). Crouch-peeking in a fight stays free.",
+      "ramp": true
     },
     "jumpSpam": {
-      "w": -0.002,
+      "w": -0.01,
       "helper": false,
-      "doc": "per jump with no combat (shots, damage dealt or taken) in the last second. Jumps in a fight stay free; a climbing jump costs this small amount too."
+      "doc": "per jump with no combat (shots, damage dealt or taken) in the last second. Jumps in a fight stay free; a climbing jump costs this small amount too.",
+      "ramp": true
     },
     "strafeJitter": {
-      "w": -0.002,
+      "w": -0.01,
       "helper": false,
-      "doc": "per left/right strafe reversal within 0.5 s of the last one, while not hit in the last second. Strafe-dodging under fire stays free."
+      "doc": "per left/right strafe reversal within 0.5 s of the last one, while not hit in the last second. Strafe-dodging under fire stays free.",
+      "ramp": true
     },
     "turnJitter": {
-      "w": -0.002,
+      "w": -0.01,
       "helper": false,
-      "doc": "per big turn (1/4 of the turn cap or more) that reverses the last big one within 0.5 s, with no enemy on screen."
+      "doc": "per big turn (1/4 of the turn cap or more) that reverses the last big one within 0.5 s, with no enemy on screen.",
+      "ramp": true
     },
     "abilityWasted": {
-      "w": -0.004,
+      "w": -0.02,
       "helper": false,
-      "doc": "per ability use with no enemy seen and no combat in the last 2 s."
+      "doc": "per ability use with no enemy seen and no combat in the last 2 s.",
+      "ramp": true
     }
   },
   "no_progress_after_s": 10

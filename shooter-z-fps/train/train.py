@@ -191,6 +191,7 @@ class Trainer(BaseCallback):
 
     # ---- SB3 hooks ----------------------------------------------------------------------------------
     def _on_training_start(self) -> None:
+        self.training_env.ramp_scale = float(np.clip(self.num_timesteps / max(1, self.args.ramp_end), 0, 1))
         if getattr(self, "resuming", False):
             self.switch()  # the servers play the restored stage (and a snapshot from the pool)
             return
@@ -236,6 +237,7 @@ class Trainer(BaseCallback):
         L.record("train/stage", self.stage)
         L.record("league/pool_size", len(self.pool))
         L.record("train/helper_scale", self.training_env.helper_scale)
+        L.record("train/ramp_scale", self.training_env.ramp_scale)
         self.terms.clear(); self.rollout_ends.clear(); self.decisions = 0
 
         t = self.num_timesteps
@@ -252,6 +254,7 @@ class Trainer(BaseCallback):
             span = max(1, self.args.fade_end - self.selfplay_started)
             frac = (t - self.selfplay_started) / span
             self.training_env.helper_scale = float(np.clip(2 - 2 * frac, 0, 1))
+        self.training_env.ramp_scale = float(np.clip(t / max(1, self.args.ramp_end), 0, 1))  # wasted-move costs grow in
         if changed:
             self.switch()  # a new stage: every server restarts
         elif STAGES[self.stage][1] is None and self.pool:
@@ -320,7 +323,7 @@ class Trainer(BaseCallback):
 
     def evaluate(self) -> None:
         """32 deterministic matches against Normal bots on fixed seeds (a fixed yardstick), and with
-        --ref-policy 32 against that fixed reference model (the main measure in AI-only self-play)
+        --ref-policy 64 against that fixed reference model (the main measure in AI-only self-play)
         -> progress.csv (learning curves)."""
         res = play_matches(self.model.policy, self.eval_port, "normal", 32, EVAL_SEED, MAX_TICKS)
         row = {"steps": self.num_timesteps, "minutes": round((time.time() - self.started) / 60, 1), "stage": STAGES[self.stage][0], **res}
@@ -328,7 +331,7 @@ class Trainer(BaseCallback):
             if self.ref is None:
                 self.ref = DetSnapshot(self.model.policy, Path(self.args.ref_policy))
             rec: list = []
-            ref = play_matches(self.model.policy, self.eval_port, "policy", 32, EVAL_SEED, MAX_TICKS, opponent_policy=self.ref, records=rec)
+            ref = play_matches(self.model.policy, self.eval_port, "policy", 64, EVAL_SEED, MAX_TICKS, opponent_policy=self.ref, records=rec)
             k, d = sum(x["kills"] for x in rec), sum(x["deaths"] for x in rec)
             row |= {"ref_win_rate": ref["win_rate"], "ref_loss_rate": float(np.mean([x["lost"] for x in rec])), "ref_kill_share": k / max(k + d, 1)}
             self.logger.record("eval/kill_share_vs_ref", row["ref_kill_share"])
@@ -398,10 +401,12 @@ def main() -> None:
     p.add_argument("--selfplay-bots", action="store_true", help="in self-play, 1 of the 5 servers plays heuristic bots (random level per match)")
     p.add_argument("--ref-policy", type=Path, help="fixed reference opponent for the progress benchmark (a policy_<steps>.pt)")
     p.add_argument("--init-policy", type=Path, help="start from these weights (a snapshots/policy_<steps>.pt); without --curriculum it goes straight to self-play")
+    p.add_argument("--ramp-end", type=float, default=None, help="step at which the ramp terms (wasted-move costs) reach full weight (default: 80%% of --timesteps)")
     p.add_argument("--fade-end", type=float, default=None, help="step at which the helper rewards reach 0 (default: --timesteps)")
     args = p.parse_args()
     args.timesteps, args.snapshot_every, args.eval_every = int(args.timesteps), int(args.snapshot_every), int(args.eval_every)
     args.fade_end = int(args.fade_end) if args.fade_end else args.timesteps
+    args.ramp_end = int(args.ramp_end) if args.ramp_end else int(0.8 * args.timesteps)
 
     torch.set_num_threads(args.threads)
     random.seed(args.seed); np.random.seed(args.seed); torch.manual_seed(args.seed)

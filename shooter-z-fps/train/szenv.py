@@ -49,12 +49,13 @@ def enemy_visible(obs: np.ndarray) -> np.ndarray:
     return (rays[:, :, ENEMY_LABELS] > 0).any(axis=(1, 2)).astype(np.float32)
 
 
-def load_reward(path: Path = HERE / "reward.json") -> tuple[dict[str, float], set[str], float]:
-    """({term: weight}, {helper terms}, no-progress seconds)."""
+def load_reward(path: Path = HERE / "reward.json") -> tuple[dict[str, float], set[str], float, set[str]]:
+    """({term: weight}, {helper terms}, no-progress seconds, {ramp terms})."""
     cfg = json.loads(path.read_text())
     weights = {k: float(v["w"]) for k, v in cfg["weights"].items()}
     helpers = {k for k, v in cfg["weights"].items() if v.get("helper")}
-    return weights, helpers, float(cfg.get("no_progress_after_s", 10))
+    ramps = {k for k, v in cfg["weights"].items() if v.get("ramp")}
+    return weights, helpers, float(cfg.get("no_progress_after_s", 10)), ramps
 
 
 def to_vector(md: np.ndarray) -> np.ndarray:
@@ -194,7 +195,9 @@ class ShooterVecEnv(VecEnv):
         self.frozen_of = [frozen] * n_envs
         self.frozen_next = None
         self.frozen_state, self.frozen_start = None, None
-        self.weights, self.helpers, no_progress_s = reward or load_reward()
+        self.weights, self.helpers, no_progress_s, *rest = reward or load_reward()
+        self.ramps = rest[0] if rest else set()
+        self.ramp_scale = 1.0  # the trainer grows ramp terms from 0 to 1 by setting this
         self.no_progress_after = int(no_progress_s * self.hello["tick_hz"] / self.hello["decision_ticks"])
         self.helper_scale = 1.0  # the trainer fades helper terms by lowering this
         self._calm = np.zeros(self.wire_agents, dtype=np.int64)  # decisions since damage dealt or taken
@@ -286,8 +289,8 @@ class ShooterVecEnv(VecEnv):
             terms[k] = moves[k]
         for k, v in moves.items():
             self._moves_ep[k] += v
-        scaled = {name: self.weights.get(name, 0.0) * (self.helper_scale if name in self.helpers else 1.0) * v
-                  for name, v in terms.items()}
+        scaled = {name: self.weights.get(name, 0.0) * (self.helper_scale if name in self.helpers else 1.0)
+                  * (self.ramp_scale if name in self.ramps else 1.0) * v for name, v in terms.items()}
         rewards = sum(scaled.values())
         dones = terminated | truncated
         self._ep += ev
@@ -378,9 +381,11 @@ class MultiShooterVecEnv(VecEnv):
         self._cuts = np.cumsum([0] + [e.num_envs for e in self.envs])
 
     def reconfigure(self, specs: list[dict]) -> np.ndarray:
+        helper, ramp = self.helper_scale, self.ramp_scale
         for e in self.envs:
             e.close()
         self.envs = [ShooterVecEnv(**s) for s in specs]
+        self.helper_scale, self.ramp_scale = helper, ramp  # new servers keep the current reward schedule
         total = sum(e.num_envs for e in self.envs)
         if total != self.num_envs:
             raise ValueError(f"a stage must keep {self.num_envs} training agents, this one has {total}")
@@ -393,10 +398,19 @@ class MultiShooterVecEnv(VecEnv):
         if new.num_envs != self.envs[k].num_envs:
             new.close()
             raise ValueError(f"server {k} must keep {self.envs[k].num_envs} training agents, the new one has {new.num_envs}")
-        new.helper_scale = self.envs[k].helper_scale
+        new.helper_scale, new.ramp_scale = self.envs[k].helper_scale, self.envs[k].ramp_scale
         self.envs[k].close()
         self.envs[k] = new
         return new.reset()
+
+    @property
+    def ramp_scale(self) -> float:
+        return self.envs[0].ramp_scale
+
+    @ramp_scale.setter
+    def ramp_scale(self, v: float) -> None:
+        for e in self.envs:
+            e.ramp_scale = v
 
     @property
     def helper_scale(self) -> float:
