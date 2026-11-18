@@ -4,7 +4,8 @@
 AI that sees only what you could see: no wall hacks. Two small maps, 1v1, 2v2 (you and an AI teammate) or
 1 vs 3 free-for-all, four characters with one ability each.
 
-**Play:** run it locally for now (see below). It is not deployed yet.
+**Play:** [shooterz.theonlygoatsan.com](https://shooterz.theonlygoatsan.com) (desktop with mouse and keyboard, or a
+phone held sideways; on a phone in portrait you can watch AI vs AI).
 
 > **New to this code?** Open this folder with an AI coding agent (Claude Code, Cursor, GitHub Copilot or
 > similar) and ask it to walk you through it. For example: *"Explain how src/core keeps the game
@@ -152,6 +153,14 @@ it); the four character models add about 4.2 MB (about 1 MB and 14.5k triangles 
 Graphics: **Normal** (default: soft shadows from one sun light, fake ambient occlusion, glow on lasers,
 anti-aliasing, pixel ratio capped at 1.5) or **Low** (no shadows, no anti-aliasing, pixel ratio 1, fewer
 props and particles) for computers that struggle. Pick it on the menu.
+
+## Deploy
+
+A static site (S3 + CloudFront) with SST, like the runner: `npx sst deploy --stage prod`. Local settings go in
+a gitignored `.env` next to `sst.config.ts` (`AWS_PROFILE`, and `SHOOTERZ_CERT_ARN` for the domain once its
+ACM certificate is issued). The AI model, the character models and the sounds are not in git: put them in
+`public/` before deploying (ASSETS.md). Hashed files (`assets/`) are cached for a year; everything that keeps
+its name (pages, model, characters, sounds) revalidates, so a new AI model reaches players within minutes.
 
 ## How it's built
 

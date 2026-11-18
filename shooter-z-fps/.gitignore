@@ -8,3 +8,8 @@ public/characters/
 public/sfx/
 # trained models: Hugging Face only, never git (copied here for local play)
 public/models/
+# SST (deploy): local state and generated types
+.sst/
+sst-env.d.ts
+# deploy settings (AWS profile, certificate ARN): local only
+.env
