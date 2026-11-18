@@ -14,7 +14,8 @@
     "match": "tsx src/headless/match.ts",
     "replay": "tsx src/headless/replay.ts",
     "server": "tsx src/headless/server.ts",
-    "deploy": "sst deploy --stage prod"
+    "deploy": "sst deploy --stage prod",
+    "refresh": "sst refresh --stage prod"
   },
   "devDependencies": {
     "@types/node": "^22.19.1",
