@@ -1,5 +1,5 @@
 // Character select preview: the chosen character turning slowly, aiming, and every few seconds its Special
-// Move with effects that make the move obvious, while the move's name flashes:
+// Move with effects that make the move obvious (its name is in the text panel next to it):
 //   Dash    = a quick dash across the plinth with speed lines and an afterimage trail
 //   Bulwark = the frontal energy shield
 //   Echo    = an expanding scan ring with a radar sweep
@@ -24,7 +24,6 @@ export class CharPreview {
   private t = 0;
   private spin = 0;
   private last = performance.now();
-  private flash: HTMLElement | null;
   // effects
   private lines = new THREE.Group();
   private ring: THREE.Mesh;
@@ -33,7 +32,6 @@ export class CharPreview {
   running = true;
 
   constructor(canvas: HTMLCanvasElement) {
-    this.flash = canvas.parentElement?.querySelector(".cp-flash") ?? null;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     this.renderer.setPixelRatio(1);
     this.renderer.setSize(360, 420, false);
@@ -91,9 +89,6 @@ export class CharPreview {
     const p = restPose();
     p.t = this.t;
     p.specialAge = age;
-    // the name flashes while the move plays
-    const flashFor = { dash: 1.2, shield: 2, scan: 1.6, cloak: 2.8 }[ch.ability];
-    if (this.flash) this.flash.classList.toggle("on", age < flashFor);
     // defaults
     m.root.position.set(0, 0, 0);
     this.lines.visible = false;
@@ -189,6 +184,5 @@ export class CharPreview {
     const mat = (this.lines.children[0] as THREE.Mesh).material as THREE.MeshBasicMaterial;
     mat.color.set(ch.accent);
     for (const m of [this.ring, this.shell, this.sweep]) (m.material as THREE.MeshBasicMaterial).color.set(ch.accent);
-    if (this.flash) { this.flash.textContent = ch.abilityName; this.flash.style.setProperty("--c", ch.accent); }
   }
 }

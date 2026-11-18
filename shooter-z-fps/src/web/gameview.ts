@@ -40,7 +40,6 @@ export class GameView {
   readonly map: MapView;
   readonly fx: Fx;
   readonly robots: RobotView[] = [];
-  private xray: THREE.Mesh[][] = [];
   private spawnAt: number[]; private specialAt: number[]; private airSince: number[];
   private markers: THREE.Sprite[] = [];
   private prev: { x: number; y: number; z: number; yaw: number }[];
@@ -88,7 +87,6 @@ export class GameView {
         if (this.stage.scene !== sceneNow) return; // a new match has started since
         for (const r of this.robots) sceneNow.remove(r.root);
         this.robots.length = 0;
-        this.xray.length = 0;
         this.addRobots(opts.colors);
       });
     }
@@ -123,30 +121,10 @@ export class GameView {
       const r = makeRobot(CHARACTERS[a.character].accent, this.stage.graphics === "normal", a.character, true);
       scene.add(r.root);
       this.robots.push(r);
-      // x-ray copy of every part: drawn through walls when the reveal rules say so
-      const xm = new THREE.MeshBasicMaterial({ color: this.colors[a.id], transparent: true, opacity: 0.5, depthTest: false, depthWrite: false });
-      const list: THREE.Mesh[] = [];
-      for (const m of r.meshes) {
-        const sk = m as THREE.SkinnedMesh;
-        let x: THREE.Mesh;
-        if (sk.isSkinnedMesh) {
-          // follows the same skeleton as the body
-          const xs = new THREE.SkinnedMesh(sk.geometry, xm);
-          xs.bind(sk.skeleton, sk.bindMatrix);
-          xs.frustumCulled = false;
-          x = xs;
-        } else x = new THREE.Mesh(m.geometry, xm);
-        x.renderOrder = 20;
-        x.visible = false;
-        m.add(x);
-        list.push(x);
-      }
-      this.xray.push(list);
+      // no body outlines: friend or foe and reveals are shown only by the arrow over the head
     }
-    // compile the robot shaders now (x-ray copies included), not on the first hit mid-fight
-    for (const l of this.xray) for (const x of l) x.visible = true;
+    // compile the robot shaders now, not on the first hit mid-fight
     this.stage.renderer.compile(scene, this.stage.camera);
-    for (const l of this.xray) for (const x of l) x.visible = false;
   }
 
   private buildViewmodel(color: string): void {
@@ -303,23 +281,6 @@ export class GameView {
       // first person: our own robot only casts its shadow (shown again on the death cam)
       const hidden = a.id === this.viewer && a.alive;
       for (const m of r.meshes) m.layers.set(hidden ? SELF_LAYER : 0);
-      // x-ray: outlined for the viewer after a hit, revealed when idle, teammates always
-      let xr = false;
-      if (outlineViewer >= 0 && a.alive && a.id !== outlineViewer) {
-        const mate = a.team === g.agents[outlineViewer].team;
-        // death cam: the robot that got you is highlighted until you respawn
-        if (!g.agents[outlineViewer].alive && this.killedBy[outlineViewer] === a.id) xr = true;
-        xr = xr || mate || a.outlineFor[outlineViewer] > 0 || a.revealTicks > 0 || a.scanFor[g.agents[outlineViewer].team] > 0;
-        if (mate && g.cloaked(a)) xr = false;
-      }
-      const pulse = 0.38 + 0.14 * Math.sin(this.time * 10);
-      const xrMate = outlineViewer >= 0 && a.team === g.agents[outlineViewer].team;
-      for (const x of this.xray[a.id]) {
-        x.visible = xr;
-        const xm = x.material as THREE.MeshBasicMaterial;
-        xm.opacity = pulse;
-        xm.color.copy(xrMate ? MATE : FOE);
-      }
       // marker arrow
       const mk = this.markers[a.id];
       let show = false, mate = false;
@@ -329,7 +290,9 @@ export class GameView {
         if (mate) show = true;
         else {
           const revealed = a.outlineFor[markerViewer] > 0 || a.revealTicks > 0 || a.scanFor[v.team] > 0;
-          show = revealed || (v.alive && this.canSee(v, a));
+          // death cam: the robot that got you keeps its red arrow until you respawn
+          const killer = !v.alive && this.killedBy[markerViewer] === a.id;
+          show = revealed || killer || (v.alive && this.canSee(v, a));
         }
       }
       mk.visible = show;

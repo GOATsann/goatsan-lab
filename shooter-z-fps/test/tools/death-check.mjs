@@ -17,7 +17,8 @@ await p.click("#play");
 const state = () => p.evaluate(() => {
   const z = window.shooterZ, g = z.match.game, me = g.agents[0], c = z.view.stage.camera.position;
   const eyeDist = Math.hypot(c.x - me.x, c.y - (me.y + 1.62), c.z - me.z);
-  return { alive: me.alive, deaths: me.deaths, eyeDist, center: document.querySelector(".center")?.textContent ?? "", tick: g.tick };
+  const k = z.view.killedBy?.[0] ?? -1;
+  return { alive: me.alive, deaths: me.deaths, eyeDist, center: document.querySelector(".center")?.textContent ?? "", tick: g.tick, killerArrow: k >= 0 ? z.view.markers[k].visible : null };
 });
 let s = await state();
 const t0 = Date.now();
@@ -37,6 +38,6 @@ while (!back.alive && Date.now() - t0 < 100000) { await p.waitForTimeout(100); b
 await p.waitForTimeout(300);
 back = await state();
 await p.screenshot({ path: `${out}/deathcam-respawned.png` });
-Object.assign(result, { earlyCamDist: early.eyeDist.toFixed(2), lateCamDist: late.eyeDist.toFixed(2), center: late.center, respawned: back.alive, respawnCamDist: back.eyeDist.toFixed(2) });
+Object.assign(result, { earlyCamDist: early.eyeDist.toFixed(2), lateCamDist: late.eyeDist.toFixed(2), center: late.center, killerArrowOnDeathCam: late.killerArrow, respawned: back.alive, respawnCamDist: back.eyeDist.toFixed(2) });
 console.log(JSON.stringify({ ...result, errors: errs.length ? errs : "none" }));
 await b.close();

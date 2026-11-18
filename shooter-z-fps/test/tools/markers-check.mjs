@@ -40,7 +40,7 @@ await p.click("[data-setting=map] [data-v=base]");
 await p.click("#play");
 playAt = (Date.now() - tStart) / 1000;
 await p.waitForTimeout(1500);
-const stats = { frames: 0, mateShown: 0, mateMissing: 0, foeShown: 0, foeShownThroughWall: 0, foeVisibleButHidden: 0, foeRevealedShown: 0 };
+const stats = { outlinedFrames: 0, frames: 0, mateShown: 0, mateMissing: 0, foeShown: 0, foeShownThroughWall: 0, foeVisibleButHidden: 0, foeRevealedShown: 0 };
 let shot = 0;
 const t0 = Date.now();
 while (Date.now() - t0 < 45000) {
@@ -55,7 +55,9 @@ while (Date.now() - t0 < 45000) {
       const sees = me.alive && (g.world.clear(me.x, eye, me.z, a.x, a.y + 1.6 * h, a.z) || g.world.clear(me.x, eye, me.z, a.x, a.y + 1.15 * h, a.z));
       const cloakedFar = g.cloaked(a) && Math.hypot(a.x - me.x, a.z - me.z) > 6;
       const revealed = a.outlineFor[0] > 0 || a.revealTicks > 0 || a.scanFor[me.team] > 0;
-      rows.push({ mate: a.team === me.team, shown: mk.visible, color: "#" + mk.material.color.getHexString(), sees: sees && !cloakedFar, revealed });
+      let outlined = false; z.view.robots[a.id].root.traverse((o) => { if (o.material && o.material.depthTest === false && o.visible && o !== mk) outlined = true; });
+      const killer = !me.alive && z.view.killedBy[0] === a.id;
+      rows.push({ killer, outlined, mate: a.team === me.team, shown: mk.visible, color: "#" + mk.material.color.getHexString(), sees: sees && !cloakedFar, revealed });
     }
     // turn slowly so robots come in and out of view
     z.input.addMouse(3, 0);
@@ -64,8 +66,9 @@ while (Date.now() - t0 < 45000) {
   stats.frames++;
   let mateUp = false, foeUp = false;
   for (const r of f) {
+    if (r.outlined) stats.outlinedFrames++;
     if (r.mate) { if (r.shown) { stats.mateShown++; mateUp = true; } else stats.mateMissing++; continue; }
-    if (r.shown) { stats.foeShown++; foeUp = true; if (!r.sees && !r.revealed) stats.foeShownThroughWall++; if (r.revealed && !r.sees) stats.foeRevealedShown++; }
+    if (r.shown) { stats.foeShown++; foeUp = true; if (!r.sees && !r.revealed && !r.killer) stats.foeShownThroughWall++; if (r.killer) stats.killerOnDeathCam = (stats.killerOnDeathCam ?? 0) + 1; if (r.revealed && !r.sees) stats.foeRevealedShown++; }
     else if (r.sees || r.revealed) stats.foeVisibleButHidden++;
   }
   if (mateUp && foeUp && shot < 3) { await p.screenshot({ path: `${out}/markers-${shot}.png` }); shot++; }
