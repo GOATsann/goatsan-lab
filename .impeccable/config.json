@@ -12,6 +12,20 @@
         ],
         "createdAt": "2026-11-15T04:07:15.735Z",
         "reason": "Claude: Inter is only the body face; the display face is Chakra Petch, and the body matches the build #1 explainer page so the series looks consistent"
+      },
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-11-18T14:41:19.286Z"
+      },
+      {
+        "rule": "dark-glow",
+        "value": "*",
+        "files": [
+          "shooter-z-fps/capture.html"
+        ],
+        "createdAt": "2026-11-18T16:40:41.238Z",
+        "reason": "Claude: capture.html is the internal page used to film build-process clips (laser glow on a dark arena is the game's intended effect), not a product UI"
       }
     ]
   }
