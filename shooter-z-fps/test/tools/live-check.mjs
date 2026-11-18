@@ -9,7 +9,7 @@ const errs = [];
 // ---- 1. content types and caching of every kind of file
 const html = await (await fetch(`${base}/`)).text();
 const assetJs = html.match(/assets\/main-[^"]+\.js/)?.[0];
-const files = ["/", `/${assetJs}`, "/models/shooter-ai.onnx", "/models/shooter-ai.json", "/characters/dash.glb", "/characters/characters.json", "/sfx/echo.mp3"];
+const files = ["/", `/${assetJs}`, "/models/shooter-ai-28m.onnx", "/models/shooter-ai-28m.json", "/models/shooter-ai-34m.onnx", "/models/shooter-ai-34m.json", "/characters/dash.glb", "/characters/characters.json", "/sfx/echo.mp3"];
 for (const f of files) {
   const r = await fetch(`${base}${f}`, { method: "HEAD" });
   report.headers[f.replace(/main-[^.]+\./, "main-*.")] = { status: r.status, type: r.headers.get("content-type"), cache: r.headers.get("cache-control"), size: r.headers.get("content-length") };

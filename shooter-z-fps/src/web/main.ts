@@ -16,7 +16,7 @@ import { Stage, type Graphics } from "./stage";
 import { CharPreview } from "./charpreview";
 import { Tutorial, TUTORIAL_MAP } from "./tutorial";
 import { TouchControls } from "./touch";
-import { loadTrainedModel, retryModelLoad, TrainedAiController, type TrainedModel } from "./trained-ai";
+import { AiTeam, loadedModel, loadTrainedModel, type ModelId, retryModelLoad, TrainedAiController } from "./trained-ai";
 import { RANGE } from "../core/config";
 import { cos, sin } from "../core/fmath";
 import * as THREE from "three";
@@ -50,9 +50,12 @@ const settings = {
   touchSens: Number(store.get("touchSens") ?? 1),
   // phones: Simple firing (fires while the crosshair is on a visible enemy) or Advanced (manual Fire)
   fireMode: (store.get("fireMode") ?? "simple") as "simple" | "advanced",
+  // AI level: Easy = model A at 28M steps, Hard = A at 34M steps. Phones start on Easy.
+  aiLevel: (store.get("aiLevel") ?? (touchDevice ? "easy" : "hard")) as "easy" | "hard",
 
 };
 if (!MODES[settings.mode]) settings.mode = "duel";
+if (settings.aiLevel !== "easy" && settings.aiLevel !== "hard") settings.aiLevel = "easy";
 if (!(settings.character >= 0 && settings.character < CHARACTERS.length)) settings.character = 0;
 
 const canvas = $<HTMLCanvasElement>("view");
@@ -90,24 +93,63 @@ interface Session {
   backdrop: boolean; // the live match behind the menu
   tutorial: Tutorial | null;
   /** the trained AI driving the "external" robots, if any */
-  ai: TrainedAiController | null;
+  ai: AiTeam | null;
 }
 
 // ---- the trained AI plays every robot that isn't you (opponents, 2v2 teammate, Watch AI vs AI).
 // The hand-written rule bots are for testing and training only: the ?rulebots dev flag (not in the UI).
+// Two models: "28m" plays Easy, "34m" plays Hard. Two copies of the 34M model rarely fight each other, so
+// every AI-vs-AI pairing that matters includes a 28M robot (see modelsFor).
 const ruleBots = params.has("rulebots");
-let aiModel: TrainedModel | null = null;
 let aiState: "idle" | "loading" | "ready" | "error" = "idle";
 const wantAI = () => !ruleBots;
-/** Load the model (once; the menu's Retry tries again after a failure). */
-async function ensureAI(): Promise<void> {
-  if (!wantAI() || aiModel) return;
-  aiState = "loading"; showAiState();
-  aiModel = await loadTrainedModel();
-  aiState = aiModel ? "ready" : "error";
-  showAiState();
-  // the menu's live backdrop switches to the AI as soon as it's here
-  if (aiModel && state === "menu" && S?.backdrop && !S.ai) startMatch("backdrop", settings.map);
+const levelModel = (): ModelId => (settings.aiLevel === "hard" ? "34m" : "28m");
+/** Which model plays each slot (null: the human, or no AI). */
+function modelsFor(kind: "play" | "watch" | "backdrop", mode: Mode, slots: Slot[]): (ModelId | null)[] {
+  const teams = MODES[mode].teams;
+  return slots.map((sl, i) => {
+    if (sl.kind === "human") return null;
+    if (kind !== "play") {
+      // AI vs AI: 34M against 28M (teams 0 vs 1; free-for-all alternates)
+      return (mode === "ffa" ? i % 2 === 0 : teams[i] === 0) ? "34m" : "28m";
+    }
+    if (settings.aiLevel === "easy") return "28m";
+    if (mode === "team") return teams[i] === teams[0] ? "28m" : "34m"; // your teammate 28M, opponents 34M
+    if (mode === "ffa") return i === slots.length - 1 ? "28m" : "34m"; // 2x 34M + 1x 28M, so they fight each other too
+    return "34m";
+  });
+}
+/** The models a kind of match needs. */
+function modelsNeeded(kind: "play" | "watch" | "backdrop"): ModelId[] {
+  if (kind !== "play") return ["34m", "28m"];
+  if (settings.aiLevel === "easy") return ["28m"];
+  return settings.mode === "duel" ? ["34m"] : ["34m", "28m"];
+}
+const modelsReady = (ids: ModelId[]) => ids.every((id) => loadedModel(id));
+/** Load the models a match needs (each once; the menu's Retry tries again after a failure). The menu
+ *  waits for the selected level's model; the other one loads after it (Watch and the menu backdrop use both). */
+async function ensureAI(ids: ModelId[] = [levelModel()]): Promise<boolean> {
+  if (!wantAI()) return true;
+  if (modelsReady(ids)) return true;
+  const primary = ids.includes(levelModel()) && !loadedModel(levelModel());
+  if (primary) { aiState = "loading"; showAiState(); }
+  const ok = (await Promise.all(ids.map((id) => loadTrainedModel(id)))).every(Boolean);
+  if (primary || !ok) { aiState = ok ? "ready" : "error"; showAiState(); }
+  return ok;
+}
+/** At start: the level's model first (Play waits only for it), then the other one for the backdrop and Watch. */
+async function preloadAI(): Promise<void> {
+  if (!wantAI()) return;
+  if (!(await ensureAI([levelModel()]))) return;
+  backdropAI();
+  await ensureAI(["34m", "28m"]);
+  backdropAI();
+}
+/** The menu's live backdrop switches to the AI as soon as its models are here. */
+function backdropAI(): void {
+  if (state !== "menu" || !S?.backdrop) return;
+  const have = S.ai ? new Set(Object.values(S.ai.models)) : new Set<ModelId>();
+  if (modelsReady(["34m", "28m"]) ? have.size < 2 : !S.ai && loadedModel("28m")) startMatch("backdrop", settings.map);
 }
 function showAiState(): void {
   const el = $("aiStatus");
@@ -150,7 +192,22 @@ function startMatch(kind: "play" | "watch" | "backdrop" | "tutorial", mapOverrid
   // (until the model is here, the menu backdrop's robots just stand still: never rule bots on screen)
   if (useAI) slots.forEach((sl, i) => { if (sl.kind === "bot") { slots[i] = { kind: "external", name: sl.name, character: sl.character }; aiSlots.push(i); } });
   const match = new Match(seed, { map, mode, scoreLimit: kind === "backdrop" ? 50 : tut ? 999 : settings.limit, slots });
-  const ai = useAI && aiModel && aiSlots.length ? new TrainedAiController(aiModel, match, aiSlots) : null;
+  let ai: AiTeam | null = null;
+  if (useAI && aiSlots.length) {
+    // one batched controller per model. The backdrop shows 34M vs 28M once both are here; until then
+    // 28M plays every robot (two 34M robots barely fight), and with neither, the robots stand still.
+    const want = modelsFor(kind as "play" | "watch" | "backdrop", mode, slots);
+    const both = modelsReady(["34m", "28m"]);
+    const groups = new Map<ModelId, number[]>();
+    for (const i of aiSlots) {
+      let id = want[i]!;
+      if (kind === "backdrop" && !both) id = "28m";
+      if (!loadedModel(id)) continue;
+      groups.set(id, [...(groups.get(id) ?? []), i]);
+    }
+    const parts = [...groups].map(([id, sl]) => new TrainedAiController(loadedModel(id)!, match, sl));
+    if (parts.length) ai = new AiTeam(parts);
+  }
   const colors = slotColors(mode);
   const self = spectate ? -1 : 0;
   const view = new GameView(stage, match, { look: "final", self, colors });
@@ -330,7 +387,7 @@ function startTouch(kind: "play" | "tutorial"): void {
   input.forceLocked = true;
   sfx.unlock();
   goFullscreen();
-  void withAI(() => { hideMenu(); state = "play"; startMatch(kind); });
+  void withAI("play", () => { hideMenu(); state = "play"; startMatch(kind); });
 }
 
 /** Free camera: WASD fly, mouse look (click to lock), Space up, C down, Shift faster. */
@@ -400,7 +457,7 @@ input.onKey = (code) => {
   if (code === "Tab") s.hud.showBoard = true;
   if (code === "KeyH") { hudVisible = !hudVisible; s.hud.setVisible(hudVisible); }
   if (code === "KeyM") sfx.setMuted(!sfx.muted);
-  if (code === "Enter" && state === "play" && (s.match.game.over || s.tutorial?.done)) { lockAndGo(); void withAI(() => { startMatch("play"); state = "play"; }); }
+  if (code === "Enter" && state === "play" && (s.match.game.over || s.tutorial?.done)) { lockAndGo(); void withAI("play", () => { startMatch("play"); state = "play"; }); }
   if (code === "KeyN" && s.tutorial && !s.tutorial.done && state === "play") { s.tutorial.next(); if (s.tutorial.done) store.set("tutorialDone", "1"); }
   if (code === "Escape" && (s.spectator || s.match.game.over || s.tutorial?.done)) showMenu();
   if (state === "play") {
@@ -485,7 +542,7 @@ function hideMenu(): void { $("menu").hidden = true; preview.running = false; }
 
 function refreshMenu(): void {
   for (const seg of document.querySelectorAll<HTMLElement>(".seg[data-setting]")) {
-    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics" | "limit" | "fireMode" | "effects" | "music";
+    const key = seg.dataset.setting as "mode" | "map" | "skill" | "aiLevel" | "graphics" | "limit" | "fireMode" | "effects" | "music";
     seg.setAttribute("role", "radiogroup");
     for (const b of seg.querySelectorAll<HTMLButtonElement>("button")) { b.classList.toggle("on", b.dataset.v === String(settings[key])); b.setAttribute("role", "radio"); }
   }
@@ -526,7 +583,7 @@ for (const seg of document.querySelectorAll<HTMLElement>(".seg[data-setting]")) 
   seg.addEventListener("click", (e) => {
     const b = (e.target as HTMLElement).closest("button") as HTMLButtonElement | null;
     if (!b) return;
-    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics" | "limit" | "fireMode" | "effects" | "music";
+    const key = seg.dataset.setting as "mode" | "map" | "skill" | "aiLevel" | "graphics" | "limit" | "fireMode" | "effects" | "music";
     const v = b.dataset.v!;
     if (key === "graphics") {
       if (v !== settings.graphics) { store.set("graphics", v); location.reload(); }
@@ -542,20 +599,20 @@ for (const seg of document.querySelectorAll<HTMLElement>(".seg[data-setting]")) 
 }
 $<HTMLInputElement>("sens").addEventListener("input", (e) => { settings.sens = Number((e.target as HTMLInputElement).value); store.set("sens", String(settings.sens)); input.sensitivity = 0.0022 * settings.sens; });
 
-/** Start once the trained AI is here (Play and Watch are disabled until then; see showAiState). */
-async function withAI(go: () => void): Promise<void> {
-  if (wantAI() && !aiModel) await ensureAI();
-  if (wantAI() && !aiModel) return; // couldn't load: the menu says so and offers Retry
+/** Start once the AI models this match needs are here (Play and Watch are disabled until the level's
+ *  model is; see showAiState). */
+async function withAI(kind: "play" | "watch", go: () => void): Promise<void> {
+  if (!(await ensureAI(modelsNeeded(kind)))) return; // couldn't load: the menu says so and offers Retry
   go();
 }
-$("aiRetry").addEventListener("click", () => { retryModelLoad(); void ensureAI(); });
+$("aiRetry").addEventListener("click", () => { retryModelLoad(); void preloadAI(); });
 $("play").addEventListener("click", () => {
   lockAndGo(); // inside the click: browsers only lock the mouse on a user gesture
-  void withAI(() => { hideMenu(); state = "play"; startMatch("play"); });
+  void withAI("play", () => { hideMenu(); state = "play"; startMatch("play"); });
 });
 const watch = () => {
   sfx.unlock();
-  void withAI(() => { hideMenu(); state = "watch"; autoDirector = true; startMatch("watch"); });
+  void withAI("watch", () => { hideMenu(); state = "watch"; autoDirector = true; startMatch("watch"); });
 };
 $("watch").addEventListener("click", watch);
 $("tutorial").addEventListener("click", () => {
@@ -569,7 +626,8 @@ $("watchPhone").addEventListener("click", watch);
 refreshMenu();
 // every match needs the trained AI: load it right away (Play and Watch wait for it)
 $("levelField").hidden = !ruleBots;
-void ensureAI();
+$("aiLevelField").hidden = ruleBots;
+void preloadAI();
 if (params.get("start") === "play" && !phone) { hideMenu(); state = "play"; startMatch("play"); }
 else if (params.get("start") === "tutorial" && (!phone || params.has("autotest"))) { hideMenu(); state = "play"; startMatch("tutorial"); }
 else if (params.get("start") === "watch") watch();

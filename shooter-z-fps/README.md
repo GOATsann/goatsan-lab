@@ -90,10 +90,14 @@ Low graphics (changeable on the menu). The tutorial works with touch and shows t
 **The AI.** Every robot that isn't you (opponents, your 2v2 teammate, both sides in Watch AI vs AI) is the
 trained AI: a PPO policy with LSTM memory that taught itself to play against the rule bots and itself
 (see "The AI plan" below). It runs in your browser with onnxruntime-web (WASM, in its own worker), deciding
-every 3 ticks from exactly the observation and actions it was trained with. There is one AI level for now;
-the menu shows "Loading the AI..." until the model is here, and "Couldn't load the AI. Retry" if it fails.
-The model file (`public/models/shooter-ai.onnx` + `.json`, about 5.5 MB) is not in this repo; it comes from
-the training side (Hugging Face).
+every 3 ticks from exactly the observation and actions it was trained with. There are two AI levels. Easy
+is model A at 28M training steps, and Hard is model A at 34M steps. Two copies of the 34M model rarely fight
+each other, so every AI-vs-AI pairing includes a 28M robot. Watch AI vs AI and the menu background show 34M
+against 28M. On Hard, your 2v2 teammate is the 28M model and both opponents are 34M, and in 1 vs 3 two
+opponents are 34M and one is 28M. Each model loads only when a match needs it. The menu shows "Loading the
+AI..." until the selected level's model is here, and "Couldn't load the AI. Retry" if it fails.
+The model files (`public/models/shooter-ai-28m.onnx` and `shooter-ai-34m.onnx`, each with a `.json`, about
+5.5 MB each) are not in this repo; they come from the training side.
 
 The hand-written **rule bots** (below) are kept for testing and training only: add `?rulebots` to the URL
 to play against them, with their Easy / Normal / Hard levels on the menu. The tutorial's training target is
@@ -202,8 +206,11 @@ The design notes for the learning AI are in the BULSHY.FM ideas folder (not in t
 the observation and action interfaces the RL agent will use, fair heuristic bots that use exactly those
 interfaces, replays, the batch server, tests.
 
-**Done (phase 2, first AI):** the trained AI plays in the browser (model A at 28M steps: wins 80 / 57 / 47 %
-against the Easy / Normal / Hard rule bots). The training code is in `train/`.
+**Done (phase 2, first AI):** the trained AI plays in the browser. Model A at 34M steps
+([TheOnlyGoatsan/shooter-z-ppo-lstm](https://huggingface.co/TheOnlyGoatsan/shooter-z-ppo-lstm/tree/d11d8df762355c06e6533686e24ab3e84f4659b7),
+pinned with its file hashes in `models.lock.json`) plays Hard. It takes 59% of the kills against the earlier
+model A at 28M steps, which plays Easy, and it trades 1.6 to 2.7 kills per death against the rule bots. The
+training code is in `train/`.
 
 **The plan for the AI that learns (phase 2):**
 - PPO with memory (LSTM). Rays through a small 1D/2D conv, memory slots and own state through an MLP, into

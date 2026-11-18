@@ -4,7 +4,8 @@
 //     all AI robots -> argmax per action part -> the json "decode" table -> fromVector(v, 0, turn cap)
 //   - the action holds for the decision's ticks; jump, ability and reload act on the first tick only
 //   - LSTM memory h = c = 0 at match start only, fed back every decision (also across respawns)
-// The model files live in public/models/ (gitignored; see ASSETS.md).
+// The model files live in public/models/ (gitignored; see ASSETS.md). Two models play: "28m" (A at 28M steps,
+// the Easy level) and "34m" (A at 34M steps, Hard). Each loads once, only when a match needs it.
 import { type Action, ACTION_SIZE, fromVector, noop } from "../core/actions";
 import { DECISION_TICKS } from "../core/config";
 import type { Game } from "../core/game";
@@ -20,28 +21,34 @@ export interface ModelInfo {
 type Ort = typeof import("onnxruntime-web/wasm");
 type Session = import("onnxruntime-web/wasm").InferenceSession;
 
-const MODEL_URL = "models/shooter-ai.onnx";
-const INFO_URL = "models/shooter-ai.json";
+export type ModelId = "28m" | "34m";
+const modelUrl = (id: ModelId) => `models/shooter-ai-${id}.onnx`;
+const infoUrl = (id: ModelId) => `models/shooter-ai-${id}.json`;
 
-let loading: Promise<TrainedModel | null> | null = null;
+const loading = new Map<ModelId, Promise<TrainedModel | null>>();
+const loaded = new Map<ModelId, TrainedModel>();
+
+/** The model if it has finished loading (no waiting). */
+export function loadedModel(id: ModelId): TrainedModel | null { return loaded.get(id) ?? null; }
 
 /** Is the model there? (cheap: the json only) */
-export async function modelAvailable(): Promise<ModelInfo | null> {
+export async function modelAvailable(id: ModelId): Promise<ModelInfo | null> {
   try {
-    const r = await fetch(INFO_URL);
+    const r = await fetch(infoUrl(id));
     if (!r.ok || !(r.headers.get("content-type") ?? "").includes("json")) return null;
     const info = (await r.json()) as ModelInfo;
     return info.obs_size === OBS_SIZE ? info : null;
   } catch { return null; }
 }
 
-/** Forget a failed load so the next loadTrainedModel() tries again (the menu's Retry). */
-export function retryModelLoad(): void { loading = null; }
+/** Forget failed loads so the next loadTrainedModel() tries again (the menu's Retry). */
+export function retryModelLoad(): void { for (const id of [...loading.keys()]) if (!loaded.has(id)) loading.delete(id); }
 
-/** Load the model once. Null if it can't be loaded. */
-export function loadTrainedModel(): Promise<TrainedModel | null> {
-  if (!loading) loading = (async () => {
-    const info = await modelAvailable();
+/** Load a model once. Null if it can't be loaded. */
+export function loadTrainedModel(id: ModelId): Promise<TrainedModel | null> {
+  let p = loading.get(id);
+  if (!p) loading.set(id, p = (async () => {
+    const info = await modelAvailable(id);
     if (!info) return null;
     try {
       const ort: Ort = await import("onnxruntime-web/wasm");
@@ -49,24 +56,27 @@ export function loadTrainedModel(): Promise<TrainedModel | null> {
       ort.env.wasm.numThreads = 1;
       // run inference in onnxruntime's own Web Worker so the game keeps its 60 fps
       ort.env.wasm.proxy = true;
-      const session = await ort.InferenceSession.create(MODEL_URL, { executionProviders: ["wasm"] });
-      return new TrainedModel(ort, session, info);
+      const session = await ort.InferenceSession.create(modelUrl(id), { executionProviders: ["wasm"] });
+      const m = new TrainedModel(ort, session, info, id);
+      loaded.set(id, m);
+      return m;
     } catch (e) {
       console.warn("Shooter Z: the AI model could not be loaded", e);
       return null;
     }
-  })();
-  return loading;
+  })());
+  return p;
 }
 
 export class TrainedModel {
-  constructor(readonly ort: Ort, readonly session: Session, readonly info: ModelInfo) {}
+  constructor(readonly ort: Ort, readonly session: Session, readonly info: ModelInfo, readonly id: ModelId) {}
   get label(): string { return `${this.info.model.split("/").pop()} · ${Math.round(this.info.steps / 1e6)}M steps`; }
 }
 
 /** Drives the AI robots of one match. */
 export class TrainedAiController {
   readonly slots: number[];
+  get modelId(): ModelId { return this.model.id; }
   private model: TrainedModel;
   private match: Match;
   private obs = new Observation();
@@ -152,6 +162,25 @@ export class TrainedAiController {
   }
 
   avgMs(): number { return this.times.length ? this.times.reduce((s, x) => s + x, 0) / this.times.length : 0; }
+}
+
+/** All the AI robots of one match: one batched controller per model (they decide in parallel). */
+export class AiTeam {
+  constructor(readonly parts: TrainedAiController[]) {}
+  /** which model plays each slot (debug and tests) */
+  get models(): Record<number, ModelId> {
+    const r: Record<number, ModelId> = {};
+    for (const p of this.parts) for (const s of p.slots) r[s] = p.modelId;
+    return r;
+  }
+  ready(ext: (Action | null | undefined)[]): boolean {
+    let ok = true;
+    for (const p of this.parts) ok = p.ready(ext) && ok; // every part starts its decision this frame
+    return ok;
+  }
+  afterTick(): void { for (const p of this.parts) p.afterTick(); }
+  get times(): number[] { return this.parts.flatMap((p) => p.times); }
+  avgMs(): number { const t = this.times; return t.length ? t.reduce((s, x) => s + x, 0) / t.length : 0; }
 }
 
 export { DECISION_TICKS };

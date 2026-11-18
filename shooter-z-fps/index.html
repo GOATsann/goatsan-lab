@@ -83,7 +83,13 @@
           </div>
         </div>
       </div>
-      <!-- one AI level for now; the rule-bot levels only show with the ?rulebots dev flag -->
+      <div class="field" id="aiLevelField">
+        <span class="label">AI level</span>
+        <div class="seg" data-setting="aiLevel" aria-label="AI level">
+          <button data-v="easy">Easy</button><button data-v="hard">Hard</button>
+        </div>
+      </div>
+      <!-- the rule-bot levels only show with the ?rulebots dev flag -->
       <div class="field" id="levelField" hidden>
         <span class="label">AI level</span>
         <div class="seg" data-setting="skill">
