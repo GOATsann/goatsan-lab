@@ -5,7 +5,7 @@
 import * as C from "./config";
 import { type Action, noop, pack, samePacked, unpack, type PackedAction } from "./actions";
 import { HeuristicBot, SKILLS, type SkillName } from "./bot";
-import { Game, MODES, VERSION, defaultOptions, type GameOptions, type Mode } from "./game";
+import { Game, MODES, VERSION, defaultOptions, type GameOptions, type Mode, type NearSpawn } from "./game";
 import type { MapId } from "./maps";
 import { NavGrid } from "./nav";
 import { Observation, observe } from "./obs";
@@ -26,6 +26,8 @@ export interface MatchOptions {
   slots: Slot[];
   regen?: boolean;
   maxTicks?: number;
+  /** training only: a target robot (re)spawns near a learner (see GameOptions.nearSpawn) */
+  nearSpawn?: NearSpawn;
 }
 
 export interface Replay {
@@ -73,7 +75,7 @@ export class Match {
     this.seed = seed >>> 0;
     this.options = options;
     const turnCaps = options.slots.map((s) => (s.kind === "bot" ? SKILLS[s.skill ?? "normal"].turnPerTick : C.HUMAN_TURN_CAP));
-    const gopts: GameOptions = defaultOptions({ map: options.map, mode: options.mode, scoreLimit: options.scoreLimit, regen: options.regen ?? true, turnCaps, maxTicks: options.maxTicks ?? 0, characters: options.slots.map((s) => s.character ?? 0) });
+    const gopts: GameOptions = defaultOptions({ map: options.map, mode: options.mode, scoreLimit: options.scoreLimit, regen: options.regen ?? true, turnCaps, maxTicks: options.maxTicks ?? 0, characters: options.slots.map((s) => s.character ?? 0), nearSpawn: options.nearSpawn });
     if (options.slots.length !== MODES[options.mode].teams.length) throw new Error(`mode ${options.mode} needs ${MODES[options.mode].teams.length} slots`);
     this.game = new Game(this.seed, gopts);
     this.nav = new NavGrid(this.game.map);

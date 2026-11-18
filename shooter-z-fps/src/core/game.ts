@@ -33,7 +33,11 @@ export interface GameOptions {
   maxTicks: number;
   /** character per agent (index into CHARACTERS): decides the one ability */
   characters: number[];
+  /** training only: robot `slot` (re)spawns about `dist` m from robot `of`, in its view and line of sight */
+  nearSpawn?: NearSpawn;
 }
+
+export interface NearSpawn { slot: number; of: number; dist: number }
 
 export const defaultOptions = (o: Partial<GameOptions> = {}): GameOptions => {
   const mode = o.mode ?? "duel";
@@ -42,6 +46,7 @@ export const defaultOptions = (o: Partial<GameOptions> = {}): GameOptions => {
     map: o.map ?? "base", mode, scoreLimit: o.scoreLimit ?? C.DEFAULT_SCORE_LIMIT, regen: o.regen ?? true,
     turnCaps: o.turnCaps ?? Array(n).fill(C.HUMAN_TURN_CAP), maxTicks: o.maxTicks ?? 0,
     characters: o.characters ?? Array.from({ length: n }, (_, i) => i % CHARACTERS.length),
+    ...(o.nearSpawn ? { nearSpawn: o.nearSpawn } : {}),
   };
 };
 
@@ -477,7 +482,27 @@ export class Game {
     a.protectTicks = C.PROTECT_TICKS; a.idleTicks = 0; a.revealTicks = 0;
     a.lastDamageTick = -99999;
     a.abilityCooldown = 0; a.abilityTicks = 0; // the ability is ready after a respawn
+    const near = this.options.nearSpawn;
+    if (near && near.slot === a.id && this.agents[near.of].alive) this.placeNear(a, this.agents[near.of], near.dist);
     this.events.push({ type: "spawn", a: a.id });
+  }
+
+  /** Training only (nearSpawn): move `a` to a free spot about `dist` m in front of `of` (within +-0.6 rad
+   *  of its view, so on screen) with a clear line from its eye to `a`'s torso. Any direction if the
+   *  view is blocked; the normal spawn if no spot is found. */
+  private placeNear(a: Agent, of: Agent, dist: number): void {
+    const R = C.RADIUS, b = this.map.bounds, W = this.world;
+    for (let k = 0; k < 60; k++) {
+      const ang = k < 40 ? of.yaw + (this.rng.float() * 2 - 1) * 0.6 : this.rng.float() * 2 * Math.PI;
+      const d = dist * (0.8 + 0.4 * this.rng.float());
+      const x = of.x - sin(ang) * d, z = of.z - cos(ang) * d; // forward = (-sin yaw, -cos yaw)
+      if (x - R < b.x0 || x + R > b.x1 || z - R < b.z0 || z + R > b.z1) continue;
+      if (W.overlap(x - R, 0, z - R, x + R, C.STAND_H, z + R) >= 0) continue;
+      if (!W.clear(of.x, this.eyeY(of), of.z, x, 1.2, z)) continue;
+      a.x = x; a.z = z; a.y = 0;
+      a.yaw = yawTo(of.x - x, of.z - z);
+      return;
+    }
   }
 
   // ------------------------------------------------------------------------------------- hashing

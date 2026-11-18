@@ -94,3 +94,28 @@ describe("self-play (two learners)", () => {
     expect([...r.cause]).toEqual([0, 0, 0, 0]);
   });
 });
+
+describe("near spawns (training targets)", () => {
+  it("the target spawns and respawns about target_distance in front of the learner, in view", () => {
+    for (const map of ["base", "ship"] as const) {
+      const b = new Batch({ n_envs: 8, seed_base: 51, max_ticks: 36000, opponent: "still", target_distance: 6, map });
+      const obs = b.resetAll();
+      const enemyRays = (o: Float32Array, off: number) => {
+        let k = 0;
+        for (let r = 0; r < 256; r++) for (const l of [5, 6, 7]) if (o[off + r * 11 + l] > 0) k++;
+        return k;
+      };
+      b.envs.forEach((e, i) => {
+        const [me, t] = e.match.game.agents;
+        const d = Math.hypot(me.x - t.x, me.z - t.z);
+        expect(d).toBeGreaterThan(4.7);
+        expect(d).toBeLessThan(7.3);
+        expect(enemyRays(obs, i * OBS_SIZE)).toBeGreaterThan(0); // on screen
+      });
+    }
+  });
+
+  it("is refused for real opponents", () => {
+    expect(() => new Batch({ n_envs: 1, seed_base: 1, max_ticks: 100, opponent: "bot", target_distance: 5 })).toThrow();
+  });
+});

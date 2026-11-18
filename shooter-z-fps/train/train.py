@@ -4,13 +4,15 @@
     ... --run-name B-selfplay                               # straight into self-play
     ... --timesteps 5e6 --servers 5 --matches 16            # a short local test
 
-Curriculum (A): still targets -> moving targets -> bots Easy -> Normal -> Hard -> self-play. A stage is
-passed on its own servers' last 200 matches (targets: hit rate >= 50% and win rate >= 90%; bots: win
-rate >= 60%); a stage that takes longer than its share of the budget is passed anyway (logged).
+Curriculum (A): still targets (spawned in view at 5, 10, 20 m, then normal spawns) -> moving targets
+(10 m, then normal) -> bots Easy -> Normal -> Hard -> self-play. A stage is passed on its own servers'
+last 200 matches (targets: hit rate >= 50% and win rate >= 90%; bots: win rate >= 60%); a stage that
+takes longer than its time cap (--stage-cap of the budget; a quarter of that for the close-spawn
+stages) is passed anyway (logged).
 During a stage, 1 of the 5 servers replays the previous stage (so it doesn't forget).
 Self-play: 4 servers play the current policy against itself (both robots learn), 1 server plays a
 frozen snapshot from the pool (a snapshot is saved every --snapshot-every steps). The reward's helper
-terms (damage) fade from 100% to 0% over the second half of the self-play steps.
+terms (damage, enemy on screen) fade from 100% to 0% over the second half of the self-play steps.
 Every --eval-every steps: 32 deterministic matches against Normal bots -> progress.csv (learning curves).
 """
 
@@ -41,13 +43,18 @@ from szenv import MultiShooterVecEnv, ShooterVecEnv, load_reward  # noqa: E402
 
 MAX_TICKS = 60 * 60 * 3  # training cut-off: 3 minutes of game time (truncation, not a loss)
 EVAL_SEED = 777_000
-STAGES = [  # (name, handshake for the stage's servers, pass rule)
-    ("still", {"opponent": "still"}, "targets"),
-    ("moving", {"opponent": "moving", "options": {"opponent_skill": "normal"}}, "targets"),
-    ("bot-easy", {"opponent": "bot", "options": {"opponent_skill": "easy"}}, "bots"),
-    ("bot-normal", {"opponent": "bot", "options": {"opponent_skill": "normal"}}, "bots"),
-    ("bot-hard", {"opponent": "bot", "options": {"opponent_skill": "hard"}}, "bots"),
-    ("self-play", None, None),
+STAGES = [  # (name, handshake for the stage's servers, pass rule, time cap as a share of --stage-cap)
+    # targets first appear close and in view (target_distance), then farther, then at normal spawns
+    ("still-5m", {"opponent": "still", "options": {"target_distance": 5}}, "targets", 0.25),
+    ("still-10m", {"opponent": "still", "options": {"target_distance": 10}}, "targets", 0.25),
+    ("still-20m", {"opponent": "still", "options": {"target_distance": 20}}, "targets", 0.25),
+    ("still", {"opponent": "still"}, "targets", 1),
+    ("moving-10m", {"opponent": "moving", "options": {"opponent_skill": "normal", "target_distance": 10}}, "targets", 0.25),
+    ("moving", {"opponent": "moving", "options": {"opponent_skill": "normal"}}, "targets", 1),
+    ("bot-easy", {"opponent": "bot", "options": {"opponent_skill": "easy"}}, "bots", 1),
+    ("bot-normal", {"opponent": "bot", "options": {"opponent_skill": "normal"}}, "bots", 1),
+    ("bot-hard", {"opponent": "bot", "options": {"opponent_skill": "hard"}}, "bots", 1),
+    ("self-play", None, None, None),
 ]
 
 
@@ -127,7 +134,7 @@ class Trainer(BaseCallback):
         a, n = self.args, self.args.matches
         seed = lambda k: 1_000_000 + 10_000_000 * k + self.num_timesteps  # noqa: E731 (fresh tracks after every switch)
         base = lambda k: {"port": self.ports[k], "seed_base": seed(k), "max_ticks": MAX_TICKS, "reward": self.reward}  # noqa: E731
-        name, cfg, _ = STAGES[self.stage]
+        name, cfg, _, _ = STAGES[self.stage]
         if cfg is not None:  # a curriculum stage: 4 servers on it, 1 on the previous stage (or also on it)
             prev = STAGES[max(0, self.stage - 1)][1]
             out = []
@@ -209,12 +216,12 @@ class Trainer(BaseCallback):
             self.switch()  # new stage, or a fresh snapshot for the frozen server now and then
 
     def maybe_advance(self) -> bool:
-        name, cfg, rule = STAGES[self.stage]
+        name, cfg, rule, _ = STAGES[self.stage]
         if cfg is None:
             return False
         r = list(self.recent[name])
         t = self.num_timesteps
-        budget = self.args.stage_cap * self.args.timesteps
+        budget = self.args.stage_cap * STAGES[self.stage][3] * self.args.timesteps
         passed = False
         if len(r) >= 200:
             win = np.mean([x["won"] for x in r])

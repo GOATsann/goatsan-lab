@@ -38,6 +38,9 @@ export interface Handshake {
   /** "bot" (default), "still" (a target that never moves or fires), "moving" (a bot that never fires),
    *  "learner" (duel only: robot 1 is a second learner, for self-play) */
   opponent?: Opponent;
+  /** training targets only (still / moving): the target (re)spawns about this many metres in front of
+   *  the learner, in view. 0 (default) = normal spawns */
+  target_distance?: number;
 }
 
 interface Env {
@@ -59,11 +62,12 @@ export class Batch {
   constructor(h: Handshake) {
     this.h = {
       mode: "duel", map: "random", opponent_skill: "random", character: "random", score_limit: C.DEFAULT_SCORE_LIMIT,
-      turn_cap: 10 / C.TICK_HZ, opponent: "bot", ...h,
+      turn_cap: 10 / C.TICK_HZ, opponent: "bot", target_distance: 0, ...h,
     };
     if (!["bot", "still", "moving", "learner"].includes(this.h.opponent)) throw new Error(`unknown opponent ${this.h.opponent}`);
     if (this.h.opponent === "learner" && this.h.mode !== "duel") throw new Error("self-play (opponent: learner) is duel only for now");
     this.learners = this.h.opponent === "learner" ? [0, 1] : [0];
+    if (this.h.target_distance > 0 && !["still", "moving"].includes(this.h.opponent)) throw new Error("target_distance is for still / moving targets only");
     this.acts = this.learners.map(() => noop());
     for (let i = 0; i < h.n_envs; i++) this.envs.push({ match: this.newMatch(this.seedFor(i, 0)), seed: this.seedFor(i, 0), episode: 0, fixed: false, lastReplay: null });
   }
@@ -115,7 +119,8 @@ export class Batch {
       if (opp === "still") return { kind: "external", name: "Target", character }; // Python never drives it: it stands still
       return { kind: "bot", skill, name: BOT_NAMES[i], character, ...(opp === "moving" ? { noFire: true } : {}) };
     });
-    const m = new Match(seed, { map, mode, scoreLimit: this.h.score_limit, slots, maxTicks: this.h.max_ticks });
+    const near = this.h.target_distance > 0 ? { nearSpawn: { slot: 1, of: 0, dist: this.h.target_distance } } : {};
+    const m = new Match(seed, { map, mode, scoreLimit: this.h.score_limit, slots, maxTicks: this.h.max_ticks, ...near });
     for (const s of this.learners) m.game.options.turnCaps[s] = this.h.turn_cap; // the learners' turn cap
     return m;
   }

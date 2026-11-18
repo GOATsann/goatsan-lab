@@ -37,7 +37,16 @@ PITCH_BINS = np.array([-1, -0.4, -0.15, -0.04, -0.01, 0, 0.01, 0.04, 0.15, 0.4, 
 ACTION_NVEC = [3, 3, 2, 2, len(YAW_BINS), len(PITCH_BINS), 2, 2, 2]
 NOOP_ACTION = np.array([1, 1, 0, 0, 6, 5, 0, 0, 0], dtype=np.int64)  # stand still, no turn
 # derived reward terms (computed here, not sent by the game)
-DERIVED = {"wastedShots", "noProgress"}
+DERIVED = {"wastedShots", "noProgress", "enemyVisible"}
+# ray layout (PROTOCOL.md obs_layout): 256 rays x 11 = distance, 9 label flags, protected
+N_RAYS, RAY_FEATURES = 256, 11
+ENEMY_LABELS = [1 + 4, 1 + 5, 1 + 6, 1 + 8]  # enemyHead, enemyTorso, enemyLegs, enemyShield
+
+
+def enemy_visible(obs: np.ndarray) -> np.ndarray:
+    """1.0 for each observation with an enemy on screen."""
+    rays = obs[:, : N_RAYS * RAY_FEATURES].reshape(len(obs), N_RAYS, RAY_FEATURES)
+    return (rays[:, :, ENEMY_LABELS] > 0).any(axis=(1, 2)).astype(np.float32)
 
 
 def load_reward(path: Path = HERE / "reward.json") -> tuple[dict[str, float], set[str], float]:
@@ -106,6 +115,10 @@ class ShooterVecEnv(VecEnv):
         self.fields: list[str] = self.hello["event_fields"]
         self.f = {k: i for i, k in enumerate(self.fields)}
         self.L = len(self.hello["learner_slots"])  # agents per match on the wire
+        rays = self.hello["obs_layout"]["rays"]
+        labels = rays["labels"]
+        if (rays["n"], rays["features_per_ray"]) != (N_RAYS, RAY_FEATURES) or [1 + labels.index(k) for k in ("enemyHead", "enemyTorso", "enemyLegs", "enemyShield")] != ENEMY_LABELS:
+            raise ValueError("the game's ray layout changed: update N_RAYS / ENEMY_LABELS in szenv.py")
         self.wire_agents = n_envs * self.L
         # agents SB3 trains on: every wire agent, except robot 1 when a frozen snapshot drives it
         self.train_idx = np.arange(self.wire_agents) if opponent != "frozen" else np.arange(0, self.wire_agents, 2)
@@ -168,6 +181,9 @@ class ShooterVecEnv(VecEnv):
             raise ValueError(f"step reply has {len(msg) - off} unexpected bytes (protocol mismatch)")
 
         f = self.f
+        seen_obs = obs.copy()  # what the robot sees after this decision (the last frame of a finished match)
+        for a, t in terminal.items():
+            seen_obs[a] = t
         engaged = (ev[:, f["damageDealt"]] > 0) | (ev[:, f["damageTaken"]] > 0)
         self._calm = np.where(engaged, 0, self._calm + 1)
         terms = {
@@ -176,6 +192,7 @@ class ShooterVecEnv(VecEnv):
             "kills": ev[:, f["kills"]], "headshots": ev[:, f["headshots"]],
             "wastedShots": np.maximum(0.0, ev[:, f["shots"]] - ev[:, f["hits"]]),
             "noProgress": (self._calm >= self.no_progress_after).astype(np.float32),
+            "enemyVisible": enemy_visible(seen_obs),
         }
         scaled = {name: self.weights.get(name, 0.0) * (self.helper_scale if name in self.helpers else 1.0) * v
                   for name, v in terms.items()}

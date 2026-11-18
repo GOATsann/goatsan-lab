@@ -6,14 +6,51 @@
     "The benchmark never uses this file: it reports wins, K/D, headshots and damage directly."
   ],
   "weights": {
-    "won":          { "w": 10.0,   "helper": false, "doc": "once, when the match ends in a win (first to the score limit)." },
-    "lost":         { "w": -10.0,  "helper": false, "doc": "once, when the match ends in a loss." },
-    "damageDealt":  { "w": 0.01,   "helper": true,  "doc": "per point of damage dealt (100 = one elimination's worth; headshots already do 2.5x damage)." },
-    "damageTaken":  { "w": -0.01,  "helper": true,  "doc": "per point of damage taken. Cover is learned from this; being in cover is never rewarded directly." },
-    "wastedShots":  { "w": -0.002, "helper": false, "doc": "per shot that hit nothing (shots - hits). Against spraying." },
-    "noProgress":   { "w": -0.005, "helper": false, "doc": "per decision after 10 s with no damage dealt or taken (about -0.1 a second). Against camping; brief waiting is free." },
-    "kills":        { "w": 0.0,    "helper": true,  "doc": "per elimination (off: damage already covers it)." },
-    "headshots":    { "w": 0.0,    "helper": true,  "doc": "per headshot hit, on top of the higher damage (off at first)." }
+    "won": {
+      "w": 10.0,
+      "helper": false,
+      "doc": "once, when the match ends in a win (first to the score limit)."
+    },
+    "lost": {
+      "w": -10.0,
+      "helper": false,
+      "doc": "once, when the match ends in a loss."
+    },
+    "damageDealt": {
+      "w": 0.01,
+      "helper": true,
+      "doc": "per point of damage dealt (100 = one elimination's worth; headshots already do 2.5x damage)."
+    },
+    "damageTaken": {
+      "w": -0.01,
+      "helper": true,
+      "doc": "per point of damage taken. Cover is learned from this; being in cover is never rewarded directly."
+    },
+    "wastedShots": {
+      "w": -0.002,
+      "helper": false,
+      "doc": "per shot that hit nothing (shots - hits). Against spraying."
+    },
+    "noProgress": {
+      "w": -0.005,
+      "helper": false,
+      "doc": "per decision after 10 s with no damage dealt or taken (about -0.1 a second). Against camping; brief waiting is free."
+    },
+    "enemyVisible": {
+      "w": 0.002,
+      "helper": true,
+      "doc": "per decision with an enemy on screen (any ray hits its head, torso, legs or shield). Teaches it to find and keep the enemy in view; fades out with the other helpers."
+    },
+    "kills": {
+      "w": 0.0,
+      "helper": true,
+      "doc": "per elimination (off: damage already covers it)."
+    },
+    "headshots": {
+      "w": 0.0,
+      "helper": true,
+      "doc": "per headshot hit, on top of the higher damage (off at first)."
+    }
   },
   "no_progress_after_s": 10
 }
