@@ -31,6 +31,10 @@ Python -> server:
 - `seed_base`: env `i`'s k-th episode uses seed `seed_base + k * n_envs + i`.
 - `max_ticks`: training cut-off (truncation, not a loss). Players never have a round timer.
 - `turn_cap`: the learner's maximum turn per tick in radians (default 10 rad/s = 0.1667 per tick).
+- `opponent` (protocol 2): what robot 1 is. `"bot"` (default: a heuristic bot at `opponent_skill`),
+  `"still"` (a training target that never moves or fires), `"moving"` (a heuristic bot that moves and aims
+  but never fires, reloads or uses its ability: a moving target), or `"learner"` (duel only: robot 1 is a
+  second learner driven by Python, for self-play).
 
 Server -> Python (abridged):
 
@@ -75,6 +79,15 @@ refused.
 `reload`, `ability` on when > 0.5, `yaw` and `pitch` in [-1, 1] x `turn_cap` **per tick** (positive yaw
 turns left, positive pitch looks up). `crouch` and `fire` are held for the whole decision; `jump`,
 `reload` and `ability` act on its first tick only.
+
+## Agents (protocol 2)
+
+The reply's `learner_slots` lists the robots Python drives in every match: `[0]`, or `[0, 1]` with
+`opponent: "learner"`. Every per-match array below is **per agent**, agent = env x learner, in that order
+(agent `a` is env `a // L`, learner `a % L`, with `L = len(learner_slots)`): observations, actions, events,
+terminated, truncated, end_cause, seed, and the done list (which then names agents; both learners of a
+finished match are listed together). Command 4 returns the observations of all learners of that env.
+With one learner, this is exactly protocol 1.
 
 ## Commands
 
@@ -125,8 +138,7 @@ reward must be **shared by the team** (`teamKills`, `teamDeaths`, `won`/`lost` a
   discrete action: aiming is continuous. A discrete wrapper can be built on the Python side.
 - **Episode end**: `end_cause` (won / lost) replaces `death_cause`; dying is not the end of an episode.
 - **Episode setup comes from the seed**: map, opponent level and characters (no `level` option).
-- **One learner per match** (slot 0) against heuristic bots. Multi-agent (several learner slots per
-  match, per-agent obs/actions/events, self-play against past versions) is left open on purpose: the
-  handshake already reports `agents` and `learner_slot`, and a later protocol version will add a list of
-  learner slots. To be designed together with the training side.
+- **Learners per match**: one (slot 0) against a bot or a training target, or two (slots 0 and 1) for
+  self-play (protocol 2). Playing against frozen past versions is done on the Python side: the trainer
+  drives learner 1 with a snapshot and doesn't learn from it.
 - No `observe_chaser` / `powerups` options; abilities are always on.

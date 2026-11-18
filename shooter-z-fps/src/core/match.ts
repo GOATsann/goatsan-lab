@@ -13,7 +13,11 @@ import { N_CHARACTERS } from "./characters";
 import { Rng } from "./rng";
 
 export type SlotKind = "human" | "bot" | "external";
-export interface Slot { kind: SlotKind; skill?: SkillName; name: string; /** index into CHARACTERS */ character: number }
+export interface Slot {
+  kind: SlotKind; skill?: SkillName; name: string; /** index into CHARACTERS */ character: number;
+  /** training only: a bot that moves and aims but never fires, reloads or uses its ability (a moving target) */
+  noFire?: boolean;
+}
 
 export interface MatchOptions {
   map: MapId;
@@ -97,6 +101,7 @@ export class Match {
         if ((g.tick + i) % C.DECISION_TICKS === 0) {
           observe(g, i, this.obs[i]);
           bot.decide(this.obs[i], this.held[i]);
+          if (this.options.slots[i].noFire) { this.held[i].fire = false; this.held[i].reload = false; this.held[i].ability = false; }
         }
         this.actions[i] = this.held[i];
       } else {
