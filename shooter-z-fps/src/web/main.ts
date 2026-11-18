@@ -15,6 +15,9 @@ import { Input } from "./input";
 import { Stage, type Graphics } from "./stage";
 import { CharPreview } from "./charpreview";
 import { Tutorial, TUTORIAL_MAP } from "./tutorial";
+import { TouchControls } from "./touch";
+import { RANGE } from "../core/config";
+import { cos, sin } from "../core/fmath";
 import * as THREE from "three";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -24,8 +27,9 @@ const store = {
   set: (k: string, v: string) => { try { localStorage.setItem(`shooter-z:${k}`, v); } catch { /* private mode */ } },
 };
 
-// phones and tablets: watch only (the game needs a mouse and keyboard)
-const phone = params.has("phone") || (matchMedia("(pointer: coarse)").matches && !matchMedia("(pointer: fine)").matches) || window.innerWidth < 760;
+// phones and tablets: play with touch controls when held sideways, or watch AI vs AI
+const touchDevice = params.has("touch") || (matchMedia("(pointer: coarse)").matches && !matchMedia("(pointer: fine)").matches);
+const phone = params.has("phone") || touchDevice || window.innerWidth < 760;
 document.body.classList.toggle("phone", phone);
 document.title = `${BRAND.gameName}: ${BRAND.tagline}`;
 
@@ -33,11 +37,15 @@ document.title = `${BRAND.gameName}: ${BRAND.tagline}`;
 const settings = {
   mode: (store.get("mode") ?? "duel") as Mode,
   map: (store.get("map") ?? "base") as MapId,
-  skill: (store.get("skill") ?? "normal") as SkillName,
+  // touch players start on Easy (they can change it)
+  skill: (store.get("skill") ?? (touchDevice ? "easy" : "normal")) as SkillName,
   character: Number(store.get("character") ?? 0),
   limit: Number(store.get("limit") ?? 10),
-  graphics: ((params.get("graphics") ?? store.get("graphics")) === "low" ? "low" : "normal") as Graphics,
+  // a simple device rule: touch devices default to Low graphics (they can switch to Normal)
+  graphics: ((params.get("graphics") ?? store.get("graphics") ?? (touchDevice ? "low" : "normal")) === "low" ? "low" : "normal") as Graphics,
   sens: Number(store.get("sens") ?? 1),
+  touchSens: Number(store.get("touchSens") ?? 1),
+  autoFire: (store.get("autoFire") ?? "off") as "off" | "on",
 };
 if (!MODES[settings.mode]) settings.mode = "duel";
 if (!(settings.character >= 0 && settings.character < CHARACTERS.length)) settings.character = 0;
@@ -76,11 +84,21 @@ interface Session {
 let S: Session | null = null;
 let state: "menu" | "play" | "watch" = "menu";
 let hudVisible = true;
+/** playing with touch controls (phone held sideways) */
+let touchPlay = false;
+let touchPaused = false;
+let touch: TouchControls | null = null;
 let autoDirector = true;
 const idle: Action = noop();
 
 function startMatch(kind: "play" | "watch" | "backdrop" | "tutorial", mapOverride?: MapId): void {
-  if (S) { S.hud.root.remove(); }
+  if (S) { S.hud.root.remove(); S.tutorial?.el.remove(); }
+  touch?.remove();
+  touch = null;
+  touchPaused = false;
+  const touching = touchPlay && (kind === "play" || kind === "tutorial");
+  document.body.classList.toggle("touchplay", touching);
+  $("touchEnd").hidden = true;
   stage.reset();
   const seed = newSeed();
   const spectate = kind === "watch" || kind === "backdrop";
@@ -97,12 +115,19 @@ function startMatch(kind: "play" | "watch" | "backdrop" | "tutorial", mapOverrid
   const rig = newRig();
   rig.mode = spectate ? (kind === "backdrop" ? "overview" : "follow") : "fp";
   rig.target = 0;
-  const tutorial = tut ? new Tutorial(match, settings.character, hud.root) : null;
+  const tutorial = tut ? new Tutorial(match, settings.character, touching ? document.body : hud.root, touching) : null;
+  if (touching) {
+    touch = new TouchControls(document.body, input, {
+      lookSpeed: 0.006 * settings.touchSens,
+      onPause: () => { touchPaused = true; pausedByUser = true; touch?.reset(); },
+    });
+    touch.autoFire = settings.autoFire === "on";
+  }
   hud.tutorial = tut;
   S = { match, view, hud, rig, spectator: spectate, self, colors, slots, endedAt: -1, backdrop: kind === "backdrop", tutorial };
   if (tutorial) view.snapshot();
   hud.setVisible(kind !== "backdrop" && hudVisible);
-  (window as unknown as { shooterZ: unknown }).shooterZ = { match, view, rig, input, hud, get state() { return state; }, get tutorial() { return S?.tutorial ?? null; } }; // for tests and debugging
+  (window as unknown as { shooterZ: unknown }).shooterZ = { match, view, rig, input, hud, get state() { return state; }, get tutorial() { return S?.tutorial ?? null; }, get touchPaused() { return touchPaused; } }; // for tests and debugging
   updateSpecBar();
   acc = 0;
 }
@@ -156,13 +181,15 @@ function frame(now: number): void {
   if (!S) return;
   const s = S;
   const g = s.match.game;
-  const paused = state === "play" && !input.locked && !g.over;
+  const paused = state === "play" && !g.over && (touchPlay ? touchPaused : !input.locked);
   $("pause").hidden = !(paused && pausedByUser);
-  $("clickHint").hidden = !(state === "play" && !input.locked && !pausedByUser && !g.over);
+  $("clickHint").hidden = touchPlay || !(state === "play" && !input.locked && !pausedByUser && !g.over);
+  if (touchPlay && state === "play") $("touchEnd").hidden = !(g.over || !!s.tutorial?.done);
   if (!paused && !g.over) {
     acc += dtMs;
     let steps = 0;
     while (acc >= STEP && steps < 6) {
+      if (touch) input.touch.autoFire = touch.autoFire && crosshairOnEnemy(s);
       const act = s.self >= 0 ? (s.rig.mode === "fp" ? input.action() : idle) : null;
       s.view.snapshot();
       s.match.step([act]);
@@ -176,6 +203,7 @@ function frame(now: number): void {
     }
     if (steps === 6) acc = 0; // fell far behind (tab was hidden): don't fast-forward
   }
+  touch?.update(s.self >= 0 ? g.agents[s.self] : null);
   // cameras
   if (s.rig.mode === "fp") {
     s.rig.pendingYaw = input.pendingYaw();
@@ -202,6 +230,35 @@ function frame(now: number): void {
   }
 }
 requestAnimationFrame(frame);
+
+/** Auto-fire (touch option): is the crosshair on an enemy you can see right now? */
+function crosshairOnEnemy(s: Session): boolean {
+  const g = s.match.game, me = g.agents[s.self];
+  if (!me.alive) return false;
+  const cp = cos(me.pitch);
+  const hit = g.trace(me.id, me.x, g.eyeY(me), me.z, -sin(me.yaw) * cp, sin(me.pitch), -cos(me.yaw) * cp, RANGE, true);
+  return hit.agent >= 0 && g.isEnemy(me.id, hit.agent);
+}
+
+/** Phones: fullscreen and landscape lock where the browser allows it (needs the tap that started play). */
+function goFullscreen(): void {
+  if (params.has("nofs")) return; // screen recordings in tests
+  const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
+  try {
+    const r = el.requestFullscreen?.({ navigationUI: "hide" }) ?? el.webkitRequestFullscreen?.();
+    Promise.resolve(r).then(() => (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> })?.lock?.("landscape")).catch(() => {});
+  } catch { /* not supported (e.g. iPhone Safari): the page still works */ }
+}
+
+function startTouch(kind: "play" | "tutorial"): void {
+  touchPlay = true;
+  input.forceLocked = true;
+  hideMenu();
+  state = "play";
+  sfx.unlock();
+  goFullscreen();
+  startMatch(kind);
+}
 
 /** Free camera: WASD fly, mouse look (click to lock), Space up, C down, Shift faster. */
 function flyFree(rig: CameraRig, dt: number): void {
@@ -296,7 +353,13 @@ document.addEventListener("pointerlockchange", () => {
 canvas.addEventListener("click", () => {
   if (state === "play" || (state === "watch" && S?.rig.mode === "free")) { sfx.unlock(); input.lock(); }
 });
-$("resume").addEventListener("click", () => { pausedByUser = false; lockAndGo(); });
+$("resume").addEventListener("click", () => { pausedByUser = false; if (touchPlay) touchPaused = false; else lockAndGo(); });
+$("playTouch").addEventListener("click", () => startTouch("play"));
+$("tutorialTouch").addEventListener("click", () => startTouch("tutorial"));
+$("againBtn").addEventListener("click", () => startTouch("play"));
+$("menuBtn").addEventListener("click", () => showMenu());
+$<HTMLInputElement>("touchSens").value = String(settings.touchSens);
+$<HTMLInputElement>("touchSens").addEventListener("input", (e) => { settings.touchSens = Number((e.target as HTMLInputElement).value); store.set("touchSens", String(settings.touchSens)); });
 $("quit").addEventListener("click", () => showMenu());
 
 function lockAndGo(): void {
@@ -307,6 +370,8 @@ function lockAndGo(): void {
 // ------------------------------------------------------------------------------------- menu
 function showMenu(): void {
   input.unlock();
+  if (touchPlay) { touchPlay = false; input.forceLocked = params.has("autotest"); }
+  $("touchEnd").hidden = true;
   state = "menu";
   pausedByUser = false;
   $("menu").hidden = false;
@@ -322,7 +387,7 @@ function hideMenu(): void { $("menu").hidden = true; preview.running = false; }
 
 function refreshMenu(): void {
   for (const seg of document.querySelectorAll<HTMLElement>(".seg[data-setting]")) {
-    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics" | "limit";
+    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics" | "limit" | "autoFire";
     seg.setAttribute("role", "radiogroup");
     for (const b of seg.querySelectorAll<HTMLButtonElement>("button")) { b.classList.toggle("on", b.dataset.v === String(settings[key])); b.setAttribute("role", "radio"); }
   }
@@ -362,7 +427,7 @@ for (const seg of document.querySelectorAll<HTMLElement>(".seg[data-setting]")) 
   seg.addEventListener("click", (e) => {
     const b = (e.target as HTMLElement).closest("button") as HTMLButtonElement | null;
     if (!b) return;
-    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics" | "limit";
+    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics" | "limit" | "autoFire";
     const v = b.dataset.v!;
     if (key === "graphics") {
       if (v !== settings.graphics) { store.set("graphics", v); location.reload(); }

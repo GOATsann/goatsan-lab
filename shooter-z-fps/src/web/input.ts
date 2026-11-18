@@ -6,6 +6,8 @@ export class Input {
   private mouseDown = false;
   private rightDown = false;
   private dx = 0; private dy = 0;
+  /** touch controls write here (touch.ts); merged with keyboard and mouse */
+  readonly touch = { forward: 0, strafe: 0, fire: false, jump: false, crouch: false, reload: false, ability: false, autoFire: false };
   sensitivity = 0.0022; // radians per pixel
   /** one-shot key presses (Tab, V, H, ...) handled by the game */
   onKey: (code: string, e: KeyboardEvent) => void = () => {};
@@ -62,13 +64,14 @@ export class Input {
   /** The action for the next tick. Consumes the mouse movement so far. */
   action(): Action {
     const k = this.keys, a = this.act;
-    a.forward = (k.has("KeyW") || k.has("ArrowUp") ? 1 : 0) - (k.has("KeyS") || k.has("ArrowDown") ? 1 : 0);
-    a.strafe = (k.has("KeyD") || k.has("ArrowRight") ? 1 : 0) - (k.has("KeyA") || k.has("ArrowLeft") ? 1 : 0);
-    a.jump = k.has("Space");
-    a.crouch = k.has("KeyC") || k.has("ControlLeft") || k.has("ControlRight");
-    a.fire = this.mouseDown;
-    a.reload = k.has("KeyR");
-    a.ability = k.has("KeyE") || this.rightDown;
+    const t = this.touch;
+    a.forward = Math.max(-1, Math.min(1, (k.has("KeyW") || k.has("ArrowUp") ? 1 : 0) - (k.has("KeyS") || k.has("ArrowDown") ? 1 : 0) + t.forward));
+    a.strafe = Math.max(-1, Math.min(1, (k.has("KeyD") || k.has("ArrowRight") ? 1 : 0) - (k.has("KeyA") || k.has("ArrowLeft") ? 1 : 0) + t.strafe));
+    a.jump = k.has("Space") || t.jump;
+    a.crouch = k.has("KeyC") || k.has("ControlLeft") || k.has("ControlRight") || t.crouch;
+    a.fire = this.mouseDown || t.fire || t.autoFire;
+    a.reload = k.has("KeyR") || t.reload;
+    a.ability = k.has("KeyE") || this.rightDown || t.ability;
     a.yaw = this.pendingYaw();
     a.pitch = this.pendingPitch();
     this.dx = 0; this.dy = 0;

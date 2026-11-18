@@ -29,8 +29,14 @@
       </div>
       <p class="first-visit desktop-only" id="firstVisit" hidden>New here? Start with the tutorial: nine short steps, about two minutes.</p>
       <div class="cta phone-only">
-        <button class="primary" id="watchPhone">Watch AI vs AI</button>
-        <p class="pc-note">Play it on a computer: it needs a mouse and keyboard.</p>
+        <div class="rotate portrait-only" role="note">
+          <svg viewBox="0 0 64 64" width="56" height="56" aria-hidden="true"><rect x="20" y="8" width="24" height="40" rx="4" fill="none" stroke="currentColor" stroke-width="3"/><rect x="12" y="30" width="40" height="24" rx="4" fill="none" stroke="var(--accent)" stroke-width="3" stroke-dasharray="5 4"/><path d="M50 14 a14 14 0 0 1 4 12" fill="none" stroke="var(--accent)" stroke-width="3"/><path d="M54 26 l-5 -3 l6 -2 z" fill="var(--accent)"/></svg>
+          <p><b>Rotate your phone to play.</b> Or watch the robots play each other right now.</p>
+        </div>
+        <button class="primary landscape-only" id="playTouch">Play</button>
+        <button class="landscape-only" id="tutorialTouch">Start tutorial</button>
+        <button class="watch-phone" id="watchPhone">Watch AI vs AI</button>
+        <p class="pc-note landscape-only">Touch controls: left thumb moves, drag the right side to aim, hold Fire.</p>
       </div>
       <div class="controls-card desktop-only" aria-label="Controls">
         <div class="ctl"><span class="keys wasd"><kbd>W</kbd><span><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span></span><b>Move</b></div>
@@ -81,6 +87,13 @@
           <button data-v="easy">Easy</button><button data-v="normal">Normal</button><button data-v="hard">Hard</button>
         </div>
       </div>
+      <div class="field phone-only">
+        <span class="label">Touch controls</span>
+        <div class="row">
+          <label class="field small"><span class="label">Look speed</span><input type="range" id="touchSens" min="0.4" max="2.5" step="0.05" value="1"></label>
+          <div class="field small"><span class="label">Auto-fire</span><div class="seg" data-setting="autoFire"><button data-v="off">Off</button><button data-v="on">On</button></div></div>
+        </div>
+      </div>
       <div class="row">
         <div class="field small">
           <span class="label">First to</span>
@@ -108,6 +121,11 @@
 </div>
 
 <div class="hint-click" id="clickHint" hidden>Click to lock the mouse and play</div>
+
+<div class="touch-end" id="touchEnd" hidden>
+  <button class="primary" id="againBtn">Play again</button>
+  <button id="menuBtn">Menu</button>
+</div>
 
 <script type="module" src="/src/web/main.ts"></script>
 </body>

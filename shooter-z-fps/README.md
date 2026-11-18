@@ -58,8 +58,22 @@ on the menu to see it turning, with its Special Move and cooldown.
 The AI opponents get random characters. The robots are a stand-in look (a per-character accessory); the
 final character art comes later.
 
-**On a phone** you can't play (it needs a mouse and keyboard), but you can **Watch AI vs AI**: a live bot
-match with follow, robot's-eyes, overview and free cameras. The same mode is on the desktop menu.
+**On a phone**, turn it sideways to play with touch controls (in portrait the menu says "Rotate your
+phone to play" and offers **Watch AI vs AI**, a live bot match with follow, robot's-eyes, overview and free
+cameras; the same mode is on the desktop menu). Touch controls, all usable at once (multi-touch):
+
+| Touch | Action |
+|---|---|
+| Left thumb anywhere on the left side | a floating stick: move (8 directions; the game has one run speed) |
+| Drag on the right side | aim (Look speed on the menu) |
+| Fire (big button, bottom right) | fire while held; Auto-fire (menu, off by default) fires when the crosshair is on an enemy |
+| Special Move button (with cooldown ring) | your character's Special Move |
+| Jump, Crouch (tap to toggle), R | jump, crouch, reload (it also reloads by itself when empty) |
+| II (top right) | pause |
+
+Starting play asks for fullscreen and a landscape lock where the browser allows it (not on iPhone
+Safari; the layout uses `dvh` units so the address bar doesn't cover anything). Touch devices start on
+Easy and Low graphics; both can be changed on the menu. The tutorial works with touch and shows touch hints.
 
 **AI level** (Easy / Normal / Hard) sets the bots' human-like limits: reaction time, max turn speed, aim
 wobble, how close they go for the head, and how readily they strafe and take cover.
