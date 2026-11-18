@@ -3,7 +3,8 @@
     "The reward the Shooter Z AI learns from. One weight per term; the reward of a decision (1/20 s) is the sum of weight x term.",
     "Terms marked helper fade from 100% to 0% over the second half of self-play, so the final AI plays to win, not to farm points.",
     "Every term is logged on its own (reward/<name>), so you can see which part drives the agent.",
-    "The benchmark never uses this file: it reports wins, K/D, headshots and damage directly."
+    "The benchmark never uses this file: it reports wins, K/D, headshots and damage directly.",
+    "Wasted-move costs are small next to combat: a torso hit (20 HP) is +0.2, so 20 wasted moves cost what one hit earns. Counts per minute are on the dashboard."
   ],
   "weights": {
     "won": {
@@ -50,6 +51,31 @@
       "w": 0.0,
       "helper": true,
       "doc": "per headshot hit, on top of the higher damage (off at first)."
+    },
+    "crouchSpam": {
+      "w": -0.01,
+      "helper": false,
+      "doc": "per crouch/stand toggle that undoes the last one within 0.5 s with no shot fired or taken in between (squat spam). Crouch-peeking in a fight stays free."
+    },
+    "jumpSpam": {
+      "w": -0.01,
+      "helper": false,
+      "doc": "per jump with no combat (shots, damage dealt or taken) in the last second. Jumps in a fight stay free; a climbing jump costs this small amount too."
+    },
+    "strafeJitter": {
+      "w": -0.01,
+      "helper": false,
+      "doc": "per left/right strafe reversal within 0.5 s of the last one, while not hit in the last second. Strafe-dodging under fire stays free."
+    },
+    "turnJitter": {
+      "w": -0.01,
+      "helper": false,
+      "doc": "per big turn (1/4 of the turn cap or more) that reverses the last big one within 0.5 s, with no enemy on screen."
+    },
+    "abilityWasted": {
+      "w": -0.02,
+      "helper": false,
+      "doc": "per ability use with no enemy seen and no combat in the last 2 s."
     }
   },
   "no_progress_after_s": 10

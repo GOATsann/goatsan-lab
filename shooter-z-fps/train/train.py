@@ -10,8 +10,8 @@ last 200 matches (targets: hit rate >= 50% and win rate >= 90%; bots: win rate >
 takes longer than its time cap (--stage-cap of the budget; a quarter of that for the close-spawn
 stages) is passed anyway (logged).
 During a stage, 1 of the 5 servers replays the previous stage (so it doesn't forget).
-Self-play: 4 servers play the current policy against itself (both robots learn), 1 server plays a
-frozen snapshot from the pool (a snapshot is saved every --snapshot-every steps). The reward's helper
+Self-play: 4 servers play the current policy against itself (both robots learn; 3 with --selfplay-bots,
+then 1 plays heuristic bots at a random level per match), 1 server plays a frozen snapshot from the pool (a snapshot is saved every --snapshot-every steps). The reward's helper
 terms (damage, enemy on screen) fade from 100% to 0% over the second half of the self-play steps.
 Every --eval-every steps: 32 deterministic matches against Normal bots -> progress.csv (learning curves).
 """
@@ -128,8 +128,13 @@ class Trainer(BaseCallback):
                 c = prev if (k == a.servers - 1 and self.stage > 0) else cfg
                 out.append({**base(k), "n_envs": n, "opponent": c["opponent"], "options": c.get("options", {}), "stage": STAGES[self.stage - 1][0] if c is prev and self.stage > 0 else name})
             return out
-        # self-play: servers 0..n-2 play the current policy against itself, the last one a frozen snapshot
-        out = [{**base(k), "n_envs": n // 2, "opponent": "self", "stage": "self-play"} for k in range(a.servers - 1)]
+        # self-play: the first servers play the current policy against itself; with --selfplay-bots one server
+        # plays heuristic bots (a random level per match, so it keeps beating them); the last one frozen snapshots
+        n_bots = 1 if a.selfplay_bots else 0
+        out = [{**base(k), "n_envs": n // 2, "opponent": "self", "stage": "self-play"} for k in range(a.servers - 1 - n_bots)]
+        if n_bots:
+            k = a.servers - 2
+            out.append({**base(k), "n_envs": n, "opponent": "bot", "options": {"opponent_skill": "random"}, "stage": "self-play bots"})
         frozen = self.pick_snapshot()
         out.append({**base(a.servers - 1), "n_envs": n, "opponent": "frozen" if frozen else "self", "frozen": frozen,
                     "stage": f"vs {frozen.name}" if frozen else "self-play", **({} if frozen else {"n_envs": n // 2})})
@@ -198,6 +203,13 @@ class Trainer(BaseCallback):
             L.record("episode/headshot_share", sum(x["headshots"] for x in e) / max(sum(x["hits"] for x in e), 1))
             L.record("episode/damage_per_min", sum(x["damageDealt"] for x in e) / max(sum(x["minutes"] for x in e), 1e-9))
             L.record("episode/cut_off_share", np.mean([x["cut_off"] for x in e]))
+            mins = max(sum(x["minutes"] for x in e), 1e-9)
+            for k in ("crouchToggles", "jumps", "strafeReversals", "turnReversals", "abilities",
+                      "crouchSpam", "jumpSpam", "strafeJitter", "turnJitter", "abilityWasted"):
+                L.record(f"moves/{k}_per_min", sum(x.get(k, 0) for x in e) / mins)
+            for opp in sorted({x["opponent"] for x in e}):  # e.g. the bot server in self-play
+                sub = [x for x in e if x["opponent"] == opp]
+                L.record(f"episode/win_rate_{opp}", np.mean([x["won"] for x in sub]))
         L.record("train/stage", self.stage)
         L.record("train/helper_scale", self.training_env.helper_scale)
         self.terms.clear(); self.rollout_ends.clear(); self.decisions = 0
@@ -347,6 +359,7 @@ def main() -> None:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--resume", action="store_true", help="continue runs/<run-name> from its final.zip up to --timesteps (total); "
                    "the old final.zip is kept as checkpoint_<steps>.zip")
+    p.add_argument("--selfplay-bots", action="store_true", help="in self-play, 1 of the 5 servers plays heuristic bots (random level per match)")
     p.add_argument("--init-policy", type=Path, help="start from these weights (a snapshots/policy_<steps>.pt); without --curriculum it goes straight to self-play")
     p.add_argument("--fade-end", type=float, default=None, help="step at which the helper rewards reach 0 (default: --timesteps)")
     args = p.parse_args()
@@ -398,6 +411,11 @@ def main() -> None:
         trainer = Trainer(args, run_dir, trainer_ports, eval_port, reward)
         trainer.started = time.time()
         trainer.current_stages = [STAGES[0][0] if args.curriculum else "self-play"] * args.servers
+        if not args.curriculum and args.selfplay_bots and not args.resume:  # straight self-play: the bots server from the start
+            k = args.servers - 2
+            env.reconfigure_one(k, {"port": trainer_ports[k], "seed_base": 1_000_000 + 10_000_000 * k, "max_ticks": MAX_TICKS, "reward": reward,
+                                    "n_envs": args.matches, "opponent": "bot", "options": {"opponent_skill": "random"}})
+            trainer.current_stages[k] = "self-play bots"
         if args.resume:
             trainer.restore(model.num_timesteps)
         model.learn(total_timesteps=args.timesteps - model.num_timesteps, callback=trainer, tb_log_name="ppo",

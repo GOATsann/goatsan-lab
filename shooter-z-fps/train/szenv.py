@@ -37,7 +37,7 @@ PITCH_BINS = np.array([-1, -0.4, -0.15, -0.04, -0.01, 0, 0.01, 0.04, 0.15, 0.4, 
 ACTION_NVEC = [3, 3, 2, 2, len(YAW_BINS), len(PITCH_BINS), 2, 2, 2]
 NOOP_ACTION = np.array([1, 1, 0, 0, 6, 5, 0, 0, 0], dtype=np.int64)  # stand still, no turn
 # derived reward terms (computed here, not sent by the game)
-DERIVED = {"wastedShots", "noProgress", "enemyVisible"}
+DERIVED = {"wastedShots", "noProgress", "enemyVisible", "crouchSpam", "jumpSpam", "strafeJitter", "turnJitter", "abilityWasted"}
 # ray layout (PROTOCOL.md obs_layout): 256 rays x 11 = distance, 9 label flags, protected
 N_RAYS, RAY_FEATURES = 256, 11
 ENEMY_LABELS = [1 + 4, 1 + 5, 1 + 6, 1 + 8]  # enemyHead, enemyTorso, enemyLegs, enemyShield
@@ -68,6 +68,73 @@ def to_vector(md: np.ndarray) -> np.ndarray:
     v[:, 5] = PITCH_BINS[md[:, 5]]
     v[:, 6:9] = md[:, 6:9]
     return v
+
+
+class WastedMoves:
+    """Counts each robot's moves per decision and flags the clearly wasted ones (reward.json terms
+    crouchSpam, jumpSpam, strafeJitter, turnJitter, abilityWasted). Legit moves stay free: crouching or
+    strafing while shooting or being shot at, jumping in a fight, turning toward a visible enemy.
+    Windows are in decisions (20 per second)."""
+
+    QUICK, FIGHT, LONG = 10, 20, 40  # 0.5 s (a quick undo), 1 s (recent combat), 2 s
+    COUNTS = ["crouchToggles", "jumps", "strafeReversals", "turnReversals", "abilities",
+              "crouchSpam", "jumpSpam", "strafeJitter", "turnJitter", "abilityWasted"]
+
+    def __init__(self, n: int):
+        self.n = n
+        self.reset(np.ones(n, dtype=bool))
+
+    def reset(self, which: np.ndarray) -> None:
+        if not hasattr(self, "t"):
+            z = lambda v=0: np.full(self.n, v, dtype=np.int64)  # noqa: E731
+            self.t, self.crouch, self.strafe, self.turn = z(), z(), z(), z()
+            self.toggle_t, self.flip_t, self.turn_t = z(-999), z(-999), z(-999)
+            self.combat_t, self.hit_t, self.seen_t = z(-999), z(-999), z(-999)
+            self.calm_since_toggle = np.ones(self.n, dtype=bool)
+        for arr, v in ((self.t, 0), (self.crouch, 0), (self.strafe, 0), (self.turn, 0), (self.toggle_t, -999), (self.flip_t, -999),
+                       (self.turn_t, -999), (self.combat_t, -999), (self.hit_t, -999), (self.seen_t, -999)):
+            arr[which] = v
+        self.calm_since_toggle[which] = True
+
+    def step(self, md: np.ndarray, ev: np.ndarray, f: dict, seen: np.ndarray) -> dict[str, np.ndarray]:
+        t = self.t
+        shots, dealt, taken = ev[:, f["shots"]] > 0, ev[:, f["damageDealt"]] > 0, ev[:, f["damageTaken"]] > 0
+        fight = shots | dealt | taken
+        self.combat_t = np.where(fight, t, self.combat_t)
+        self.hit_t = np.where(taken, t, self.hit_t)
+        self.seen_t = np.where(seen > 0, t, self.seen_t)
+        self.calm_since_toggle &= ~(shots | taken)
+        # crouch: a toggle that undoes the last one within 0.5 s, with no shot fired or taken in between
+        crouch = md[:, 3]
+        toggle = crouch != self.crouch
+        crouch_spam = toggle & (t - self.toggle_t < self.QUICK) & self.calm_since_toggle
+        self.toggle_t = np.where(toggle, t, self.toggle_t)
+        self.calm_since_toggle = np.where(toggle, True, self.calm_since_toggle)
+        self.crouch = crouch
+        # jump: with no combat in the last second (also catches climbing jumps; the weight is small)
+        jump = md[:, 2] == 1
+        jump_spam = jump & (t - self.combat_t > self.FIGHT)
+        # strafe: left <-> right within 0.5 s of the last flip, while not under fire
+        sdir = md[:, 1] - 1
+        flip = (sdir != 0) & (self.strafe != 0) & (sdir != self.strafe)
+        strafe_jitter = flip & (t - self.flip_t < self.QUICK) & (t - self.hit_t > self.FIGHT)
+        self.flip_t = np.where(flip, t, self.flip_t)
+        self.strafe = np.where(sdir != 0, sdir, self.strafe)
+        # turn: a big turn (>= 1/4 of the cap) that reverses the last big one within 0.5 s, no enemy on screen
+        big = np.abs(YAW_BINS[md[:, 4]]) >= 0.25
+        tdir = np.where(big, np.sign(YAW_BINS[md[:, 4]]).astype(np.int64), 0)
+        tflip = (tdir != 0) & (self.turn != 0) & (tdir != self.turn)
+        turn_jitter = tflip & (t - self.turn_t < self.QUICK) & (seen == 0)
+        self.turn_t = np.where(tflip, t, self.turn_t)
+        self.turn = np.where(tdir != 0, tdir, self.turn)
+        # ability: used with no enemy seen and no combat in the last 2 s
+        used = ev[:, f["abilities"]] > 0
+        ability_wasted = used & (t - self.seen_t > self.LONG) & (t - self.combat_t > self.LONG)
+        self.t = t + 1
+        f32 = lambda b: b.astype(np.float32)  # noqa: E731
+        return {"crouchToggles": f32(toggle), "jumps": f32(jump), "strafeReversals": f32(flip), "turnReversals": f32(tflip),
+                "abilities": f32(used), "crouchSpam": f32(crouch_spam), "jumpSpam": f32(jump_spam),
+                "strafeJitter": f32(strafe_jitter), "turnJitter": f32(turn_jitter), "abilityWasted": f32(ability_wasted)}
 
 
 class Conn:
@@ -135,6 +202,9 @@ class ShooterVecEnv(VecEnv):
         self._ep_steps = np.zeros(self.wire_agents, dtype=np.int64)
         self._last_obs = np.zeros((self.wire_agents, self.obs_size), dtype=np.float32)
         self._actions = None
+        self._md = None
+        self.moves = WastedMoves(self.wire_agents)
+        self._moves_ep = {k: np.zeros(self.wire_agents) for k in WastedMoves.COUNTS}
         super().__init__(len(self.train_idx), spaces.Box(-np.inf, np.inf, (self.obs_size,), np.float32),
                          spaces.MultiDiscrete(ACTION_NVEC))
 
@@ -146,6 +216,9 @@ class ShooterVecEnv(VecEnv):
         self._calm[:] = 0
         self._ep[:] = 0
         self._ep_steps[:] = 0
+        self.moves.reset(np.ones(self.wire_agents, dtype=bool))
+        for v in self._moves_ep.values():
+            v[:] = 0
         self.frozen_state, self.frozen_start = None, np.ones(self.n_matches, dtype=bool)
         return obs[self.train_idx]
 
@@ -173,6 +246,7 @@ class ShooterVecEnv(VecEnv):
                                            episode_start=self.frozen_start[idx], deterministic=False)
                 act[idx], h[:, idx], c[:, idx] = a, nh, nc
             md[1::2] = act
+        self._md = md
         self.conn.send(bytes([CMD_STEP]) + to_vector(md).tobytes())
 
     def _recv_step(self):
@@ -207,6 +281,11 @@ class ShooterVecEnv(VecEnv):
             "noProgress": (self._calm >= self.no_progress_after).astype(np.float32),
             "enemyVisible": enemy_visible(seen_obs),
         }
+        moves = self.moves.step(self._md, ev, f, terms["enemyVisible"])
+        for k in ("crouchSpam", "jumpSpam", "strafeJitter", "turnJitter", "abilityWasted"):
+            terms[k] = moves[k]
+        for k, v in moves.items():
+            self._moves_ep[k] += v
         scaled = {name: self.weights.get(name, 0.0) * (self.helper_scale if name in self.helpers else 1.0) * v
                   for name, v in terms.items()}
         rewards = sum(scaled.values())
@@ -229,11 +308,16 @@ class ShooterVecEnv(VecEnv):
                     "minutes": float(e[f["ticks"]]) / self.hello["tick_hz"] / 60,
                     **{name: float(e[f[name]]) for name in ("kills", "deaths", "hits", "headshots", "shots",
                                                              "damageDealt", "damageTaken", "teamScore", "enemyScore")},
+                    **{k: float(v[a]) for k, v in self._moves_ep.items()},  # move counts (per match)
                 }
+                for v in self._moves_ep.values():
+                    v[a] = 0
                 self._ep[a] = 0
                 self._ep_steps[a] = 0
                 self._calm[a] = 0
             infos.append(info)
+        if dones.any():
+            self.moves.reset(dones)
         self._last_obs = obs
         if self.opponent == "frozen":
             self.frozen_start = dones[1::2]
