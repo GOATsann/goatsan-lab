@@ -216,8 +216,10 @@ class Trainer(BaseCallback):
             span = max(1, self.args.fade_end - self.selfplay_started)
             frac = (t - self.selfplay_started) / span
             self.training_env.helper_scale = float(np.clip(2 - 2 * frac, 0, 1))
-        if changed or (STAGES[self.stage][1] is None and self.pool and random.random() < 0.25):
-            self.switch()  # new stage, or a fresh snapshot for the frozen server now and then
+        if changed:
+            self.switch()  # a new stage: every server restarts
+        elif STAGES[self.stage][1] is None and self.pool:
+            self.refresh_league()
 
     def maybe_advance(self) -> bool:
         name, cfg, rule, _ = STAGES[self.stage]
@@ -240,6 +242,26 @@ class Trainer(BaseCallback):
                 self.selfplay_started = t
             return True
         return False
+
+    def refresh_league(self) -> None:
+        """Self-play: the last server plays frozen snapshots. The first time the pool has one, that server
+        alone switches from self-play to 'frozen' (its matches restart once). After that, on 25% of updates a
+        new snapshot is queued, and each of its matches takes it when it ends. No other match is cut short."""
+        env, k = self.training_env, self.args.servers - 1
+        last = env.envs[k]
+        if last.opponent != "frozen":
+            frozen = self.pick_snapshot()
+            spec = {"port": self.ports[k], "seed_base": 1_000_000 + 10_000_000 * k + self.num_timesteps, "max_ticks": MAX_TICKS,
+                    "reward": self.reward, "n_envs": self.args.matches, "opponent": "frozen", "frozen": frozen}
+            obs = env.reconfigure_one(k, spec)
+            a, b = env._cuts[k], env._cuts[k + 1]
+            self.model._last_obs[a:b] = obs
+            self.model._last_episode_starts[a:b] = True
+            self.current_stages[k] = f"vs {frozen.name}"
+        elif random.random() < 0.25:
+            frozen = self.pick_snapshot()
+            last.queue_frozen(frozen)
+            self.current_stages[k] = "vs snapshots"
 
     def switch(self) -> None:
         env = self.training_env
@@ -325,6 +347,7 @@ def main() -> None:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--resume", action="store_true", help="continue runs/<run-name> from its final.zip up to --timesteps (total); "
                    "the old final.zip is kept as checkpoint_<steps>.zip")
+    p.add_argument("--init-policy", type=Path, help="start from these weights (a snapshots/policy_<steps>.pt); without --curriculum it goes straight to self-play")
     p.add_argument("--fade-end", type=float, default=None, help="step at which the helper rewards reach 0 (default: --timesteps)")
     args = p.parse_args()
     args.timesteps, args.snapshot_every, args.eval_every = int(args.timesteps), int(args.snapshot_every), int(args.eval_every)
@@ -366,8 +389,11 @@ def main() -> None:
               policy_kwargs=POLICY_KWARGS,
               tensorboard_log=str(run_dir / "tb"), device="cpu", verbose=1, seed=args.seed,
             )
+            if args.init_policy:  # start from trained weights (e.g. a curriculum snapshot), fresh optimizer
+                model.policy.load_state_dict(torch.load(args.init_policy, map_location="cpu"))
+                print(f"[init] weights from {args.init_policy}", flush=True)
         resumed = {"resumed_from": json.loads((run_dir / "meta.json").read_text())} if args.resume else {}
-        (run_dir / "meta.json").write_text(json.dumps({"args": vars(args), **resumed, "game_version": env.envs[0].hello["version"],
+        (run_dir / "meta.json").write_text(json.dumps({"args": {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()}, **resumed, "game_version": env.envs[0].hello["version"],
                                                         "obs_size": env.envs[0].obs_size, "action_nvec": [int(x) for x in env.action_space.nvec]}, indent=2))
         trainer = Trainer(args, run_dir, trainer_ports, eval_port, reward)
         trainer.started = time.time()

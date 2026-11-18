@@ -122,7 +122,11 @@ class ShooterVecEnv(VecEnv):
         self.wire_agents = n_envs * self.L
         # agents SB3 trains on: every wire agent, except robot 1 when a frozen snapshot drives it
         self.train_idx = np.arange(self.wire_agents) if opponent != "frozen" else np.arange(0, self.wire_agents, 2)
-        self.frozen, self.frozen_state, self.frozen_start = frozen, None, None
+        # "frozen": each match has its own snapshot; queue_frozen() hands the next one to each match as it ends,
+        # so no match is ever cut short to swap opponents
+        self.frozen_of = [frozen] * n_envs
+        self.frozen_next = None
+        self.frozen_state, self.frozen_start = None, None
         self.weights, self.helpers, no_progress_s = reward or load_reward()
         self.no_progress_after = int(no_progress_s * self.hello["tick_hz"] / self.hello["decision_ticks"])
         self.helper_scale = 1.0  # the trainer fades helper terms by lowering this
@@ -157,8 +161,17 @@ class ShooterVecEnv(VecEnv):
         md[self.train_idx] = self._actions
         if self.opponent == "frozen":  # robot 1 of every match, driven by the snapshot
             opp_obs = self._last_obs[1::2]
-            act, self.frozen_state = self.frozen.predict(opp_obs, state=self.frozen_state,
-                                                         episode_start=self.frozen_start, deterministic=False)
+            if self.frozen_state is None:
+                shape = self.frozen_of[0].policy.lstm_hidden_state_shape  # (layers, 1, hidden)
+                z = np.zeros((shape[0], self.n_matches, shape[2]), dtype=np.float32)
+                self.frozen_state = (z, z.copy())
+            h, c = self.frozen_state
+            act = np.zeros((self.n_matches, len(ACTION_NVEC)), dtype=np.int64)
+            for snap in {id(f): f for f in self.frozen_of}.values():  # one batch per snapshot in use
+                idx = np.array([i for i, f in enumerate(self.frozen_of) if f is snap])
+                a, (nh, nc) = snap.predict(opp_obs[idx], state=(h[:, idx], c[:, idx]),
+                                           episode_start=self.frozen_start[idx], deterministic=False)
+                act[idx], h[:, idx], c[:, idx] = a, nh, nc
             md[1::2] = act
         self.conn.send(bytes([CMD_STEP]) + to_vector(md).tobytes())
 
@@ -224,6 +237,9 @@ class ShooterVecEnv(VecEnv):
         self._last_obs = obs
         if self.opponent == "frozen":
             self.frozen_start = dones[1::2]
+            if self.frozen_next is not None:
+                for i in np.flatnonzero(self.frozen_start):
+                    self.frozen_of[i] = self.frozen_next  # its next match is against the new snapshot
         idx = self.train_idx
         return obs[idx], rewards[idx].astype(np.float32), dones[idx], [infos[i] for i in idx]
 
@@ -234,6 +250,10 @@ class ShooterVecEnv(VecEnv):
             self.conn.close()
 
     # --- extras -------------------------------------------------------------------------------
+    def queue_frozen(self, snapshot) -> None:
+        """'frozen' only: each match plays `snapshot` from its next match on (no match is cut short)."""
+        self.frozen_next = snapshot
+
     def set_seed(self, env: int, seed: int) -> np.ndarray:
         """Restart match `env` on exactly this seed. Returns its learners' first observations."""
         self.conn.send(bytes([CMD_SEED]) + struct.pack("<HI", env, seed))
@@ -281,6 +301,17 @@ class MultiShooterVecEnv(VecEnv):
             raise ValueError(f"a stage must keep {self.num_envs} training agents, this one has {total}")
         self._cuts = np.cumsum([0] + [e.num_envs for e in self.envs])
         return self.reset()
+
+    def reconfigure_one(self, k: int, spec: dict) -> np.ndarray:
+        """Replace only server k (its matches restart; every other match goes on). Returns its first observations."""
+        new = ShooterVecEnv(**spec)
+        if new.num_envs != self.envs[k].num_envs:
+            new.close()
+            raise ValueError(f"server {k} must keep {self.envs[k].num_envs} training agents, the new one has {new.num_envs}")
+        new.helper_scale = self.envs[k].helper_scale
+        self.envs[k].close()
+        self.envs[k] = new
+        return new.reset()
 
     @property
     def helper_scale(self) -> float:
