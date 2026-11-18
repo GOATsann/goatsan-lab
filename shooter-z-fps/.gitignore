@@ -6,3 +6,5 @@ videos/
 public/characters/
 # the Special Move sounds are generated for this project, all rights reserved, not in the repo (ASSETS.md)
 public/sfx/
+# trained models: Hugging Face only, never git (copied here for local play)
+public/models/
