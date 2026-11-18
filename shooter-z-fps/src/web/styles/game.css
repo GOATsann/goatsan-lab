@@ -331,3 +331,5 @@ body.ai-wait #play, body.ai-wait #watch, body.ai-wait #watchPhone, body.ai-wait 
 .ai-status { margin: 12px 0 0; color: var(--ink-dim); font-size: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .ai-status.error { color: #ff9a8f; }
 .ai-status button { min-height: 44px; padding: 8px 18px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,0.08); color: var(--ink); font-family: var(--head); font-weight: 600; cursor: pointer; }
+/* the start-of-match touch hint sits under the score, clear of every button (it used to wrap onto Crouch) */
+.t-hint, .touch.simple .t-hint { top: calc(92px + env(safe-area-inset-top)); bottom: auto; max-width: min(46vw, 380px); white-space: normal; text-align: center; font-size: 13px; }
