@@ -7,8 +7,9 @@ PY="$LAB/car-racing/.venv/bin/python"
 (while true; do
   "$PY" car-racing/dashboard/export.py >/dev/null 2>&1
   "$PY" car-racing/dashboard/export_runner.py >/dev/null 2>&1
+  "$PY" car-racing/dashboard/export_shooter.py >/dev/null 2>&1
   sleep 60
 done) &
 trap 'kill $!' EXIT
-echo "Dashboard: http://localhost:8765/car-racing/dashboard/  (runner: ?p=runner)"
+echo "Dashboard: http://localhost:8765/car-racing/dashboard/  (runner: ?p=runner, Shooter Z: ?p=shooter)"
 "$PY" -m http.server 8765 --bind 127.0.0.1

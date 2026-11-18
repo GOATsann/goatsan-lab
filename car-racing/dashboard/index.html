@@ -33,8 +33,8 @@
   </section>
 
   <section class="tiles" aria-label="Headline numbers">
-    <div class="tile"><span>Latest test race</span><b class="score" id="t-latest">–</b><span id="t-latest-at"></span></div>
-    <div class="tile"><span>Best test race</span><b class="score" id="t-best">–</b><span id="t-best-note"></span></div>
+    <div class="tile"><span id="t-latest-label">Latest test race</span><b class="score" id="t-latest">–</b><span id="t-latest-at"></span></div>
+    <div class="tile"><span id="t-best-label">Best test race</span><b class="score" id="t-best">–</b><span id="t-best-note"></span></div>
     <div class="tile"><span>Coach accuracy</span><b id="t-coach">–</b><span>1.00 = predicts the points perfectly</span></div>
     <div class="tile"><span id="t-explore-label">Driver's randomness</span><b id="t-explore">–</b><span>shrinks as it gets confident</span></div>
   </section>
@@ -43,14 +43,31 @@
   <section id="legend" class="compare" hidden aria-label="Runs compared">
     <fieldset class="pick"><legend>Pick up to 5 runs</legend><div id="pick"></div></fieldset>
     <div class="table-scroll"><table>
-      <thead><tr><th>#</th><th>Run</th><th>Steps</th><th>Latest test race</th><th>Best test race</th></tr></thead>
+      <thead><tr><th>#</th><th>Run</th><th>Steps</th><th id="th-latest">Latest test race</th><th id="th-best">Best test race</th></tr></thead>
       <tbody id="compare-rows"></tbody>
     </table></div>
   </section>
 
   <section class="charts" id="charts" aria-label="Charts"></section>
 
-  <section style="display:grid;gap:12px" aria-label="Progress races">
+  <section id="shooter-bench" class="compare" hidden aria-label="Benchmark">
+    <h2>Benchmark</h2>
+    <p class="note">100 fixed matches per opponent, deterministic play, first to 10. The reward plays no part. A vs B: 50 seeds, each played from both sides.</p>
+    <div class="table-scroll"><table>
+      <thead><tr><th>Run</th><th>Opponent</th><th>Win rate</th><th>95% range</th><th>K/D</th><th>Hit rate</th><th>Headshots</th><th>Damage / min</th></tr></thead>
+      <tbody id="shooter-bench-rows"></tbody>
+    </table></div>
+  </section>
+
+  <section id="stages-box" class="compare" hidden aria-label="Curriculum">
+    <h2>Curriculum stages</h2>
+    <div class="table-scroll"><table>
+      <thead><tr><th>Steps</th><th>Stage</th><th>Event</th></tr></thead>
+      <tbody id="stages-rows"></tbody>
+    </table></div>
+  </section>
+
+  <section id="videos-section" style="display:grid;gap:12px" aria-label="Progress races">
     <h2>Watch it learn</h2>
     <p class="note" id="videos-note">One test race on the same track every 100,000 steps. Newest first.</p>
     <div class="videos" id="videos"></div>
@@ -84,6 +101,20 @@ const RUNNER_CHARTS = [
   { key: "update_size", title: "Update size", desc: "How much the policy changed per update (approx. KL).", color: "--signal", min: 0, fmt: v => v.toFixed(3) },
   { key: "coach_loss", title: "Coach loss", desc: "Squared gap between the critic's guess and the real points.", color: "--signal", min: 0, fmt: v => v.toFixed(3) },
 ];
+const SHOOTER_CHARTS = [
+  { key: "races", title: "Win rate vs Normal bots (progress benchmark)", desc: "32 fixed matches against Normal bots every 2M steps, best actions only.", color: "--reward", min: 0, max: 100, fmt: v => v.toFixed(0) + "%" },
+  { key: "win_rate", title: "Training win rate", desc: "Matches won in training, against whatever the current stage plays (targets, bots or itself).", color: "--reward", min: 0, max: 100, fmt: v => v.toFixed(0) + "%" },
+  { key: "enemy_visible", title: "Enemy on screen", desc: "Share of decisions with an enemy on screen. Rises as it learns to find and track the enemy.", color: "--reward", min: 0, max: 100, fmt: v => v.toFixed(0) + "%" },
+  { key: "hit_rate", title: "Hit rate", desc: "Hits per shot fired, in training matches.", color: "--reward", min: 0, max: 100, fmt: v => v.toFixed(0) + "%" },
+  { key: "headshot_share", title: "Headshots", desc: "Share of hits that hit the head (2.5x damage).", color: "--reward", min: 0, max: 100, fmt: v => v.toFixed(0) + "%" },
+  { key: "kd", title: "K/D", desc: "Eliminations per death, in training matches.", color: "--reward", min: 0, fmt: v => v.toFixed(2) },
+  { key: "damage_per_min", title: "Damage per minute", desc: "Damage dealt per minute of match, in training matches.", color: "--reward", min: 0, fmt: v => v < 10 ? v.toFixed(1) : v.toFixed(0) },
+  { key: "stage", title: "Curriculum stage", desc: "0-8 = targets, then bots Easy/Normal/Hard; 9 = self-play. Run B starts at 9.", color: "--signal", min: 0, max: 9, fmt: v => v.toFixed(0) },
+  { key: "helper_scale", title: "Helper rewards left", desc: "Damage and enemy-on-screen rewards fade to 0 over the second half of self-play.", color: "--signal", min: 0, max: 1, fmt: v => (v * 100).toFixed(0) + "%" },
+  { key: "coach_accuracy", title: "Coach accuracy", desc: "How well the critic predicts the points (explained variance).", color: "--signal", max: 1, fmt: v => v.toFixed(2) },
+  { key: "exploration", title: "Randomness (entropy)", desc: "Spread of its action choices over 9 action parts. 10.6 = fully random.", color: "--signal", min: 0, fmt: v => v.toFixed(2) },
+  { key: "update_size", title: "Update size", desc: "How much the policy changed per update (approx. KL).", color: "--signal", min: 0, fmt: v => v.toFixed(3) },
+];
 const PROJECTS = {
   car: { name: "CarRacing", kicker: "BULSHY.FM · Build #1", title: "Car racing training", data: "data.json", charts: CAR_CHARTS,
          bestNote: "900 = solved", explore: "Driver's randomness", exploreFmt: v => v.toFixed(3), defaultRun: "baseline",
@@ -91,6 +122,9 @@ const PROJECTS = {
   runner: { name: "Lights-Out Surfer", kicker: "BULSHY.FM · Lights-Out Surfer", title: "Runner training", data: "data-runner.json", charts: RUNNER_CHARTS,
             bestNote: "same track, on Normal", explore: "Randomness (entropy)", exploreFmt: v => v.toFixed(2), defaultRun: null,
             videosNote: "Progress races on the same track (seed 7, Normal), rendered from replays. Newest first." },
+  shooter: { name: "Shooter Z", kicker: "BULSHY.FM · Shooter Z", title: "Shooter Z training", data: "data-shooter.json", charts: SHOOTER_CHARTS,
+             bestNote: "32 matches vs Normal bots", explore: "Randomness (entropy)", exploreFmt: v => v.toFixed(2), defaultRun: null,
+             latestLabel: "Latest win rate vs Normal", bestLabel: "Best win rate vs Normal", suffix: "%", noVideos: true, noBenchPage: true, videosNote: "" },
 };
 const PID = PROJECTS[new URLSearchParams(location.search).get("p")] ? new URLSearchParams(location.search).get("p") : "car";
 const PROJECT = PROJECTS[PID];
@@ -103,6 +137,11 @@ document.getElementById("t-best-note").textContent = PROJECT.bestNote;
 document.getElementById("t-explore-label").textContent = PROJECT.explore;
 document.getElementById("nav-train").href = "./" + Q;
 document.getElementById("nav-bench").href = "bench.html" + Q;
+if (PROJECT.noBenchPage) document.getElementById("nav-bench").hidden = true;  // the benchmark table is on this page
+if (PROJECT.noVideos) document.getElementById("videos-section").hidden = true;
+if (PROJECT.latestLabel) for (const id of ["t-latest-label", "th-latest"]) document.getElementById(id).textContent = PROJECT.latestLabel;
+if (PROJECT.bestLabel) for (const id of ["t-best-label", "th-best"]) document.getElementById(id).textContent = PROJECT.bestLabel;
+const SUF = PROJECT.suffix || "";
 document.getElementById("projects").replaceChildren(...Object.entries(PROJECTS).map(([id, p]) => {
   const a = document.createElement("a"); a.href = "./" + (id === "car" ? "" : `?p=${id}`); a.textContent = p.name;
   if (id === PID) a.setAttribute("aria-current", "page");
@@ -262,6 +301,7 @@ function renderCompare() {
   loadPicked(all); renderPicker(all);
   const names = all.filter(n => picked.includes(n));  // keep the runs in their usual order
   document.getElementById("single").hidden = true;
+  document.getElementById("shooter-bench").hidden = true; document.getElementById("stages-box").hidden = true;
   const legend = document.getElementById("legend"); legend.hidden = false;
   const rows = document.getElementById("compare-rows"); rows.replaceChildren();
   names.forEach((n, i) => {
@@ -271,7 +311,7 @@ function renderCompare() {
     const tr = document.createElement("tr");
     const c0 = document.createElement("td"); const key = document.createElement("i"); key.className = "key"; key.style.background = colorOf[n]; c0.append(key, document.createTextNode(n));
     const cn = document.createElement("td"); cn.className = "num"; cn.textContent = data.runs[n].number ?? "–"; tr.appendChild(cn);
-    const cells = [fmtSteps(steps), races.at(-1) ? races.at(-1).score.toFixed(0) : "–", best ? best.score.toFixed(0) : "–"];
+    const cells = [fmtSteps(steps), races.at(-1) ? races.at(-1).score.toFixed(0) + SUF : "–", best ? best.score.toFixed(0) + SUF : "–"];
     tr.appendChild(c0); for (const c of cells) { const td = document.createElement("td"); td.textContent = c; tr.appendChild(td); }
     rows.appendChild(tr);
   });
@@ -325,9 +365,10 @@ function render() {
   const left = fps ? (target - steps) / fps / 60 : null;
   document.getElementById("eta").textContent = steps >= target ? "finished" : fps ? `${Math.round(fps)} steps/s · about ${left > 90 ? (left / 60).toFixed(1) + " h" : Math.round(left) + " min"} left` : "";
   const latest = races.at(-1), best = races.reduce((b, r) => (b && b.score > r.score ? b : r), null);
-  document.getElementById("t-latest").textContent = latest ? latest.score.toFixed(0) : "–";
+  document.getElementById("t-latest").textContent = latest ? latest.score.toFixed(0) + SUF : "–";
   document.getElementById("t-latest-at").textContent = latest ? `at ${fmtSteps(latest.steps)} steps, ${latest.minutes.toFixed(0)} min in` : "";
-  document.getElementById("t-best").textContent = best ? best.score.toFixed(0) : "–";
+  document.getElementById("t-best").textContent = best ? best.score.toFixed(0) + SUF : "–";
+  renderShooterExtras(run);
   const coach = (s.coach_accuracy || []).at(-1)?.[1], explore = (s.exploration || []).at(-1)?.[1];
   document.getElementById("t-coach").textContent = coach !== undefined ? coach.toFixed(2) : "–";
   document.getElementById("t-explore").textContent = explore !== undefined ? PROJECT.exploreFmt(explore) : "–";
@@ -344,6 +385,31 @@ function render() {
     const after = [...box.children].find(c => +c.dataset.steps < v.steps);
     box.insertBefore(card, after || null);
   }
+}
+
+// Shooter Z: the benchmark table and the curriculum stage log of the chosen run (all text, no colour coding)
+function renderShooterExtras(run) {
+  const benchBox = document.getElementById("shooter-bench"), stageBox = document.getElementById("stages-box");
+  const b = run.shooter_bench;
+  benchBox.hidden = !b;
+  if (b) {
+    const pct = v => (v * 100).toFixed(0) + "%";
+    document.getElementById("shooter-bench-rows").replaceChildren(...Object.entries(b).map(([opp, r]) => {
+      const tr = document.createElement("tr");
+      const cells = [runName, opp, pct(r.win_rate), r.win_ci ? `${pct(r.win_ci[0])} to ${pct(r.win_ci[1])}` : "–",
+        r.kd !== undefined ? r.kd.toFixed(2) : "–", r.hit_rate !== undefined ? pct(r.hit_rate) : "–",
+        r.headshot_share !== undefined ? pct(r.headshot_share) : "–", r.damage_per_min !== undefined ? r.damage_per_min.toFixed(0) : "–"];
+      for (const c of cells) { const td = document.createElement("td"); td.textContent = c; tr.appendChild(td); }
+      return tr;
+    }));
+  }
+  const st = run.stages || [];
+  stageBox.hidden = !st.length;
+  document.getElementById("stages-rows").replaceChildren(...st.map(x => {
+    const tr = document.createElement("tr");
+    for (const c of [x.steps.toLocaleString(), x.stage, x.event]) { const td = document.createElement("td"); td.textContent = c; tr.appendChild(td); }
+    return tr;
+  }));
 }
 
 function targetOf(run) { return run.target_steps ?? data.target_steps; }  // runner runs each have their own length
