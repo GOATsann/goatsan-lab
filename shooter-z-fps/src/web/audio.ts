@@ -27,7 +27,7 @@ export class Sfx {
   private musicSrc: AudioBufferSourceNode | null = null;
   /** the music file downloads with the page (no audio permission needed for that) */
   private musicBytes: Promise<ArrayBuffer | null> = fetch("audio/music.mp3")
-    .then((r) => (r.ok && (r.headers.get("content-type") ?? "").includes("audio") ? r.arrayBuffer() : null))
+    .then((r) => (r.ok && !isHtml(r) ? r.arrayBuffer() : null))
     .catch(() => null); // missing (not in git): no music
   private samples = new Map<string, AudioBuffer>();
   private samplesLoading = false;
@@ -132,7 +132,7 @@ export class Sfx {
     const c = this.ctx;
     for (const name of ["dash", "bulwark", "echo", "wisp", "ready"]) {
       fetch(`sfx/${name}.mp3`)
-        .then((r) => (r.ok && (r.headers.get("content-type") ?? "").includes("audio") ? r.arrayBuffer() : Promise.reject(new Error("missing"))))
+        .then((r) => (r.ok && !isHtml(r) ? r.arrayBuffer() : Promise.reject(new Error("missing"))))
         .then((b) => c.decodeAudioData(b))
         .then((buf) => this.samples.set(name, buf))
         .catch(() => { /* not there: the synthesized stand-in plays instead */ });
@@ -265,3 +265,7 @@ function trimSilence(buf: AudioBuffer, threshold = 0.003): [number, number] {
   while (b > a && Math.abs(d[b]) < threshold) b--;
   return [a / buf.sampleRate, (b + 1) / buf.sampleRate];
 }
+
+/** A missing file comes back as the dev server's HTML page; any other answer is the sound (some hosts send
+ *  octet-stream instead of audio/mpeg). */
+function isHtml(r: Response): boolean { return (r.headers.get("content-type") ?? "").includes("text/html"); }

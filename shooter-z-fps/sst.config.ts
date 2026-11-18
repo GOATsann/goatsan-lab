@@ -33,7 +33,7 @@ export default $config({
           { files: "models/**", cacheControl: "public,max-age=300,must-revalidate" },
           { files: "models/*.onnx", contentType: "application/octet-stream", cacheControl: "public,max-age=300,must-revalidate" },
           { files: "characters/*.glb", contentType: "model/gltf-binary", cacheControl: "public,max-age=300,must-revalidate" },
-          { files: "sfx/*.mp3", contentType: "audio/mpeg", cacheControl: "public,max-age=3600,must-revalidate" },
+          { files: "**/*.mp3", contentType: "audio/mpeg", cacheControl: "public,max-age=3600,must-revalidate" },
         ],
       },
       ...(cert ? { domain: { name: "shooterz.theonlygoatsan.com", dns: false, cert } } : {}),
