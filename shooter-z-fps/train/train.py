@@ -162,8 +162,26 @@ class Trainer(BaseCallback):
             out.append(s)
         return out
 
+    def restore(self, t: int) -> None:
+        """Continue a finished run: its stage, self-play start and snapshot pool, from stages.csv and snapshots/."""
+        rows = [r for r in csv.reader((self.run_dir / "stages.csv").open()) if r]
+        names = [s[0] for s in STAGES]
+        last = rows[-1]
+        self.stage = names.index(last[1]) + (1 if last[2] != "start" else 0)
+        self.stage_started = int(last[0])
+        sp = [int(r[0]) for r in rows if r[1] == "self-play" and r[2] == "start"]
+        self.selfplay_started = sp[0] if sp else None
+        self.pool = sorted((self.run_dir / "snapshots").glob("policy_*.pt"))
+        last_snap = int(self.pool[-1].stem.split("_")[1]) if self.pool else 0
+        self.next_snapshot = last_snap + self.args.snapshot_every
+        self.next_eval = t + self.args.eval_every
+        self.resuming = True
+
     # ---- SB3 hooks ----------------------------------------------------------------------------------
     def _on_training_start(self) -> None:
+        if getattr(self, "resuming", False):
+            self.switch()  # the servers play the restored stage (and a snapshot from the pool)
+            return
         self.write_stage("start")
 
     def _on_step(self) -> bool:
@@ -209,7 +227,7 @@ class Trainer(BaseCallback):
             self.next_eval += self.args.eval_every
         changed = self.maybe_advance()
         if self.selfplay_started is not None:  # helper terms fade over the second half of self-play
-            span = max(1, self.args.timesteps - self.selfplay_started)
+            span = max(1, self.args.fade_end - self.selfplay_started)
             frac = (t - self.selfplay_started) / span
             self.training_env.helper_scale = float(np.clip(2 - 2 * frac, 0, 1))
         if changed or (STAGES[self.stage][1] is None and self.pool and random.random() < 0.25):
@@ -319,15 +337,24 @@ def main() -> None:
     p.add_argument("--eval-every", type=float, default=2e6)
     p.add_argument("--stage-cap", type=float, default=0.12, help="max share of the budget per curriculum stage")
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--resume", action="store_true", help="continue runs/<run-name> from its final.zip up to --timesteps (total); "
+                   "the old final.zip is kept as checkpoint_<steps>.zip")
+    p.add_argument("--fade-end", type=float, default=None, help="step at which the helper rewards reach 0 (default: --timesteps)")
     args = p.parse_args()
     args.timesteps, args.snapshot_every, args.eval_every = int(args.timesteps), int(args.snapshot_every), int(args.eval_every)
+    args.fade_end = int(args.fade_end) if args.fade_end else args.timesteps
 
     torch.set_num_threads(args.threads)
     random.seed(args.seed); np.random.seed(args.seed); torch.manual_seed(args.seed)
     run_dir = ROOT / "runs" / args.run_name
-    run_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy(HERE / "reward.json", run_dir / "reward.json")
-    reward = load_reward(HERE / "reward.json")
+    if args.resume:  # the run keeps its own reward and curriculum flag
+        old = json.loads((run_dir / "meta.json").read_text())
+        args.curriculum = old["args"]["curriculum"]
+        reward = load_reward(run_dir / "reward.json")
+    else:
+        run_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy(HERE / "reward.json", run_dir / "reward.json")
+        reward = load_reward(HERE / "reward.json")
 
     servers = GameServers(args.servers + 1, args.port, run_dir / "logs")  # +1 for evaluation
     try:
@@ -338,21 +365,33 @@ def main() -> None:
                   else {"port": pt, "n_envs": args.matches // 2, "opponent": "self"})
                  | {"seed_base": 1_000_000 + 10_000_000 * k, "max_ticks": MAX_TICKS, "reward": reward} for k, pt in enumerate(trainer_ports)]
         env = MultiShooterVecEnv(specs)
-        model = RecurrentPPO(
-            "MlpLstmPolicy", env,
-            n_steps=128, batch_size=5120, n_epochs=3,  # measured: about 2x faster than 2048 x 4 on CPU learning_rate=3e-4,
-            gamma=0.995, gae_lambda=0.95, clip_range=0.2, ent_coef=0.01, vf_coef=0.5, max_grad_norm=0.5,
-            policy_kwargs=dict(features_extractor_class=Encoder, features_extractor_kwargs=dict(features_dim=256),
-                               lstm_hidden_size=256, n_lstm_layers=1, enable_critic_lstm=True,
-                               net_arch=dict(pi=[128], vf=[128])),
-            tensorboard_log=str(run_dir / "tb"), device="cpu", verbose=1, seed=args.seed,
-        )
-        (run_dir / "meta.json").write_text(json.dumps({"args": vars(args), "game_version": env.envs[0].hello["version"],
+        if args.resume:
+            model = RecurrentPPO.load(run_dir / "final.zip", env=env, device="cpu")
+            model.tensorboard_log = str(run_dir / "tb")
+            keep = run_dir / f"checkpoint_{model.num_timesteps}.zip"
+            if not keep.exists():
+                shutil.copy(run_dir / "final.zip", keep)
+            print(f"[resume] from {model.num_timesteps:,} steps to {args.timesteps:,}; kept {keep.name}", flush=True)
+        else:
+            model = RecurrentPPO(
+              "MlpLstmPolicy", env,
+              n_steps=128, batch_size=5120, n_epochs=3, learning_rate=3e-4,  # batch 5120 x 3 epochs: about 2x faster than 2048 x 4 on CPU
+              gamma=0.995, gae_lambda=0.95, clip_range=0.2, ent_coef=0.01, vf_coef=0.5, max_grad_norm=0.5,
+              policy_kwargs=dict(features_extractor_class=Encoder, features_extractor_kwargs=dict(features_dim=256),
+                                 lstm_hidden_size=256, n_lstm_layers=1, enable_critic_lstm=True,
+                                 net_arch=dict(pi=[128], vf=[128])),
+              tensorboard_log=str(run_dir / "tb"), device="cpu", verbose=1, seed=args.seed,
+            )
+        resumed = {"resumed_from": json.loads((run_dir / "meta.json").read_text())} if args.resume else {}
+        (run_dir / "meta.json").write_text(json.dumps({"args": vars(args), **resumed, "game_version": env.envs[0].hello["version"],
                                                         "obs_size": env.envs[0].obs_size, "action_nvec": [int(x) for x in env.action_space.nvec]}, indent=2))
         trainer = Trainer(args, run_dir, trainer_ports, eval_port, reward)
         trainer.started = time.time()
         trainer.current_stages = [STAGES[0][0] if args.curriculum else "self-play"] * args.servers
-        model.learn(total_timesteps=args.timesteps, callback=trainer, tb_log_name="ppo")
+        if args.resume:
+            trainer.restore(model.num_timesteps)
+        model.learn(total_timesteps=args.timesteps - model.num_timesteps, callback=trainer, tb_log_name="ppo",
+                    reset_num_timesteps=not args.resume)
         model.save(run_dir / "final")
         trainer.evaluate()
         env.close()
