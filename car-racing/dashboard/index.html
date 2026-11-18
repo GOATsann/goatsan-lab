@@ -102,7 +102,8 @@ const RUNNER_CHARTS = [
   { key: "coach_loss", title: "Coach loss", desc: "Squared gap between the critic's guess and the real points.", color: "--signal", min: 0, fmt: v => v.toFixed(3) },
 ];
 const SHOOTER_CHARTS = [
-  { key: "races", title: "Win rate vs Normal bots (progress benchmark)", desc: "32 fixed matches against Normal bots every 2M steps, best actions only.", color: "--reward", min: 0, max: 100, fmt: v => v.toFixed(0) + "%" },
+  { key: "races", title: "Win rate vs Normal bots (yardstick)", desc: "32 fixed matches against Normal bots every 2M steps, best actions only. Bots are not in training any more; this is only a fixed reference.", color: "--reward", min: 0, max: 100, fmt: v => v.toFixed(0) + "%" },
+  { key: "ref_kill_share", title: "Kill share vs the reference model", desc: "32 fixed matches against a fixed copy of the starting model (A@28M). Above 50% = it got stronger.", color: "--reward", min: 0, max: 100, target: 50, fmt: v => v.toFixed(0) + "%" },
   { key: "win_rate", title: "Training win rate", desc: "Matches won in training, against whatever the current stage plays (targets, bots or itself).", color: "--reward", min: 0, max: 100, fmt: v => v.toFixed(0) + "%" },
   { key: "enemy_visible", title: "Enemy on screen", desc: "Share of decisions with an enemy on screen. Rises as it learns to find and track the enemy.", color: "--reward", min: 0, max: 100, fmt: v => v.toFixed(0) + "%" },
   { key: "hit_rate", title: "Hit rate", desc: "Hits per shot fired, in training matches.", color: "--reward", min: 0, max: 100, fmt: v => v.toFixed(0) + "%" },

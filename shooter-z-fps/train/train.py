@@ -95,6 +95,13 @@ class Snapshot:
         return self.policy.predict(obs, state=state, episode_start=episode_start, deterministic=deterministic)
 
 
+class DetSnapshot(Snapshot):
+    """A frozen snapshot that always plays its best action (for benchmarks)."""
+
+    def predict(self, obs, state=None, episode_start=None, deterministic=True):
+        return self.policy.predict(obs, state=state, episode_start=episode_start, deterministic=True)
+
+
 class Trainer(BaseCallback):
     """Curriculum, self-play league, helper fade, logging, snapshots and progress evaluation."""
 
@@ -111,6 +118,10 @@ class Trainer(BaseCallback):
         self.next_snapshot = args.snapshot_every
         self.next_eval = 0
         self.pool: list[Path] = []
+        if args.init_policy:  # the starting weights are the first opponent in the pool (e.g. A@28M)
+            self.pool.append(Path(args.init_policy))
+        self.vs_snapshot = collections.defaultdict(lambda: collections.deque(maxlen=50))  # snapshot -> [(kills, deaths)]
+        self.ref = None  # fixed reference opponent for the progress benchmark (--ref-policy)
         (run_dir / "snapshots").mkdir(parents=True, exist_ok=True)
         self.log = (run_dir / "stages.csv").open("a", newline="")
         self.stage_log = csv.writer(self.log)
@@ -141,9 +152,19 @@ class Trainer(BaseCallback):
         return out
 
     def pick_snapshot(self):
+        """Prioritized pick (PFSP "hard", as in AlphaStar): weight (1 - p)^2, p = the current model's kill share
+        against that snapshot so far (prior 1:1). Snapshots it still struggles with get most matches; ones it
+        crushes fade out. Weights use recent results (the last 50 matches per snapshot)."""
         if not self.pool:
             return None
-        return Snapshot(self.model.policy, random.choice(self.pool))
+        weights = []
+        for path in self.pool:
+            r = self.vs_snapshot.get(path.stem, [])
+            k, d = sum(x[0] for x in r), sum(x[1] for x in r)
+            p = (k + 1) / (k + d + 2)
+            weights.append((1 - p) ** 2 + 1e-3)
+        path = random.choices(self.pool, weights=weights)[0]
+        return Snapshot(self.model.policy, path)
 
     def env_specs(self):
         out = []
@@ -162,7 +183,7 @@ class Trainer(BaseCallback):
         self.stage_started = int(last[0])
         sp = [int(r[0]) for r in rows if r[1] == "self-play" and r[2] == "start"]
         self.selfplay_started = sp[0] if sp else None
-        self.pool = sorted((self.run_dir / "snapshots").glob("policy_*.pt"))
+        self.pool = ([Path(self.args.init_policy)] if self.args.init_policy else []) + sorted((self.run_dir / "snapshots").glob("policy_*.pt"))
         last_snap = int(self.pool[-1].stem.split("_")[1]) if self.pool else 0
         self.next_snapshot = last_snap + self.args.snapshot_every
         self.next_eval = t + self.args.eval_every
@@ -182,6 +203,8 @@ class Trainer(BaseCallback):
             if "episode_end" in info:
                 e = info["episode_end"]
                 self.rollout_ends.append(e)
+                if e.get("snapshot"):
+                    self.vs_snapshot[e["snapshot"]].append((e["kills"], e["deaths"]))
                 self.recent[self.server_stage(i)].append(e)
         return True
 
@@ -211,6 +234,7 @@ class Trainer(BaseCallback):
                 sub = [x for x in e if x["opponent"] == opp]
                 L.record(f"episode/win_rate_{opp}", np.mean([x["won"] for x in sub]))
         L.record("train/stage", self.stage)
+        L.record("league/pool_size", len(self.pool))
         L.record("train/helper_scale", self.training_env.helper_scale)
         self.terms.clear(); self.rollout_ends.clear(); self.decisions = 0
 
@@ -295,9 +319,21 @@ class Trainer(BaseCallback):
         print(f"[stage] {self.num_timesteps:,} steps: {STAGES[self.stage][0]} {event}" + (f" (win rate {win:.0%})" if win is not None else ""), flush=True)
 
     def evaluate(self) -> None:
-        """32 deterministic matches against Normal bots on fixed seeds -> progress.csv (learning curves)."""
+        """32 deterministic matches against Normal bots on fixed seeds (a fixed yardstick), and with
+        --ref-policy 32 against that fixed reference model (the main measure in AI-only self-play)
+        -> progress.csv (learning curves)."""
         res = play_matches(self.model.policy, self.eval_port, "normal", 32, EVAL_SEED, MAX_TICKS)
         row = {"steps": self.num_timesteps, "minutes": round((time.time() - self.started) / 60, 1), "stage": STAGES[self.stage][0], **res}
+        if self.args.ref_policy:
+            if self.ref is None:
+                self.ref = DetSnapshot(self.model.policy, Path(self.args.ref_policy))
+            rec: list = []
+            ref = play_matches(self.model.policy, self.eval_port, "policy", 32, EVAL_SEED, MAX_TICKS, opponent_policy=self.ref, records=rec)
+            k, d = sum(x["kills"] for x in rec), sum(x["deaths"] for x in rec)
+            row |= {"ref_win_rate": ref["win_rate"], "ref_loss_rate": float(np.mean([x["lost"] for x in rec])), "ref_kill_share": k / max(k + d, 1)}
+            self.logger.record("eval/kill_share_vs_ref", row["ref_kill_share"])
+            print(f"[eval] {self.num_timesteps:,} steps: vs {self.ref.name} kill share {row['ref_kill_share']:.0%}, "
+                  f"won {row['ref_win_rate']:.0%}, lost {row['ref_loss_rate']:.0%}", flush=True)
         path = self.run_dir / "progress.csv"
         new = not path.exists()
         with path.open("a", newline="") as f:
@@ -360,6 +396,7 @@ def main() -> None:
     p.add_argument("--resume", action="store_true", help="continue runs/<run-name> from its final.zip up to --timesteps (total); "
                    "the old final.zip is kept as checkpoint_<steps>.zip")
     p.add_argument("--selfplay-bots", action="store_true", help="in self-play, 1 of the 5 servers plays heuristic bots (random level per match)")
+    p.add_argument("--ref-policy", type=Path, help="fixed reference opponent for the progress benchmark (a policy_<steps>.pt)")
     p.add_argument("--init-policy", type=Path, help="start from these weights (a snapshots/policy_<steps>.pt); without --curriculum it goes straight to self-play")
     p.add_argument("--fade-end", type=float, default=None, help="step at which the helper rewards reach 0 (default: --timesteps)")
     args = p.parse_args()

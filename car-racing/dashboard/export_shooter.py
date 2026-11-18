@@ -75,7 +75,8 @@ def evals(run_dir: Path) -> list[dict]:
     with log.open() as f:
         return [{"steps": int(r["steps"]), "minutes": float(r["minutes"]), "score": float(r["win_rate"]) * 100,
                  "stage": r["stage"], "kd": float(r["kd"]), "hit_rate": float(r["hit_rate"]) * 100,
-                 "headshot_share": float(r["headshot_share"]) * 100, "damage_per_min": float(r["damage_per_min"])}
+                 "headshot_share": float(r["headshot_share"]) * 100, "damage_per_min": float(r["damage_per_min"]),
+                 **({"ref_kill_share": float(r["ref_kill_share"]) * 100} if r.get("ref_kill_share") else {})}
                 for r in csv.DictReader(f)]
 
 
@@ -101,7 +102,8 @@ def main() -> None:
         runs[run_dir.name] = {
             "number": None, "change": "curriculum" if meta["args"].get("curriculum") else "straight self-play",
             "game_version": meta.get("game_version"), "target_steps": int(float(meta["args"]["timesteps"])),
-            "series": scalars(run_dir, weight), "races": evals(run_dir), "stages": stages(run_dir),
+            "series": {**scalars(run_dir, weight), "ref_kill_share": [[r["steps"], r["ref_kill_share"]] for r in evals(run_dir) if "ref_kill_share" in r]},
+            "races": evals(run_dir), "stages": stages(run_dir),
             "videos": [], "bench_videos": [], "bench": None, "shooter_bench": benches or None,
         }
     OUT.write_text(json.dumps({"project": "shooter", "updated": time.strftime("%Y-%m-%d %H:%M:%S"), "runs": runs}))

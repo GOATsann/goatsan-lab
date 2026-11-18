@@ -304,6 +304,7 @@ class ShooterVecEnv(VecEnv):
                 e = self._ep[a]
                 info["episode_end"] = {
                     "seed": int(seeds[a]), "opponent": self.opponent, "slot": int(a % self.L),
+                    **({"snapshot": getattr(self.frozen_of[a // 2], "name", "")} if self.opponent == "frozen" else {}),
                     "won": bool(cause[a] == 1), "lost": bool(cause[a] == 2), "cut_off": bool(truncated[a]),
                     "minutes": float(e[f["ticks"]]) / self.hello["tick_hz"] / 60,
                     **{name: float(e[f[name]]) for name in ("kills", "deaths", "hits", "headshots", "shots",
