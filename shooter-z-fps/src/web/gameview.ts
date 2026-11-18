@@ -40,6 +40,8 @@ export class GameView {
   readonly map: MapView;
   readonly fx: Fx;
   readonly robots: RobotView[] = [];
+  /** see-through red silhouette copies, shown only while Echo's Scan exposes the robot to your team */
+  private scanGhost: THREE.Mesh[][] = [];
   private spawnAt: number[]; private specialAt: number[]; private airSince: number[];
   private markers: THREE.Sprite[] = [];
   private prev: { x: number; y: number; z: number; yaw: number }[];
@@ -87,6 +89,7 @@ export class GameView {
         if (this.stage.scene !== sceneNow) return; // a new match has started since
         for (const r of this.robots) sceneNow.remove(r.root);
         this.robots.length = 0;
+        this.scanGhost.length = 0;
         this.addRobots(opts.colors);
       });
     }
@@ -121,10 +124,30 @@ export class GameView {
       const r = makeRobot(CHARACTERS[a.character].accent, this.stage.graphics === "normal", a.character, true);
       scene.add(r.root);
       this.robots.push(r);
-      // no body outlines: friend or foe and reveals are shown only by the arrow over the head
+      // no body outlines anywhere, except Echo's Scan: the exposed robot glows as a red silhouette
+      // through walls (the ability's payoff); everything else is shown by the arrow over the head
+      const gm = new THREE.MeshBasicMaterial({ color: FOE, transparent: true, opacity: 0.6, depthTest: false, depthWrite: false });
+      const list: THREE.Mesh[] = [];
+      for (const m of r.meshes) {
+        const sk = m as THREE.SkinnedMesh;
+        let x: THREE.Mesh;
+        if (sk.isSkinnedMesh) {
+          const xs = new THREE.SkinnedMesh(sk.geometry, gm);
+          xs.bind(sk.skeleton, sk.bindMatrix); // follows the same skeleton as the body
+          xs.frustumCulled = false;
+          x = xs;
+        } else x = new THREE.Mesh(m.geometry, gm);
+        x.renderOrder = 20;
+        x.visible = false;
+        m.add(x);
+        list.push(x);
+      }
+      this.scanGhost.push(list);
     }
-    // compile the robot shaders now, not on the first hit mid-fight
+    // compile the robot shaders now (scan silhouettes included), not on the first scan mid-fight
+    for (const l of this.scanGhost) for (const x of l) x.visible = true;
     this.stage.renderer.compile(scene, this.stage.camera);
+    for (const l of this.scanGhost) for (const x of l) x.visible = false;
   }
 
   private buildViewmodel(color: string): void {
@@ -283,6 +306,10 @@ export class GameView {
       // first person: our own robot only casts its shadow (shown again on the death cam)
       const hidden = a.id === this.viewer && a.alive;
       for (const m of r.meshes) m.layers.set(hidden ? SELF_LAYER : 0);
+      // Echo's Scan: a red silhouette through walls for the scanning team
+      const scanned = markerViewer >= 0 && a.alive && a.team !== g.agents[markerViewer].team && a.scanFor[g.agents[markerViewer].team] > 0;
+      const glow = 0.5 + 0.2 * Math.sin(this.time * 14);
+      for (const x of this.scanGhost[a.id]) { x.visible = scanned; if (scanned) (x.material as THREE.MeshBasicMaterial).opacity = glow; }
       // marker arrow
       const mk = this.markers[a.id];
       let show = false, mate = false;

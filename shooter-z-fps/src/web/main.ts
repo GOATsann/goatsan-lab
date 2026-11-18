@@ -128,9 +128,10 @@ function startMatch(kind: "play" | "watch" | "backdrop" | "tutorial", mapOverrid
   S = { match, view, hud, rig, spectator: spectate, self, colors, slots, endedAt: -1, backdrop: kind === "backdrop", tutorial };
   if (tutorial) view.snapshot();
   hud.setVisible(kind !== "backdrop" && hudVisible);
-  (window as unknown as { shooterZ: unknown }).shooterZ = { match, view, rig, input, hud, get state() { return state; }, get tutorial() { return S?.tutorial ?? null; }, get touchPaused() { return touchPaused; } }; // for tests and debugging
+  (window as unknown as { shooterZ: unknown }).shooterZ = { match, view, rig, input, hud, get state() { return state; }, get tutorial() { return S?.tutorial ?? null; }, get touchPaused() { return touchPaused; }, sfx }; // for tests and debugging
   updateSpecBar();
   acc = 0;
+  readyCd = 0;
 }
 
 function hudCtx(): HudContext {
@@ -158,7 +159,11 @@ function onEvents(events: readonly GameEvent[]): void {
     else if (e.type === "reload" && e.a === me) sfx.reload();
     else if (e.type === "jump" && e.a === me) sfx.jump();
     else if (e.type === "spawn" && e.a === me) sfx.spawn();
-    else if (e.type === "ability" && dist(e.a) < 25) sfx.spawn();
+    else if (e.type === "ability" && (e.a === me || dist(e.a) < 45)) {
+      // you can hear another robot's Special Move nearby, from where it is (fair: a player would too)
+      const a = g.agents[e.a];
+      sfx.special(e.kind, e.a === me, { x: a.x, y: a.y + 1.2, z: a.z });
+    }
     // spectator auto-director: cut to whoever just made an elimination
     if (e.type === "kill" && s.spectator && autoDirector && (s.rig.mode === "follow" || s.rig.mode === "pov")) {
       const killer = e.a;
@@ -172,6 +177,7 @@ function onEvents(events: readonly GameEvent[]): void {
 // ------------------------------------------------------------------------------------- loop
 const STEP = 1000 / TICK_HZ;
 let acc = 0, last = performance.now();
+let readyCd = 0;
 const proj = new THREE.Vector3();
 
 function frame(now: number): void {
@@ -195,6 +201,13 @@ function frame(now: number): void {
       s.view.snapshot();
       s.match.step([act]);
       onEvents(g.events);
+      // a quiet chime when your Special Move is ready again
+      if (s.self >= 0) {
+        const me = g.agents[s.self];
+        const respawned = g.events.some((e) => e.type === "spawn" && e.a === s.self);
+        if (me.alive && !respawned && readyCd > 0 && me.abilityCooldown === 0) sfx.ready();
+        readyCd = me.abilityCooldown;
+      }
       if (s.tutorial && !s.tutorial.done) {
         s.tutorial.update(g.events, STEP / 1000);
         if (s.tutorial.done) store.set("tutorialDone", "1");
@@ -211,6 +224,11 @@ function frame(now: number): void {
     s.rig.pendingPitch = input.pendingPitch();
   } else if (s.rig.mode === "free") flyFree(s.rig, dt);
   s.view.render(paused || g.over ? 1 : acc / STEP, dt, s.rig);
+  {
+    // the listener is the camera (positional Special Move sounds)
+    const c = stage.camera, f = new THREE.Vector3(0, 0, -1).applyQuaternion(c.quaternion);
+    sfx.setListener(c.position.x, c.position.y, c.position.z, f.x, f.y, f.z);
+  }
   if (!s.backdrop) {
     const cam = stage.camera;
     const w = window.innerWidth, h = window.innerHeight;

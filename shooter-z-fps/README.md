@@ -19,9 +19,9 @@ it; N skips a step.
 
 First to 10 eliminations wins (you can change the limit). No round timer. When you're eliminated the
 camera pulls back so you see your robot go down, the robot that got you is highlighted and named, and
-after 2.5 s you respawn in first person with 2 s of spawn protection: you take no damage, you flicker
-faintly, and a small "Spawn protection" countdown shows at the top. It always ends after 2 s, or sooner
-when you fire. (It is not a Special Move; Bulwark's shield is.)
+after 2.5 s you respawn in first person with 2 s of spawn protection: you take no damage and your robot
+flickers faintly. It always ends after 2 s, or sooner when you fire. (It is not a Special Move; Bulwark's
+shield is.)
 
 | Key | Action |
 |---|---|
@@ -49,6 +49,8 @@ crouching more.
 - Friend or foe: a **green arrow** floats over teammates (always) and a **red arrow** over an opponent only
   while you can see it or it is revealed (hit, scan, standing still), never through walls otherwise. The
   minimap uses the same green and red. Every character keeps its own colours; there is no team tinting.
+  The one body effect is Echo's Scan: the enemies it exposes glow as red silhouettes through walls for
+  1.5 s, for Echo's whole team.
 
 **Characters** (same health, speed and laser; the Special Move is the only difference). Click a character
 on the menu to see it turning, with its Special Move and cooldown; every few seconds it performs the move
@@ -59,7 +61,7 @@ shield; Echo: a scan ring with a radar sweep; Wisp: a shimmer, then near-invisib
 |---|---|---|---|
 | Dash | Dash | A quick burst (~2.8 m) in the direction you're moving | 6 s |
 | Bulwark | Shield | A frontal energy shield for 2 s that stops lasers; you can still shoot | 12 s |
-| Echo | Scan | Shows your team every enemy within 20 m for 1.5 s, through walls | 15 s |
+| Echo | Scan | Shows your team every enemy within 20 m for 1.5 s as red silhouettes through walls (plus red arrows and the minimap) | 15 s |
 | Wisp | Cloak | Nearly invisible for 3 s (visible within 6 m); firing breaks it | 15 s |
 
 The AI opponents get random characters. Each character is a rigged, animated 3D model (aim, run, strafe,

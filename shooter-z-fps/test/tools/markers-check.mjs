@@ -57,6 +57,8 @@ while (Date.now() - t0 < 45000) {
       const revealed = a.outlineFor[0] > 0 || a.revealTicks > 0 || a.scanFor[me.team] > 0;
       let outlined = false; z.view.robots[a.id].root.traverse((o) => { if (o.material && o.material.depthTest === false && o.visible && o !== mk) outlined = true; });
       const killer = !me.alive && z.view.killedBy[0] === a.id;
+      // the only allowed body effect: Echo's scan silhouette while the scan exposes this robot
+      if (a.scanFor[me.team] > 0) outlined = false;
       rows.push({ killer, outlined, mate: a.team === me.team, shown: mk.visible, color: "#" + mk.material.color.getHexString(), sees: sees && !cloakedFar, revealed });
     }
     // turn slowly so robots come in and out of view

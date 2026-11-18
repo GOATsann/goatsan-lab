@@ -4,3 +4,5 @@ runs/
 videos/
 # the character models are made for this project, all rights reserved, not in the repo (ASSETS.md)
 public/characters/
+# the Special Move sounds are generated for this project, all rights reserved, not in the repo (ASSETS.md)
+public/sfx/
