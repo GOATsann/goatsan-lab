@@ -84,10 +84,19 @@ cameras; the same mode is on the desktop menu). Touch controls, all usable at on
 
 Starting play asks for fullscreen and a landscape lock where the browser allows it (not on iPhone
 Safari; the layout uses `dvh` units so the address bar doesn't cover anything). Touch devices start on
-Easy and Low graphics; both can be changed on the menu. The tutorial works with touch and shows touch hints.
+Low graphics (changeable on the menu). The tutorial works with touch and shows touch hints.
 
-**AI level** (Easy / Normal / Hard) sets the bots' human-like limits: reaction time, max turn speed, aim
-wobble, how close they go for the head, and how readily they strafe and take cover.
+**The AI.** Every robot that isn't you (opponents, your 2v2 teammate, both sides in Watch AI vs AI) is the
+trained AI: a PPO policy with LSTM memory that taught itself to play against the rule bots and itself
+(see "The AI plan" below). It runs in your browser with onnxruntime-web (WASM, in its own worker), deciding
+every 3 ticks from exactly the observation and actions it was trained with. There is one AI level for now;
+the menu shows "Loading the AI..." until the model is here, and "Couldn't load the AI. Retry" if it fails.
+The model file (`public/models/shooter-ai.onnx` + `.json`, about 5.5 MB) is not in this repo; it comes from
+the training side (Hugging Face).
+
+The hand-written **rule bots** (below) are kept for testing and training only: add `?rulebots` to the URL
+to play against them, with their Easy / Normal / Hard levels on the menu. The tutorial's training target is
+one of them, scripted.
 
 ### Tuning difficulty
 
@@ -184,7 +193,10 @@ The design notes for the learning AI are in the BULSHY.FM ideas folder (not in t
 the observation and action interfaces the RL agent will use, fair heuristic bots that use exactly those
 interfaces, replays, the batch server, tests.
 
-**Next (phase 2, the AI that learns):**
+**Done (phase 2, first AI):** the trained AI plays in the browser (model A at 28M steps: wins 80 / 57 / 47 %
+against the Easy / Normal / Hard rule bots). The training code is in `train/`.
+
+**The plan for the AI that learns (phase 2):**
 - PPO with memory (LSTM). Rays through a small 1D/2D conv, memory slots and own state through an MLP, into
   an LSTM, with heads for movement (discrete), jump/crouch/fire/reload/ability, and aim (continuous, clipped
   to the turn speed); a value head.
@@ -195,7 +207,8 @@ interfaces, replays, the batch server, tests.
   Training episodes get a time cut-off (truncation, not a loss); players never have a round timer.
 - 2v2 needs **shared team rewards** (the batch server already reports `teamKills` / `teamDeaths`), and the
   server will grow a multi-agent mode (several learner slots per match) designed with the training side.
-- Then: run the trained policy in the browser with onnxruntime-web as the opponent, "Can you beat AI?".
+- Then: run the trained policy in the browser with onnxruntime-web as the opponent, "Can you beat AI?"
+  (done: `src/web/trained-ai.ts`). Next: per-level models, and 2v2 / 1 vs 3 training.
 
 ## Credits
 

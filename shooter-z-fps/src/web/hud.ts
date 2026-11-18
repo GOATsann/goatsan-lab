@@ -230,7 +230,7 @@ export class Hud {
     const g = ctx.game;
     const rows = (list: typeof g.agents) => list.map((a) => {
       const acc = a.shots ? Math.round((100 * a.hits) / a.shots) : 0;
-      return `<tr class="${a.id === ctx.self ? "me" : ""}"><td><i style="background:${ctx.colors[a.id]}"></i>${esc(ctx.slots[a.id].name)} <small class="ch">${CHARACTERS[a.character].name}</small>${ctx.slots[a.id].kind === "bot" ? ` <small>AI ${ctx.slots[a.id].skill}</small>` : ""}</td><td>${a.kills}</td><td>${a.deaths}</td><td>${acc}%</td><td>${a.headshots}</td></tr>`;
+      return `<tr class="${a.id === ctx.self ? "me" : ""}"><td><i style="background:${ctx.colors[a.id]}"></i>${esc(ctx.slots[a.id].name)} <small class="ch">${CHARACTERS[a.character].name}</small>${ctx.slots[a.id].kind === "bot" ? ` <small>bot ${ctx.slots[a.id].skill}</small>` : ctx.slots[a.id].kind === "external" ? ` <small>AI</small>` : ""}</td><td>${a.kills}</td><td>${a.deaths}</td><td>${acc}%</td><td>${a.headshots}</td></tr>`;
     }).join("");
     const head = `<tr><th>Robot</th><th>Elims</th><th>Deaths</th><th>Accuracy</th><th>Headshots</th></tr>`;
     let body: string;

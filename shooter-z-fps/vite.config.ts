@@ -5,6 +5,8 @@ import { defineConfig } from "vite";
 export default defineConfig({
   // host: true so a phone on the same Wi-Fi can open the dev server (http://<this Mac's IP>:5190)
   server: { port: 5190, strictPort: true, host: true },
+  // onnxruntime-web loads its .wasm (and proxy worker) next to its own JS; pre-bundling breaks that path in dev
+  optimizeDeps: { exclude: ["onnxruntime-web", "onnxruntime-web/wasm"] },
   build: {
     rollupOptions: {
       input: {

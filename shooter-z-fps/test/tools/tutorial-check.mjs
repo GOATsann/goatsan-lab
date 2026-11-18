@@ -25,7 +25,7 @@ async function page(record) {
 
 // ---- 1. menu on a first visit
 const A = await page(true);
-await A.p.goto("http://localhost:5190/?autotest&seed=2");
+await A.p.goto("http://localhost:5190/?autotest&rulebots&seed=2");
 await A.p.waitForTimeout(2500);
 const firstVisitShown = await A.p.isVisible("#firstVisit");
 await A.p.screenshot({ path: `${out}/menu-first-visit.png` });
@@ -50,7 +50,7 @@ await A.ctx.close();
 // ---- 2. the tutorial
 const B = await page(true);
 const p = B.p;
-await p.goto("http://localhost:5190/?autotest&seed=2");
+await p.goto("http://localhost:5190/?autotest&rulebots&seed=2");
 await p.waitForTimeout(2000);
 await p.click("#chars [data-c='0']");
 await p.click("#tutorial");

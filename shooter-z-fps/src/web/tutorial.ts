@@ -41,8 +41,8 @@ export function tutorialSteps(character: number, touch = false, simple = false):
     { title: "Headshot", hint: T("Hit the head: 2.5x damage, and a gold marker.", "Put the crosshair on the head and tap Fire: 2.5x damage, and a gold marker.", "Put the crosshair on its head: 2.5x damage, and a gold marker."), target: "still", check: (_t, ev) => hitBy(ev, "head") },
     { title: "Reload", hint: T("Press R to reload (24 shots per clip).", "Tap R to reload (24 shots per clip)."), target: "still", check: (_t, ev) => ev.some((e) => e.type === "reload" && e.a === 0) },
     { title: `Special Move: ${ch.abilityName}`, hint: T(`Press E or right-click. ${ch.blurb}`, `Tap the ${ch.abilityName} button. ${ch.blurb}`), target: "still", check: (_t, ev) => ev.some((e) => e.type === "ability" && e.a === 0) },
-    { title: "Eliminate the target", hint: "Take the practice robot down (100 health).", target: "still", check: (_t, ev) => ev.some((e) => e.type === "kill" && e.a === 0) },
-    { title: "Now it shoots back", hint: "A slow training bot is hunting you. Eliminate it. Use cover!", target: "fighter", check: (_t, ev) => ev.some((e) => e.type === "kill" && e.a === 0 && e.v === 1) },
+    { title: "Eliminate the target", hint: "Take the training target down (100 health).", target: "still", check: (_t, ev) => ev.some((e) => e.type === "kill" && e.a === 0) },
+    { title: "Now it shoots back", hint: "The training target fights back now, slowly. Eliminate it. Use cover!", target: "fighter", check: (_t, ev) => ev.some((e) => e.type === "kill" && e.a === 0 && e.v === 1) },
   ];
 }
 

@@ -5,6 +5,7 @@ Everything in the game is made for it or generated in code, except where listed.
 | Asset | Source | Licence |
 |---|---|---|
 | Dash, Bulwark, Echo and Wisp character models (`public/characters/`) | made for this project | **not included**, all rights reserved (not part of the MIT code) |
+| The trained AI (`public/models/shooter-ai.onnx` + `shooter-ai.json`) | trained for this project (`train/`) | **not included**: published on Hugging Face, copied here for local play |
 | Maps, props, scenery, sky, planet, stars | generated in code (`src/web/mapview.ts`, `src/web/textures.ts`) | MIT, like the code |
 | Stand-in robots, blaster, abilities, effects | generated in code (`src/web/robot.ts`, `src/web/fx.ts`) | MIT |
 | Special Move sounds and the ready chime (`public/sfx/`: dash, bulwark, echo, wisp, ready) | generated for this project with Higgsfield (Mirelo SFX), then trimmed and normalised | **not included**, all rights reserved (not part of the MIT code) |

@@ -16,6 +16,7 @@ import { Stage, type Graphics } from "./stage";
 import { CharPreview } from "./charpreview";
 import { Tutorial, TUTORIAL_MAP } from "./tutorial";
 import { TouchControls } from "./touch";
+import { loadTrainedModel, retryModelLoad, TrainedAiController, type TrainedModel } from "./trained-ai";
 import { RANGE } from "../core/config";
 import { cos, sin } from "../core/fmath";
 import * as THREE from "three";
@@ -47,6 +48,7 @@ const settings = {
   touchSens: Number(store.get("touchSens") ?? 1),
   // phones: Simple firing (fires while the crosshair is on a visible enemy) or Advanced (manual Fire)
   fireMode: (store.get("fireMode") ?? "simple") as "simple" | "advanced",
+
 };
 if (!MODES[settings.mode]) settings.mode = "duel";
 if (!(settings.character >= 0 && settings.character < CHARACTERS.length)) settings.character = 0;
@@ -81,6 +83,34 @@ interface Session {
   endedAt: number;
   backdrop: boolean; // the live match behind the menu
   tutorial: Tutorial | null;
+  /** the trained AI driving the "external" robots, if any */
+  ai: TrainedAiController | null;
+}
+
+// ---- the trained AI plays every robot that isn't you (opponents, 2v2 teammate, Watch AI vs AI).
+// The hand-written rule bots are for testing and training only: the ?rulebots dev flag (not in the UI).
+const ruleBots = params.has("rulebots");
+let aiModel: TrainedModel | null = null;
+let aiState: "idle" | "loading" | "ready" | "error" = "idle";
+const wantAI = () => !ruleBots;
+/** Load the model (once; the menu's Retry tries again after a failure). */
+async function ensureAI(): Promise<void> {
+  if (!wantAI() || aiModel) return;
+  aiState = "loading"; showAiState();
+  aiModel = await loadTrainedModel();
+  aiState = aiModel ? "ready" : "error";
+  showAiState();
+  // the menu's live backdrop switches to the AI as soon as it's here
+  if (aiModel && state === "menu" && S?.backdrop && !S.ai) startMatch("backdrop", settings.map);
+}
+function showAiState(): void {
+  const el = $("aiStatus");
+  const wait = wantAI() && aiState !== "ready";
+  document.body.classList.toggle("ai-wait", wait);
+  el.hidden = !wait;
+  el.classList.toggle("error", aiState === "error");
+  $("aiStatusText").textContent = aiState === "error" ? "Couldn't load the AI." : "Loading the AI...";
+  $("aiRetry").hidden = aiState !== "error";
 }
 let S: Session | null = null;
 let state: "menu" | "play" | "watch" = "menu";
@@ -107,8 +137,14 @@ function startMatch(kind: "play" | "watch" | "backdrop" | "tutorial", mapOverrid
   const mode = kind === "backdrop" ? "ffa" : tut ? "duel" : settings.mode;
   const map = tut ? TUTORIAL_MAP : mapOverride ?? settings.map;
   const slots = standardSlots(mode, kind === "backdrop" ? "normal" : tut ? "training" : settings.skill, { spectate, seed, character: settings.character });
-  if (tut) slots[1].name = "Practice bot";
+  if (tut) slots[1].name = "Training target"; // tutorial scripting, not an opponent
+  // the trained AI plays every non-human robot (both sides when watching AI vs AI)
+  const useAI = wantAI() && kind !== "tutorial";
+  const aiSlots: number[] = [];
+  // (until the model is here, the menu backdrop's robots just stand still: never rule bots on screen)
+  if (useAI) slots.forEach((sl, i) => { if (sl.kind === "bot") { slots[i] = { kind: "external", name: sl.name, character: sl.character }; aiSlots.push(i); } });
   const match = new Match(seed, { map, mode, scoreLimit: kind === "backdrop" ? 50 : tut ? 999 : settings.limit, slots });
+  const ai = useAI && aiModel && aiSlots.length ? new TrainedAiController(aiModel, match, aiSlots) : null;
   const colors = slotColors(mode);
   const self = spectate ? -1 : 0;
   const view = new GameView(stage, match, { look: "final", self, colors });
@@ -125,10 +161,10 @@ function startMatch(kind: "play" | "watch" | "backdrop" | "tutorial", mapOverrid
     });
   }
   hud.tutorial = tut;
-  S = { match, view, hud, rig, spectator: spectate, self, colors, slots, endedAt: -1, backdrop: kind === "backdrop", tutorial };
+  S = { match, view, hud, rig, spectator: spectate, self, colors, slots, endedAt: -1, backdrop: kind === "backdrop", tutorial, ai };
   if (tutorial) view.snapshot();
   hud.setVisible(kind !== "backdrop" && hudVisible);
-  (window as unknown as { shooterZ: unknown }).shooterZ = { match, view, rig, input, hud, get state() { return state; }, get tutorial() { return S?.tutorial ?? null; }, get touchPaused() { return touchPaused; }, sfx }; // for tests and debugging
+  (window as unknown as { shooterZ: unknown }).shooterZ = { match, view, rig, input, hud, get state() { return state; }, get tutorial() { return S?.tutorial ?? null; }, get touchPaused() { return touchPaused; }, sfx, ai }; // for tests and debugging
   updateSpecBar();
   acc = 0;
   readyCd = 0;
@@ -197,9 +233,13 @@ function frame(now: number): void {
     let steps = 0;
     while (acc >= STEP && steps < 6) {
       if (touch) input.touch.autoFire = touch.autoFire && crosshairOnEnemy(s);
-      const act = s.self >= 0 ? (s.rig.mode === "fp" ? input.action() : idle) : null;
+      // the trained AI decides every few ticks; wait for it (a millisecond or two) rather than skip a decision
+      const ext: (Action | null)[] = [];
+      if (s.ai && !s.ai.ready(ext)) break;
+      if (s.self >= 0) ext[s.self] = s.rig.mode === "fp" ? input.action() : idle;
       s.view.snapshot();
-      s.match.step([act]);
+      s.match.step(ext);
+      s.ai?.afterTick();
       onEvents(g.events);
       // a quiet chime when your Special Move is ready again
       if (s.self >= 0) {
@@ -272,11 +312,9 @@ function goFullscreen(): void {
 function startTouch(kind: "play" | "tutorial"): void {
   touchPlay = true;
   input.forceLocked = true;
-  hideMenu();
-  state = "play";
   sfx.unlock();
   goFullscreen();
-  startMatch(kind);
+  void withAI(() => { hideMenu(); state = "play"; startMatch(kind); });
 }
 
 /** Free camera: WASD fly, mouse look (click to lock), Space up, C down, Shift faster. */
@@ -346,7 +384,7 @@ input.onKey = (code) => {
   if (code === "Tab") s.hud.showBoard = true;
   if (code === "KeyH") { hudVisible = !hudVisible; s.hud.setVisible(hudVisible); }
   if (code === "KeyM") sfx.setMuted(!sfx.muted);
-  if (code === "Enter" && state === "play" && (s.match.game.over || s.tutorial?.done)) { startMatch("play"); state = "play"; lockAndGo(); }
+  if (code === "Enter" && state === "play" && (s.match.game.over || s.tutorial?.done)) { lockAndGo(); void withAI(() => { startMatch("play"); state = "play"; }); }
   if (code === "KeyN" && s.tutorial && !s.tutorial.done && state === "play") { s.tutorial.next(); if (s.tutorial.done) store.set("tutorialDone", "1"); }
   if (code === "Escape" && (s.spectator || s.match.game.over || s.tutorial?.done)) showMenu();
   if (state === "play") {
@@ -416,6 +454,7 @@ function refreshMenu(): void {
     ffa: "Free-for-all: you against three AI robots, everyone for themselves.",
   };
   $("modeNote").textContent = notes[settings.mode];
+
   for (const b of document.querySelectorAll<HTMLButtonElement>("#chars button")) {
     const on = Number(b.dataset.c) === settings.character;
     b.classList.toggle("on", on);
@@ -460,18 +499,20 @@ for (const seg of document.querySelectorAll<HTMLElement>(".seg[data-setting]")) 
 }
 $<HTMLInputElement>("sens").addEventListener("input", (e) => { settings.sens = Number((e.target as HTMLInputElement).value); store.set("sens", String(settings.sens)); input.sensitivity = 0.0022 * settings.sens; });
 
+/** Start once the trained AI is here (Play and Watch are disabled until then; see showAiState). */
+async function withAI(go: () => void): Promise<void> {
+  if (wantAI() && !aiModel) await ensureAI();
+  if (wantAI() && !aiModel) return; // couldn't load: the menu says so and offers Retry
+  go();
+}
+$("aiRetry").addEventListener("click", () => { retryModelLoad(); void ensureAI(); });
 $("play").addEventListener("click", () => {
-  hideMenu();
-  state = "play";
-  startMatch("play");
-  lockAndGo();
+  lockAndGo(); // inside the click: browsers only lock the mouse on a user gesture
+  void withAI(() => { hideMenu(); state = "play"; startMatch("play"); });
 });
 const watch = () => {
-  hideMenu();
-  state = "watch";
-  autoDirector = true;
   sfx.unlock();
-  startMatch("watch");
+  void withAI(() => { hideMenu(); state = "watch"; autoDirector = true; startMatch("watch"); });
 };
 $("watch").addEventListener("click", watch);
 $("tutorial").addEventListener("click", () => {
@@ -483,6 +524,9 @@ $("tutorial").addEventListener("click", () => {
 $("watchPhone").addEventListener("click", watch);
 
 refreshMenu();
+// every match needs the trained AI: load it right away (Play and Watch wait for it)
+$("levelField").hidden = !ruleBots;
+void ensureAI();
 if (params.get("start") === "play" && !phone) { hideMenu(); state = "play"; startMatch("play"); }
 else if (params.get("start") === "tutorial" && (!phone || params.has("autotest"))) { hideMenu(); state = "play"; startMatch("tutorial"); }
 else if (params.get("start") === "watch") watch();

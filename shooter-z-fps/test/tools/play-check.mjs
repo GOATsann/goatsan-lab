@@ -11,7 +11,7 @@ const p = await b.newPage({ viewport: { width: 1600, height: 900 } });
 const errs = [];
 p.on("pageerror", (e) => errs.push(e.message));
 p.on("console", (m) => m.type() === "error" && errs.push(m.text()));
-await p.goto(`http://localhost:5190/?autotest&seed=3&fps`);
+await p.goto(`http://localhost:5190/?autotest&rulebots&seed=3&fps`);
 await p.waitForTimeout(2500);
 await p.click(`[data-setting=map] [data-v=${map}]`);
 await p.click(`[data-setting=mode] [data-v=${mode}]`);

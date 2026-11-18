@@ -27,6 +27,7 @@
         <button id="tutorial">Start tutorial</button>
         <button id="watch">Watch AI vs AI</button>
       </div>
+      <p class="ai-status" id="aiStatus" role="status" hidden><span id="aiStatusText"></span> <button id="aiRetry" hidden>Retry</button></p>
       <p class="first-visit desktop-only" id="firstVisit" hidden>New here? Start with the tutorial: nine short steps, about two minutes.</p>
       <div class="cta phone-only">
         <div class="rotate portrait-only" role="note">
@@ -81,7 +82,8 @@
           </div>
         </div>
       </div>
-      <div class="field">
+      <!-- one AI level for now; the rule-bot levels only show with the ?rulebots dev flag -->
+      <div class="field" id="levelField" hidden>
         <span class="label">AI level</span>
         <div class="seg" data-setting="skill">
           <button data-v="easy">Easy</button><button data-v="normal">Normal</button><button data-v="hard">Hard</button>
