@@ -85,12 +85,15 @@ def main() -> None:
         meta = json.loads((run_dir / "meta.json").read_text())
         reward = json.loads((run_dir / "reward.json").read_text()) if (run_dir / "reward.json").exists() else {}
         weight = reward.get("weights", {}).get("enemyVisible", {}).get("w", 0)
-        bench = json.loads((run_dir / "bench.json").read_text()) if (run_dir / "bench.json").exists() else None
+        benches = []  # the final model (bench.json) and any benchmarked snapshots (bench_<steps>.json)
+        for f in sorted(run_dir.glob("bench*.json"), key=lambda f: (f.stem != "bench", f.stem)):
+            b = json.loads(f.read_text())
+            benches.append({"label": b.pop("label", run_dir.name), "results": b})
         runs[run_dir.name] = {
             "number": None, "change": "curriculum" if meta["args"].get("curriculum") else "straight self-play",
             "game_version": meta.get("game_version"), "target_steps": int(float(meta["args"]["timesteps"])),
             "series": scalars(run_dir, weight), "races": evals(run_dir), "stages": stages(run_dir),
-            "videos": [], "bench_videos": [], "bench": None, "shooter_bench": bench,
+            "videos": [], "bench_videos": [], "bench": None, "shooter_bench": benches or None,
         }
     OUT.write_text(json.dumps({"project": "shooter", "updated": time.strftime("%Y-%m-%d %H:%M:%S"), "runs": runs}))
     print(f"wrote {OUT} ({', '.join(runs) or 'no runs yet'})")

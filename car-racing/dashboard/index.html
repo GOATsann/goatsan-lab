@@ -54,7 +54,7 @@
     <h2>Benchmark</h2>
     <p class="note">100 fixed matches per opponent, deterministic play, first to 10. The reward plays no part. A vs B: 50 seeds, each played from both sides.</p>
     <div class="table-scroll"><table>
-      <thead><tr><th>Run</th><th>Opponent</th><th>Win rate</th><th>95% range</th><th>K/D</th><th>Hit rate</th><th>Headshots</th><th>Damage / min</th></tr></thead>
+      <thead><tr><th>Model</th><th>Opponent</th><th>Win rate</th><th>95% range</th><th>K/D</th><th>Hit rate</th><th>Headshots</th><th>Damage / min</th></tr></thead>
       <tbody id="shooter-bench-rows"></tbody>
     </table></div>
   </section>
@@ -394,14 +394,14 @@ function renderShooterExtras(run) {
   benchBox.hidden = !b;
   if (b) {
     const pct = v => (v * 100).toFixed(0) + "%";
-    document.getElementById("shooter-bench-rows").replaceChildren(...Object.entries(b).map(([opp, r]) => {
+    document.getElementById("shooter-bench-rows").replaceChildren(...b.flatMap(m => Object.entries(m.results).map(([opp, r]) => {
       const tr = document.createElement("tr");
-      const cells = [runName, opp, pct(r.win_rate), r.win_ci ? `${pct(r.win_ci[0])} to ${pct(r.win_ci[1])}` : "–",
+      const cells = [m.label, opp, pct(r.win_rate), r.win_ci ? `${pct(r.win_ci[0])} to ${pct(r.win_ci[1])}` : "–",
         r.kd !== undefined ? r.kd.toFixed(2) : "–", r.hit_rate !== undefined ? pct(r.hit_rate) : "–",
         r.headshot_share !== undefined ? pct(r.headshot_share) : "–", r.damage_per_min !== undefined ? r.damage_per_min.toFixed(0) : "–"];
       for (const c of cells) { const td = document.createElement("td"); td.textContent = c; tr.appendChild(td); }
       return tr;
-    }));
+    })));
   }
   const st = run.stages || [];
   stageBox.hidden = !st.length;

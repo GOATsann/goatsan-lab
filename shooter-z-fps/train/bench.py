@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import torch
 from sb3_contrib import RecurrentPPO
 
 HERE = Path(__file__).resolve().parent
@@ -46,14 +47,28 @@ def wilson(k: int, n: int) -> tuple[float, float]:
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("runs", nargs="+", type=Path)
+    p.add_argument("runs", nargs="+", help="run folders; <run>@<steps> = that run's snapshot at <steps> (snapshots/policy_<steps>.pt)")
     p.add_argument("--matches", type=int, default=100)
     p.add_argument("--port", type=int, default=7700)
     p.add_argument("--model", default="final.zip", help="file inside each run folder")
     args = p.parse_args()
-    servers = GameServers(1, args.port, args.runs[0] / "logs")
+    servers = GameServers(1, args.port, Path(args.runs[0].partition("@")[0]) / "logs")
     try:
-        models = {r.name: RecurrentPPO.load(r / args.model, device="cpu") for r in args.runs}
+        specs = {}  # label -> (run folder, file stem for the results, snapshot or None)
+        for arg in args.runs:
+            run, _, steps = arg.partition("@")
+            run = Path(run)
+            if steps:
+                snap = run / "snapshots" / f"policy_{int(steps):010d}.pt"
+                specs[f"{run.name}@{int(steps) / 1e6:.1f}M"] = (run, f"bench_{int(steps)}", snap)
+            else:
+                specs[run.name] = (run, "bench", None)
+        models = {}
+        for label, (run, _, snap) in specs.items():
+            m = RecurrentPPO.load(run / args.model, device="cpu")
+            if snap is not None:
+                m.policy.load_state_dict(torch.load(snap, map_location="cpu"))
+            models[label] = m
         out: dict[str, dict] = {name: {} for name in models}
         rows: dict[str, list] = {name: [] for name in models}
         for name, m in models.items():
@@ -81,10 +96,9 @@ def main() -> None:
                 out[me][f"vs {other}"] = {"win_rate": wins / n, "win_ci": wilson(wins, n), "matches": n}
             r = out[a][f"vs {b}"]
             print(f"{a} vs {b}: {a} wins {r['win_rate']:.0%} ({r['win_ci'][0]:.0%}-{r['win_ci'][1]:.0%}) of {r['matches']} matches", flush=True)
-        for run in args.runs:
-            name = run.name
-            (run / "bench.json").write_text(json.dumps(out[name], indent=2))
-            with (run / "bench.csv").open("w", newline="") as f:
+        for name, (run, stem, _) in specs.items():
+            (run / f"{stem}.json").write_text(json.dumps({"label": name, **out[name]}, indent=2))
+            with (run / f"{stem}.csv").open("w", newline="") as f:
                 w = csv.DictWriter(f, fieldnames=list(rows[name][0]))
                 w.writeheader()
                 w.writerows(rows[name])
