@@ -8,7 +8,8 @@ import type { Game, GameEvent } from "../core/game";
 import type { Match } from "../core/match";
 import { Fx } from "./fx";
 import { buildMap, type MapView } from "./mapview";
-import { RobotModel, restPose, type RobotPose } from "./robot";
+import { charactersLoaded, loadCharacterModels, makeRobot } from "./character";
+import { restPose, type RobotPose, type RobotView } from "./robot";
 import type { Look, Stage } from "./stage";
 
 export type CamMode = "fp" | "pov" | "follow" | "free" | "overview";
@@ -32,8 +33,9 @@ export class GameView {
   readonly match: Match;
   readonly map: MapView;
   readonly fx: Fx;
-  readonly robots: RobotModel[] = [];
+  readonly robots: RobotView[] = [];
   private xray: THREE.Mesh[][] = [];
+  private spawnAt: number[]; private specialAt: number[]; private airSince: number[];
   private markers: THREE.Sprite[] = [];
   private prev: { x: number; y: number; z: number; yaw: number }[];
   private crouchS: number[];
@@ -72,21 +74,19 @@ export class GameView {
     scene.add(this.fx.group);
     this.colors = opts.colors.map((c) => new THREE.Color(c));
     const teams = g.agents.map((a) => a.team);
+    this.addRobots(opts.colors);
+    // rigged characters still loading (first match after the page opens): swap them in when ready
+    if (!charactersLoaded()) {
+      const sceneNow = scene;
+      loadCharacterModels().then(() => {
+        if (this.stage.scene !== sceneNow) return; // a new match has started since
+        for (const r of this.robots) sceneNow.remove(r.root);
+        this.robots.length = 0;
+        this.xray.length = 0;
+        this.addRobots(opts.colors);
+      });
+    }
     for (const a of g.agents) {
-      const r = new RobotModel(opts.colors[a.id], stage.graphics === "normal", a.character);
-      scene.add(r.root);
-      this.robots.push(r);
-      // x-ray copy of every part: drawn through walls when the reveal rules say so
-      const xm = new THREE.MeshBasicMaterial({ color: this.colors[a.id], transparent: true, opacity: 0.5, depthTest: false, depthWrite: false });
-      const list: THREE.Mesh[] = [];
-      for (const m of r.meshes) {
-        const x = new THREE.Mesh(m.geometry, xm);
-        x.renderOrder = 20;
-        x.visible = false;
-        m.add(x);
-        list.push(x);
-      }
-      this.xray.push(list);
       // teammate marker (2v2): a small diamond over the head, always visible
       const isMate = this.self >= 0 && a.id !== this.self && teams[a.id] === teams[this.self];
       const mk = new THREE.Sprite(new THREE.SpriteMaterial({ map: diamondTex(), color: this.colors[a.id], depthTest: false, transparent: true }));
@@ -102,7 +102,43 @@ export class GameView {
     this.hitAt = g.agents.map(() => -99);
     this.deadAt = g.agents.map(() => NaN);
     this.killedBy = g.agents.map(() => -1);
+    this.spawnAt = g.agents.map(() => -99);
+    this.specialAt = g.agents.map(() => -99);
+    this.airSince = g.agents.map(() => NaN);
     this.buildViewmodel(opts.colors[Math.max(0, this.self)]);
+  }
+
+  /** The robots (rigged characters where loaded, else stand-ins) and their x-ray copies. */
+  private addRobots(colors: string[]): void {
+    const scene = this.stage.scene;
+    for (const a of this.match.game.agents) {
+      const r = makeRobot(colors[a.id], this.stage.graphics === "normal", a.character);
+      scene.add(r.root);
+      this.robots.push(r);
+      // x-ray copy of every part: drawn through walls when the reveal rules say so
+      const xm = new THREE.MeshBasicMaterial({ color: this.colors[a.id], transparent: true, opacity: 0.5, depthTest: false, depthWrite: false });
+      const list: THREE.Mesh[] = [];
+      for (const m of r.meshes) {
+        const sk = m as THREE.SkinnedMesh;
+        let x: THREE.Mesh;
+        if (sk.isSkinnedMesh) {
+          // follows the same skeleton as the body
+          const xs = new THREE.SkinnedMesh(sk.geometry, xm);
+          xs.bind(sk.skeleton, sk.bindMatrix);
+          xs.frustumCulled = false;
+          x = xs;
+        } else x = new THREE.Mesh(m.geometry, xm);
+        x.renderOrder = 20;
+        x.visible = false;
+        m.add(x);
+        list.push(x);
+      }
+      this.xray.push(list);
+    }
+    // compile the robot shaders now (x-ray copies included), not on the first hit mid-fight
+    for (const l of this.xray) for (const x of l) x.visible = true;
+    this.stage.renderer.compile(scene, this.stage.camera);
+    for (const l of this.xray) for (const x of l) x.visible = false;
   }
 
   private buildViewmodel(color: string): void {
@@ -175,11 +211,14 @@ export class GameView {
       } else if (e.type === "ability") {
         const a = g.agents[e.a];
         const p = new THREE.Vector3(a.x, a.y + 1, a.z);
+        this.specialAt[e.a] = this.time;
         if (e.kind === "scan") this.fx.pulse(p, this.colors[e.a], SCAN_RANGE);
         else if (e.kind === "dash") { this.fx.sparks(new THREE.Vector3(a.x, a.y + 0.2, a.z), this.colors[e.a], 18, 3, 0.35); this.fx.flash(p, this.colors[e.a], 1.2, 0.2); }
         else if (e.kind === "cloak") this.fx.flash(p, this.colors[e.a], 1.6, 0.3);
       } else if (e.type === "spawn") {
         this.deadAt[e.a] = NaN;
+        this.spawnAt[e.a] = this.time;
+        this.specialAt[e.a] = -99;
         const a = g.agents[e.a];
         const p = this.prev[e.a];
         p.x = a.x; p.y = a.y; p.z = a.z; p.yaw = a.yaw; // no sliding across the map
@@ -226,6 +265,15 @@ export class GameView {
       const pose: RobotPose = restPose();
       pose.t = this.time;
       pose.speed = Math.sqrt(a.vx * a.vx + a.vz * a.vz);
+      // velocity in the robot's frame (it faces -Z at yaw 0): forward and to its right
+      const yaw = r.root.rotation.y;
+      pose.fwd = -a.vx * Math.sin(yaw) - a.vz * Math.cos(yaw);
+      pose.side = a.vx * Math.cos(yaw) - a.vz * Math.sin(yaw);
+      if (a.grounded || !a.alive) this.airSince[a.id] = NaN;
+      else if (Number.isNaN(this.airSince[a.id])) this.airSince[a.id] = this.time;
+      pose.airAge = Number.isNaN(this.airSince[a.id]) ? 0 : this.time - this.airSince[a.id];
+      pose.spawnAge = this.time - this.spawnAt[a.id];
+      pose.specialAge = this.time - this.specialAt[a.id];
       pose.crouch = this.crouchS[a.id];
       pose.pitch = a.pitch;
       pose.airborne = !a.grounded;

@@ -4,7 +4,9 @@
 import * as THREE from "three";
 import { getMap, type MapId } from "../core/maps";
 import { buildMap } from "./mapview";
-import { makePrimitiveRobot, restPose, RobotModel } from "./robot";
+import { makePrimitiveRobot, restPose, RobotModel, type RobotPose } from "./robot";
+import { loadCharacterModels, makeRobot } from "./character";
+import { CHARACTERS } from "../core/characters";
 import type { SkillName } from "../core/bot";
 import type { Mode } from "../core/game";
 import { Match, standardSlots } from "../core/match";
@@ -44,6 +46,7 @@ const scenes: Record<string, () => Promise<Frame>> = {
   // a deterministic match (bots only): fast-forward to tick t0, then play with a camera.
   //   mode, map, seed, skill, skill0 (robot 0's level), t0, cam=fp|pov|follow|overview|orbit, target, hud=1, label=1
   async match() {
+    await loadCharacterModels(); // frame-exact: the rigged characters are in from the first frame
     const mode = (q.get("mode") ?? "duel") as Mode;
     const seed = Number(q.get("seed") ?? 1);
     const skill = (q.get("skill") ?? "normal") as SkillName;
@@ -112,12 +115,16 @@ const scenes: Record<string, () => Promise<Frame>> = {
     document.body.appendChild(d);
     return () => {};
   },
-  // robot design stages on a turntable: stage=primitive|model, or anim=idle|run|shoot|hit|eliminated
+  // robot design stages on a turntable: stage=primitive|model, or anim=idle|run|strafe|jump|crouch|shoot|hit|
+  // eliminated|spawn|special|protected. char=0..3 shows that rigged character (character.ts) instead of the
+  // stand-in robot (glow=slot tints it with the slot colour).
   async robot() {
     studio();
     const color = q.get("color") ?? "#3d8bff";
     const anim = q.get("anim");
-    const model = q.get("stage") === "primitive" ? null : new RobotModel(color);
+    const ch = q.get("char") !== null ? Number(q.get("char")) : -1;
+    if (ch >= 0) await loadCharacterModels();
+    const model = q.get("stage") === "primitive" ? null : ch >= 0 ? makeRobot(color, true, ch, q.get("glow") !== "slot") : new RobotModel(color);
     stage.scene.add(model ? model.root : makePrimitiveRobot(color));
     const portrait = H > W;
     const spin = anim ? 0.25 : 0.6;
@@ -125,18 +132,66 @@ const scenes: Record<string, () => Promise<Frame>> = {
       if (model) {
         const p = restPose();
         p.t = t;
-        if (anim === "run") { p.speed = 6; model.root.position.z = 0; }
+        if (anim === "run") { p.speed = 6; p.fwd = 6; model.root.position.z = 0; }
+        if (anim === "strafe") { const left = t % 4 < 2; p.speed = 5; p.side = left ? -5 : 5; }
+        if (anim === "jump") {
+          // stand 0.7 s, jump (0.66 s in the air, like the core's 6.6 m/s take-off), repeat
+          const s = (t % 1.6) - 0.7;
+          p.airborne = s >= 0 && s < 0.66;
+          p.airAge = p.airborne ? s : 0;
+          model.root.position.y = p.airborne ? 6.6 * s - 10 * s * s : 0;
+        }
         if (anim === "shoot") { p.shotAge = (t % 0.4); p.pitch = 0.05; }
         if (anim === "hit") { p.hitAge = t % 0.9; }
         if (anim === "crouch") { p.crouch = Math.min(1, Math.max(0, Math.sin(t * 1.6) * 1.4 + 0.5)); }
-        if (anim === "eliminated") { p.deadAge = t - 1; p.hitAge = t - 1 >= 0 ? t - 1 : Infinity; }
+        if (anim === "eliminated") {
+          p.deadAge = t - 1; p.hitAge = t - 1 >= 0 ? t - 1 : Infinity;
+          if (q.get("hold") === "1") p.deadAge = Math.min(p.deadAge, 1.39); // stay lying down (no shrink-away)
+        }
+        if (anim === "spawn") { p.spawnAge = (t + 1.2) % 2; p.protected = true; }
+        if (anim === "special") {
+          p.specialAge = t < 0.6 ? Infinity : (t - 0.6) % 3;
+          if (ch >= 0 && CHARACTERS[ch].ability === "shield") p.shield = p.specialAge < 2;
+          if (ch >= 0 && CHARACTERS[ch].ability === "cloak") p.visibility = p.specialAge < 0.2 ? 1 - p.specialAge * 3.5 : p.specialAge < 2.4 ? 0.3 : 1;
+        }
         if (anim === "protected") p.protected = true;
         model.pose(p);
       }
-      const a = (anim ? -0.6 : 0.5) + t * spin;
+      const a = Number(q.get("a0") ?? (anim ? -0.6 : 0.5)) + t * Number(q.get("spin") ?? spin);
       const r = portrait ? 2.5 : 2.9;
       stage.camera.position.set(Math.sin(a) * r, 1.35, Math.cos(a) * r);
       stage.camera.lookAt(0, 0.95, 0);
+      stage.render();
+    };
+  },
+  // all four characters in a row facing the camera: aiming, each Special Move in turn, then a volley
+  async squad() {
+    studio();
+    await loadCharacterModels();
+    const models = CHARACTERS.map((c, i) => {
+      const m = makeRobot("#3d8bff", true, i, true);
+      m.root.position.set((i - 1.5) * 1.15, 0, 0);
+      m.root.rotation.y = Math.PI + (i - 1.5) * -0.12; // face the camera, turned a little inward
+      stage.scene.add(m.root);
+      return m;
+    });
+    const portrait = H > W;
+    return (t) => {
+      models.forEach((m, i) => {
+        const p: RobotPose = restPose();
+        p.t = t + i * 0.7;
+        const sa = t - (1.0 + i * 1.1); // Specials one after another
+        p.specialAge = sa >= 0 ? sa : Infinity;
+        if (CHARACTERS[i].ability === "shield") p.shield = sa >= 0 && sa < 2;
+        if (CHARACTERS[i].ability === "cloak") p.visibility = sa >= 0.15 && sa < 1.6 ? 0.3 : 1;
+        if (t > 6) p.shotAge = (t - 6 + i * 0.07) % 0.25; // everyone fires
+        p.pitch = 0.04;
+        m.pose(p);
+      });
+      const k = Math.min(1, t / 8);
+      const r = (portrait ? 5.6 : 3.9) - k * 0.5, a = -0.25 + k * 0.5;
+      stage.camera.position.set(Math.sin(a) * r, 1.3, Math.cos(a) * r);
+      stage.camera.lookAt(0, 0.92, 0);
       stage.render();
     };
   },

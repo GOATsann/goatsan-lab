@@ -3,7 +3,8 @@ import { defineConfig } from "vite";
 
 // Pages: the game (play, watch AI vs AI, free camera) and the process/capture page used to film build stages.
 export default defineConfig({
-  server: { port: 5190, strictPort: true },
+  // host: true so a phone on the same Wi-Fi can open the dev server (http://<this Mac's IP>:5190)
+  server: { port: 5190, strictPort: true, host: true },
   build: {
     rollupOptions: {
       input: {

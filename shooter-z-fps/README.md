@@ -55,8 +55,9 @@ on the menu to see it turning, with its Special Move and cooldown.
 | Echo | Scan | Shows your team every enemy within 20 m for 1.5 s, through walls | 15 s |
 | Wisp | Cloak | Nearly invisible for 3 s (visible within 6 m); firing breaks it | 15 s |
 
-The AI opponents get random characters. The robots are a stand-in look (a per-character accessory); the
-final character art comes later.
+The AI opponents get random characters. Each character is a rigged, animated 3D model (aim, run, strafe,
+jump, crouch, hit, eliminated, spawn and its Special Move) with its glow in the robot's slot colour. The
+models are not in this repo (see [ASSETS.md](ASSETS.md)); without them the game uses simple stand-in robots.
 
 **On a phone**, turn it sideways to play with touch controls (in portrait the menu says "Rotate your
 phone to play" and offers **Watch AI vs AI**, a live bot match with follow, robot's-eyes, overview and free
@@ -125,8 +126,9 @@ npm run build        # static site in dist/
 Measured on the build machine (Apple silicon Mac, one core): **16,000 game steps per second with four
 bots** (268x real time, every bot casting 256 labelled rays per decision) and **35,000 steps per second in
 1v1** (591x). In headless Chromium at 1600x900 on Normal graphics the game holds 60 fps (16.7 ms per
-frame). The whole download is about 230 KB gzipped (three.js is most of it): no textures, models or sound
-files, everything is generated in code.
+frame), also with the four rigged characters in a 2v2. The code is about 230 KB gzipped (three.js is most of
+it); the four character models add about 4.2 MB (about 1 MB and 14.5k triangles each). Everything else
+(maps, textures, sound) is generated in code.
 
 Graphics: **Normal** (default: soft shadows from one sun light, fake ambient occlusion, glow on lasers,
 anti-aliasing, pixel ratio capped at 1.5) or **Low** (no shadows, no anti-aliasing, pixel ratio 1, fewer
@@ -156,7 +158,8 @@ Same architecture as [Lights-Out Surfer](../runner/):
     flank. Bots read only their Observation and the map layout, never the game state.
   - `match.ts` a match = game + who controls each robot; **replays** are the seed, the options and the
     non-bot inputs, and rebuild the exact match.
-- **Browser** (`src/web/`): three.js renderer (`gameview.ts`, `mapview.ts`, `robot.ts`, `fx.ts`), HUD,
+- **Browser** (`src/web/`): three.js renderer (`gameview.ts`, `mapview.ts`, `character.ts` for the rigged
+  characters, `robot.ts` for the stand-ins, `fx.ts`), HUD,
   input with pointer lock, synthesized sound, spectator and free cameras, the tutorial (`tutorial.ts`)
   and the character preview (`charpreview.ts`). `capture.html` renders build
   stages and matches frame by frame for videos (`test/tools/capture.mjs`).
@@ -186,5 +189,7 @@ interfaces, replays, the batch server, tests.
 
 ## Credits
 
-Code: MIT ([LICENSE](../LICENSE)). Everything you see and hear is generated in code; the only external
-assets are two fonts loaded from Google Fonts. Details in [ASSETS.md](ASSETS.md).
+Code: MIT ([LICENSE](../LICENSE)). The four character models were made for this project and are all
+rights reserved (not included, not part of the MIT code). Everything else you see and hear is generated in
+code; the only other external assets are two fonts loaded from Google Fonts. Details in
+[ASSETS.md](ASSETS.md).

@@ -104,17 +104,75 @@ export interface RobotPose {
   shield: boolean;
   /** 1 = fully visible, ~0 = cloaked */
   visibility: number;
+  /** velocity in the robot's own frame (m/s): forward (+ = where it faces) and side (+ = to its right) */
+  fwd: number;
+  side: number;
+  /** seconds in the air (0 on the ground) */
+  airAge: number;
+  /** seconds since the last respawn (Infinity = none seen) */
+  spawnAge: number;
+  /** seconds since the Special Move was used (Infinity = none) */
+  specialAge: number;
 }
 
-export const restPose = (): RobotPose => ({ t: 0, speed: 0, crouch: 0, pitch: 0, airborne: false, shotAge: Infinity, hitAge: Infinity, deadAge: NaN, protected: false, shield: false, visibility: 1 });
+export const restPose = (): RobotPose => ({ t: 0, speed: 0, crouch: 0, pitch: 0, airborne: false, shotAge: Infinity, hitAge: Infinity, deadAge: NaN, protected: false, shield: false, visibility: 1, fwd: 0, side: 0, airAge: 0, spawnAge: Infinity, specialAge: Infinity });
+
+/** What the game view needs from a robot: the stand-in RobotModel or a rigged character (character.ts). */
+export interface RobotView {
+  readonly root: THREE.Group;
+  /** every drawn mesh (x-ray copies, first-person hiding) */
+  readonly meshes: THREE.Mesh[];
+  /** the blaster tip */
+  readonly muzzle: THREE.Object3D;
+  pose(p: RobotPose): void;
+}
+
+/** The third-person blaster (both model types): body, grip, barrel, glowing tip and the muzzle point. */
+export function makeBlaster(m: RobotMaterials, shadows: boolean, meshes: THREE.Mesh[]): { gun: THREE.Group; muzzle: THREE.Object3D } {
+  const gun = new THREE.Group();
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number) => {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = shadows;
+    gun.add(mesh);
+    meshes.push(mesh);
+  };
+  add(GEO.gunBody, m.dark, 0, 0.03, -0.1);
+  add(GEO.gunGrip, m.dark, 0, -0.05, -0.02);
+  add(GEO.gunBarrel, m.body, 0, 0.04, -0.37);
+  add(GEO.gunTip, m.glow, 0, 0.04, -0.47);
+  const muzzle = new THREE.Object3D();
+  muzzle.position.set(0, 0.04, -0.5);
+  gun.add(muzzle);
+  return { gun, muzzle };
+}
+
+/** Bulwark's energy shield: a curved panel the size of the core's shield (1.5 m x 1.96 m, 0.55 m in front). */
+export function makeShieldMesh(color: THREE.Color): THREE.Mesh {
+  const sg = new THREE.CylinderGeometry(1.6, 1.6, 1.96, 16, 1, true, -0.47, 0.94);
+  sg.translate(0, 0.98, -1.6);
+  sg.rotateY(Math.PI);
+  sg.translate(0, 0, -0.55);
+  const mesh = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ map: hexTex(), color, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  mesh.visible = false;
+  return mesh;
+}
+
+/** The spawn protection bubble. */
+export function makeBubble(color: THREE.Color): THREE.Mesh {
+  const b = new THREE.Mesh(GEO.bubble, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending }));
+  b.position.y = 0.9;
+  b.visible = false;
+  return b;
+}
 
 /** A modelled, animatable robot. `root` goes in the scene; position/yaw are set by the caller. */
-export class RobotModel {
+export class RobotModel implements RobotView {
   readonly root = new THREE.Group();
   readonly mats: RobotMaterials;
   readonly meshes: THREE.Mesh[] = [];
   /** the muzzle (world position for laser beams) */
-  readonly muzzle = new THREE.Object3D();
+  readonly muzzle: THREE.Object3D;
   private hips = new THREE.Group();
   private spine = new THREE.Group();
   private headPivot = new THREE.Group();
@@ -201,15 +259,10 @@ export class RobotModel {
     const gun = new THREE.Group();
     gun.position.set(0, -0.22, 0);
     this.arms[1].elbow.add(gun);
-    const gunRoot = new THREE.Group();
-    gun.add(gunRoot);
-    add(gunRoot, GEO.gunBody, m.dark, 0, 0.03, -0.1);
-    add(gunRoot, GEO.gunGrip, m.dark, 0, -0.05, -0.02);
-    add(gunRoot, GEO.gunBarrel, m.body, 0, 0.04, -0.37);
-    add(gunRoot, GEO.gunTip, m.glow, 0, 0.04, -0.47);
-    this.muzzle.position.set(0, 0.04, -0.5);
-    gunRoot.add(this.muzzle);
-    this.gun = gunRoot;
+    const blaster = makeBlaster(m, shadows, this.meshes);
+    gun.add(blaster.gun);
+    this.muzzle = blaster.muzzle;
+    this.gun = blaster.gun;
     // character accessory (a stand-in look per character)
     if (character >= 0) {
       const acc = new THREE.MeshStandardMaterial({ color: CHARACTERS[character].accent, roughness: 0.35, metalness: 0.2, emissive: CHARACTERS[character].accent, emissiveIntensity: 0.25 });
@@ -237,17 +290,10 @@ export class RobotModel {
     }
     // energy shield (Bulwark): a curved panel in front, faces where the robot looks
     // same size as the core's shield (1.5 m x 1.96 m, 0.55 m in front), curved toward the robot
-    const sg = new THREE.CylinderGeometry(1.6, 1.6, 1.96, 16, 1, true, -0.47, 0.94);
-    sg.translate(0, 0.98, -1.6);
-    sg.rotateY(Math.PI);
-    sg.translate(0, 0, -0.55);
-    this.shieldMesh = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ map: hexTex(), color: m.glow.color, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
-    this.shieldMesh.visible = false;
+    this.shieldMesh = makeShieldMesh(m.glow.color);
     this.root.add(this.shieldMesh);
     // spawn protection bubble
-    this.bubble = new THREE.Mesh(GEO.bubble, new THREE.MeshBasicMaterial({ color: m.glow.color, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending }));
-    this.bubble.position.y = 0.9;
-    this.bubble.visible = false;
+    this.bubble = makeBubble(m.glow.color);
     this.root.add(this.bubble);
     this.allMats = [...new Set(this.meshes.map((x) => x.material as THREE.Material))];
     this.pose(restPose());
