@@ -234,7 +234,13 @@ function frame(now: number): void {
   const s = S;
   const g = s.match.game;
   const paused = state === "play" && !g.over && (touchPlay ? touchPaused : !input.locked);
-  $("pause").hidden = !(paused && pausedByUser);
+  // a phone turned upright mid-match: paused, with "Rotate your phone to play" (Resume comes back with landscape)
+  const upright = touchPlay && isPortrait();
+  $("pause").hidden = !(paused && pausedByUser) || upright;
+  $("rotatePause").hidden = !(paused && upright);
+  // paused or over: the touch controls step aside entirely (and let go of any held buttons)
+  const touchOff = paused || g.over || !!s.tutorial?.done;
+  if (touch && touchOff !== touch.el.classList.contains("off")) { touch.el.classList.toggle("off", touchOff); touch.reset(); input.clear(); }
   $("clickHint").hidden = touchPlay || !(state === "play" && !input.locked && !pausedByUser && !g.over);
   if (touchPlay && state === "play") $("touchEnd").hidden = !(g.over || !!s.tutorial?.done);
   if (!paused && !g.over) {
@@ -420,7 +426,11 @@ document.addEventListener("pointerlockchange", () => {
 canvas.addEventListener("click", () => {
   if (state === "play" || (state === "watch" && S?.rig.mode === "free")) { sfx.unlock(); input.lock(); }
 });
-$("resume").addEventListener("click", () => { pausedByUser = false; if (touchPlay) touchPaused = false; else lockAndGo(); });
+$("resume").addEventListener("click", () => {
+  if (touchPlay && isPortrait()) return; // still upright: stay paused
+  pausedByUser = false;
+  if (touchPlay) { touchPaused = false; touch?.reset(); input.clear(); } else lockAndGo();
+});
 $("playTouch").addEventListener("click", () => startTouch("play"));
 $("tutorialTouch").addEventListener("click", () => startTouch("tutorial"));
 $("againBtn").addEventListener("click", () => startTouch("play"));
@@ -428,6 +438,27 @@ $("menuBtn").addEventListener("click", () => showMenu());
 $<HTMLInputElement>("touchSens").value = String(settings.touchSens);
 $<HTMLInputElement>("touchSens").addEventListener("input", (e) => { settings.touchSens = Number((e.target as HTMLInputElement).value); store.set("touchSens", String(settings.touchSens)); });
 $("quit").addEventListener("click", () => showMenu());
+$("quitRotate").addEventListener("click", () => showMenu());
+
+// ---- phones: turning upright mid-match pauses at once (the AI waits too: it's a local simulation);
+// so does the page going to the background. Every held touch is let go, and the layout follows the screen.
+const isPortrait = () => window.innerHeight > window.innerWidth;
+function pauseNow(): void {
+  if (state !== "play" || !S || S.match.game.over) return;
+  if (touchPlay) { touchPaused = true; pausedByUser = true; touch?.reset(); input.clear(); }
+  else input.unlock(); // desktop: losing the pointer lock pauses (pointerlockchange)
+}
+function onOrientation(): void {
+  stage.resize();
+  if (!touchPlay) return;
+  if (isPortrait()) pauseNow();
+  touch?.reset();
+  input.clear();
+}
+window.addEventListener("resize", onOrientation);
+(screen.orientation as ScreenOrientation | undefined)?.addEventListener?.("change", onOrientation);
+window.addEventListener("orientationchange", onOrientation);
+document.addEventListener("visibilitychange", () => { if (document.hidden) pauseNow(); });
 
 function lockAndGo(): void {
   sfx.unlock();

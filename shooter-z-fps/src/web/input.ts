@@ -49,12 +49,17 @@ export class Input {
 
   lock(): void {
     if (this.locked) return;
+    if (typeof this.target.requestPointerLock !== "function") return; // iPhone browsers have no pointer lock
     const r = this.target.requestPointerLock({ unadjustedMovement: true } as never) as unknown as Promise<void> | undefined;
     // some browsers don't support unadjustedMovement: fall back to the plain lock
     r?.catch?.(() => this.target.requestPointerLock());
   }
 
-  unlock(): void { if (this.locked) document.exitPointerLock(); }
+  /** Release a real pointer lock. (Touch play only pretends to be locked, and iPhone browsers have no
+   *  Pointer Lock API at all: calling the missing exitPointerLock threw and broke the way back to the menu.) */
+  unlock(): void {
+    if (document.pointerLockElement === this.target && typeof document.exitPointerLock === "function") document.exitPointerLock();
+  }
 
   /** Mouse movement not yet turned into an action (the camera shows it right away). */
   pendingYaw(): number { return -this.dx * this.sensitivity; }

@@ -64,7 +64,11 @@ body.phone .desktop-only { display: none !important; }
 body.phone .menu-grid { grid-template-columns: 1fr; padding: 28px 18px; gap: 22px; }
 body.phone .hero h1 { font-size: 62px; }
 
-.pause { background: rgba(10,12,16,0.55); }
+.pause { background: rgba(10,12,16,0.55); z-index: 30; }
+#rotatePause { background: rgba(10,12,16,0.85); }
+#rotatePause svg { color: var(--ink); margin-bottom: 8px; }
+/* paused or match over: the touch controls are gone, so nothing can sit over (or swallow) the buttons */
+.touch.off { display: none; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 28px 32px; text-align: center; }
 .card h2 { font-family: var(--head); font-size: 34px; margin: 0 0 6px; }
 .card p { color: var(--ink-dim); margin: 0 0 20px; }
