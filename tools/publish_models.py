@@ -10,6 +10,7 @@ Reads HF_TOKEN from .env.local (ignored by git). Every model zip is re-saved wit
 
 import argparse
 import getpass
+import hashlib
 import io
 import json
 import shutil
@@ -200,12 +201,102 @@ def stage(root: Path) -> dict[str, Path]:
     return {"car-racing-ppo": car, "lights-out-surfer-ppo": run}
 
 
+SHOOTER_CARD = """---
+license: mit
+library_name: stable-baselines3
+tags: [reinforcement-learning, deep-reinforcement-learning, sb3-contrib, recurrent-ppo, lstm, self-play, onnx, fps]
+---
+
+# Shooter Z: the PPO + LSTM shooter AI
+
+The AI of **Shooter Z**, an open-source 1v1 arena shooter built for the BULSHY.FM series. Every opponent in
+the game is this model. It sees the world as 256 labelled rays (what a player sees, no wall hacks), keeps
+an LSTM memory of the match and decides 20 times per second.
+
+Model: `{label}` ({steps:,} decisions of training).
+
+## Benchmark
+
+100 fixed matches per opponent (seeds 5000-5099), best actions only, first to 10 eliminations,
+3-minute limit. The heuristic bots exist only as a fixed yardstick; the game itself has none.
+
+| Opponent | Win rate | 95% range | Kill share | K/D | Headshots |
+|---|---|---|---|---|---|
+{rows}
+
+Kill share = its eliminations / all eliminations in the match (50% = even).
+
+## Training
+
+RecurrentPPO (sb3-contrib 2.9.2), encoder 2874 -> 256 -> 256, LSTM 256, actor and critic heads of 128
+(1.9M weights). A curriculum first: still targets (close, then far), moving targets, then heuristic bots
+Easy -> Normal -> Hard. {extra}Reward: +/-10 for a win/loss, +/-0.01 per HP dealt/taken, small costs
+for wasted shots and long idle stretches (see `reward.json`).
+
+## Files
+
+- `policy.onnx`: input `obs` float32 [batch, 2874], `h`, `c` float32 [1, batch, 256]; output `logits`
+  float32 [batch, 40] (9 action parts back to back) and `h_out`, `c_out`. Start each robot with h = c = 0
+  at match start, feed the outputs back every decision. `policy.json` has the action decoding.
+- `final.zip`: the SB3 model. `reward.json`: the training reward. `bench.json`: the benchmark.
+
+Code: https://github.com/GOATsann/goatsan-lab (shooter-z-fps/). Made by @_goatsan.
+"""
+
+
+def stage_shooter(root: Path, model: str) -> Path:
+    """model: <run> or <run>@<steps> inside shooter-z-fps/runs/ (exported with train/export_onnx.py, benchmarked)."""
+    run_name, _, steps = model.partition("@")
+    src = LAB / "shooter-z-fps" / "runs" / run_name
+    stem = f"policy_{int(steps)}" if steps else "policy"
+    bench_file = src / (f"bench_{int(steps)}.json" if steps else "bench.json")
+    out = root / "shooter-z-ppo"
+    out.mkdir(parents=True)
+    sys.path.insert(0, str(LAB / "shooter-z-fps" / "train"))
+    from szpolicy import load_model  # the Shooter Z network classes
+
+    m = load_model(src / "final.zip", snapshot=(src / "snapshots" / f"policy_{int(steps):010d}.pt") if steps else None)
+    m.tensorboard_log = None
+    m.save(out / "final.tmp.zip")
+    with zipfile.ZipFile(out / "final.tmp.zip") as zin, zipfile.ZipFile(out / "final.zip", "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "system_info.txt":
+                data = b"\n".join(l for l in data.splitlines() if not l.startswith(b"- OS:")) + b"\n"
+            zout.writestr(item, data)
+    (out / "final.tmp.zip").unlink()
+    shutil.copy(src / f"{stem}.onnx", out / "policy.onnx")
+    meta = json.loads((src / f"{stem}.json").read_text())
+    meta["model"] = model.split("/")[-1]
+    (out / "policy.json").write_text(json.dumps(meta, indent=2))
+    shutil.copy(src / "reward.json", out / "reward.json")
+    bench = json.loads(bench_file.read_text())
+    label = bench.pop("label", run_name)
+    (out / "bench.json").write_text(json.dumps(bench, indent=2))
+    rows = []
+    for opp, r in bench.items():
+        name = opp if opp.startswith("vs ") else f"{opp.capitalize()} bots"
+        ks = r.get("kill_share")
+        rows.append(f"| {name} | {r['win_rate']:.0%} | {r['win_ci'][0]:.0%}-{r['win_ci'][1]:.0%} | {'' if ks is None else f'{ks:.0%}'} | "
+                    f"{r['kd']:.2f} | {r['headshot_share']:.0%} |" if "kd" in r else f"| {name} | - (time limit) | - | {'' if ks is None else f'{ks:.0%}'} | - | - |")
+    extra = "Then AI-only self-play (80% against itself, 20% against past snapshots picked by difficulty). " if "selfplay" in run_name else ""
+    (out / "README.md").write_text(SHOOTER_CARD.format(label=label, steps=meta["steps"], rows="\n".join(rows), extra=extra))
+    return out
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--only", choices=["car-racing-ppo", "lights-out-surfer-ppo", "shooter-z-ppo"], help="publish one repo")
+    p.add_argument("--shooter-model", help="Shooter Z model to publish: <run> or <run>@<steps> (shooter-z-fps/runs/)")
     args = p.parse_args()
     root = Path(tempfile.mkdtemp(prefix="hf-stage-"))
-    folders = stage(root)
+    if args.only == "shooter-z-ppo":
+        if not args.shooter_model:
+            raise SystemExit("--shooter-model is required for shooter-z-ppo")
+        folders = {"shooter-z-ppo": stage_shooter(root, args.shooter_model)}
+    else:
+        folders = {k: v for k, v in stage(root).items() if not args.only or k == args.only}
     for name, folder in folders.items():
         check_clean(folder)
         size = sum(f.stat().st_size for f in folder.rglob("*") if f.is_file()) / 1e6
@@ -217,8 +308,13 @@ def main() -> None:
     for name, folder in folders.items():
         repo = f"{USER}/{name}"
         api.create_repo(repo, repo_type="model", private=False, exist_ok=True)
-        api.upload_folder(repo_id=repo, folder_path=str(folder), commit_message="Publish trained model, benchmark and model card")
-        print(f"uploaded https://huggingface.co/{repo}")
+        info = api.upload_folder(repo_id=repo, folder_path=str(folder), commit_message="Publish trained model, benchmark and model card")
+        print(f"uploaded https://huggingface.co/{repo} (revision {info.oid})")
+        if name == "shooter-z-ppo":  # the game pins this exact revision and checks the files
+            lock = {"repo": repo, "revision": info.oid, "model": json.loads((folder / "policy.json").read_text())["model"],
+                    "files": {f: hashlib.sha256((folder / f).read_bytes()).hexdigest() for f in ("policy.onnx", "policy.json")}}
+            (LAB / "shooter-z-fps" / "models.lock.json").write_text(json.dumps(lock, indent=2) + "\n")
+            print("wrote shooter-z-fps/models.lock.json")
     shutil.rmtree(root)
 
 

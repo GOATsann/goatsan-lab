@@ -92,6 +92,13 @@ def main() -> None:
                 out[me][f"vs {other}"] = {"win_rate": wins / n, "win_ci": wilson(wins, n), "matches": n}
             r = out[a][f"vs {b}"]
             print(f"{a} vs {b}: {a} wins {r['win_rate']:.0%} ({r['win_ci'][0]:.0%}-{r['win_ci'][1]:.0%}) of {r['matches']} matches", flush=True)
+        for name in out:  # kill share per opponent (model vs model matches mostly end at the time limit)
+            for opp, res in out[name].items():
+                key = opp[3:] if opp.startswith("vs ") else opp
+                sub = [x for x in rows[name] if x["opponent"] == key]
+                k, d = sum(x["kills"] for x in sub), sum(x["deaths"] for x in sub)
+                if k + d:
+                    res["kill_share"], res["kills_per_match"] = k / (k + d), k / len(sub)
         for name, (run, stem, _) in specs.items():
             (run / f"{stem}.json").write_text(json.dumps({"label": name, **out[name]}, indent=2))
             with (run / f"{stem}.csv").open("w", newline="") as f:
