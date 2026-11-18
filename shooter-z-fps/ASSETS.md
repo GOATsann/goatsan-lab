@@ -10,6 +10,7 @@ Everything in the game is made for it or generated in code, except where listed.
 | Stand-in robots, blaster, abilities, effects | generated in code (`src/web/robot.ts`, `src/web/fx.ts`) | MIT |
 | Special Move sounds and the ready chime (`public/sfx/`: dash, bulwark, echo, wisp, ready) | generated for this project with Higgsfield (Mirelo SFX), then trimmed and normalised | **not included**, all rights reserved (not part of the MIT code) |
 | Other sound effects (lasers, hits, eliminations, reload, jump) and the Special Move stand-ins | synthesized in code (`src/web/audio.ts`) | MIT |
+| Music (`public/audio/music.mp3`) | "Action Trailer" by kulakovka via [Pixabay](https://pixabay.com/) | Pixabay Content License; **not included in the repo** (the licence allows it inside the game and site, not redistributing the file on its own) |
 | Fonts: Chakra Petch, Inter | loaded at runtime from Google Fonts | SIL Open Font License 1.1 |
 
 **The four character models are not included in this repo.** Without them the game uses its built-in
@@ -34,5 +35,8 @@ change the gameplay: hitboxes live in the core.
 **The Special Move sounds are not included in this repo either.** Without them the game plays synthesized
 stand-ins. To use your own, put short mono MP3 files in `public/sfx/` named `dash.mp3`, `bulwark.mp3`,
 `echo.mp3`, `wisp.mp3` and `ready.mp3` (the ones made for the game are 0.7-2 s and 9-25 KB each).
+
+**The music is not included in this repo.** Add your own track at `public/audio/music.mp3` (MP3; it loops,
+with silence at either end skipped); without it the game is silent between sound effects.
 
 Any other external asset added later must be CC0 (or the licence noted here).

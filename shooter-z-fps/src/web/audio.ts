@@ -1,11 +1,34 @@
 // Sound effects: laser zaps, hits, the headshot ding, eliminations, reload clicks and jumps are synthesized
 // with WebAudio. The Special Moves (and the "ready" chime) use short sound files from public/sfx/ when they
 // are there (see ASSETS.md), else synthesized stand-ins. Other robots' Special Moves are positional (3D).
+// Background music (public/audio/music.mp3, not in git) loops under everything and ducks during play.
+//   effects -> master --\
+//                        >-- out (M mutes all) -> speakers
+//   music -> musicGain --/
+/** Music levels per scene (effects peak around 0.1-0.2 after the 0.5 effects gain). */
+const MUSIC_MENU = 0.3; // menu, character select, end of match: full-ish
+const MUSIC_PLAY = 0.085; // a match: ducked well down (~28 % of the menu level)
+const MUSIC_WATCH = 0.12; // Watch AI vs AI: a little more than playing
+const DUCK_LOUD = 0.55; // extra dip while lasers / Special Moves are loud
+export type MusicScene = "menu" | "play" | "watch" | "end";
+
 export class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  private out: GainNode | null = null;
+  private musicGain: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   muted = false;
+  effectsOn = true;
+  musicOn = true;
+  private scene: MusicScene = "menu";
+  private loudUntil = 0;
+  private musicStarted = false;
+  private musicSrc: AudioBufferSourceNode | null = null;
+  /** the music file downloads with the page (no audio permission needed for that) */
+  private musicBytes: Promise<ArrayBuffer | null> = fetch("audio/music.mp3")
+    .then((r) => (r.ok && (r.headers.get("content-type") ?? "").includes("audio") ? r.arrayBuffer() : null))
+    .catch(() => null); // missing (not in git): no music
   private samples = new Map<string, AudioBuffer>();
   private samplesLoading = false;
 
@@ -15,16 +38,91 @@ export class Sfx {
       const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AC) return;
       this.ctx = new AC();
+      this.out = this.ctx.createGain();
+      this.out.gain.value = this.muted ? 0 : 1;
+      this.out.connect(this.ctx.destination);
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.5;
-      this.master.connect(this.ctx.destination);
+      this.master.gain.value = this.effectsOn ? 0.5 : 0;
+      this.master.connect(this.out);
+      this.musicGain = this.ctx.createGain();
+      this.musicGain.gain.value = 0;
+      this.musicGain.connect(this.out);
+      // start the music once audio is really running (Safari can start it "interrupted")
+      this.ctx.addEventListener("statechange", () => { if (this.ctx?.state === "running") void this.startMusic(); });
       const len = this.ctx.sampleRate * 0.4;
       this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
       const d = this.noise.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     }
     if (this.ctx.state === "suspended") void this.ctx.resume();
+    if (this.ctx.state === "running") void this.startMusic();
     this.loadSamples();
+  }
+
+  /** Loop the music, without the silence at its ends (it would leave a gap at every loop). */
+  private async startMusic(): Promise<void> {
+    if (this.musicStarted || !this.ctx) return;
+    this.musicStarted = true;
+    try {
+      const bytes = await this.musicBytes;
+      if (!bytes) return;
+      const buf = await this.ctx.decodeAudioData(bytes.slice(0));
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      const [from, to] = trimSilence(buf);
+      src.loopStart = from;
+      src.loopEnd = to;
+      src.connect(this.musicGain!);
+      src.start(0, from);
+      this.musicSrc = src;
+      this.musicGain!.gain.setValueAtTime(0, this.ctx.currentTime);
+      this.applyMusic(1.5); // fade in
+    } catch (e) {
+      this.musicStarted = false; // the next gesture tries again
+      console.warn("Shooter Z: music not loaded", e);
+    }
+  }
+
+  /** The music level for this moment (scene, toggle, loud ducking). */
+  musicTarget(): number {
+    if (!this.musicOn) return 0;
+    const base = this.scene === "menu" || this.scene === "end" ? MUSIC_MENU : this.scene === "watch" ? MUSIC_WATCH : MUSIC_PLAY;
+    const loud = this.ctx && this.ctx.currentTime < this.loudUntil ? DUCK_LOUD : 1;
+    return base * loud;
+  }
+
+  private applyMusic(fade: number): void {
+    if (!this.ctx || !this.musicGain) return;
+    const g = this.musicGain.gain;
+    g.cancelScheduledValues(this.ctx.currentTime);
+    g.setTargetAtTime(this.musicTarget(), this.ctx.currentTime, fade / 3);
+  }
+
+  /** Menu / match / watching / end of match: smooth fades between the levels. */
+  setMusicScene(scene: MusicScene): void {
+    if (scene === this.scene) return;
+    this.scene = scene;
+    this.applyMusic(scene === "play" ? 1.0 : 1.6);
+  }
+
+  /** Something loud (a laser close by, a Special Move): dip the music a little more for a moment. */
+  duckLoud(seconds = 0.45): void {
+    if (!this.ctx || !this.musicGain) return;
+    const until = this.ctx.currentTime + seconds;
+    const was = this.ctx.currentTime < this.loudUntil;
+    this.loudUntil = Math.max(this.loudUntil, until);
+    if (!was) this.applyMusic(0.15);
+    setTimeout(() => { if (this.ctx && this.ctx.currentTime >= this.loudUntil - 0.01) this.applyMusic(0.8); }, seconds * 1000 + 20);
+  }
+
+  setMusic(on: boolean): void { this.musicOn = on; this.applyMusic(0.5); }
+  setEffects(on: boolean): void { this.effectsOn = on; if (this.master && this.ctx) this.master.gain.setTargetAtTime(on ? 0.5 : 0, this.ctx.currentTime, 0.05); }
+  /** for tests and the debug counter: the music's current gain */
+  musicLevel(): number { return this.musicGain?.gain.value ?? 0; }
+  musicInfo(): { playing: boolean; loop: boolean; loopStart: number; loopEnd: number; duration: number } | null {
+    const s = this.musicSrc;
+    return s ? { playing: true, loop: s.loop, loopStart: s.loopStart, loopEnd: s.loopEnd, duration: s.buffer?.duration ?? 0 } : null;
   }
 
   /** The Special Move sounds (and the ready chime), if public/sfx/ has them. Small files, loaded once. */
@@ -98,9 +196,10 @@ export class Sfx {
     if (!this.sample("ready", 0.32)) this.tone("sine", 1320, 1320, 0.12, 0.06);
   }
 
+  /** M: mute everything (effects and music). */
   setMuted(m: boolean): void {
     this.muted = m;
-    if (this.master) this.master.gain.value = m ? 0 : 0.5;
+    if (this.out) this.out.gain.value = m ? 0 : 1;
   }
 
   private ok(): AudioContext | null { return this.ctx && !this.muted ? this.ctx : null; }
@@ -156,4 +255,13 @@ export class Sfx {
     this.tone("sine", 700, 650, 0.6, v * 0.5, 0.05);
     this.tone("sine", 1400, 1300, 0.35, v * 0.35, 0.32);
   }
+}
+
+/** Seconds where the sound starts and ends (ignoring near-silence at both ends), like the runner's player. */
+function trimSilence(buf: AudioBuffer, threshold = 0.003): [number, number] {
+  const d = buf.getChannelData(0);
+  let a = 0, b = d.length - 1;
+  while (a < b && Math.abs(d[a]) < threshold) a++;
+  while (b > a && Math.abs(d[b]) < threshold) b--;
+  return [a / buf.sampleRate, (b + 1) / buf.sampleRate];
 }

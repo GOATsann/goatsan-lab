@@ -45,6 +45,8 @@ const settings = {
   // a simple device rule: touch devices default to Low graphics (they can switch to Normal)
   graphics: ((params.get("graphics") ?? store.get("graphics") ?? (touchDevice ? "low" : "normal")) === "low" ? "low" : "normal") as Graphics,
   sens: Number(store.get("sens") ?? 1),
+  effects: (store.get("effects") ?? "on") as "on" | "off",
+  music: (store.get("music") ?? "on") as "on" | "off",
   touchSens: Number(store.get("touchSens") ?? 1),
   // phones: Simple firing (fires while the crosshair is on a visible enemy) or Advanced (manual Fire)
   fireMode: (store.get("fireMode") ?? "simple") as "simple" | "advanced",
@@ -59,6 +61,10 @@ const input = new Input(canvas);
 input.forceLocked = params.has("autotest");
 input.sensitivity = 0.0022 * settings.sens;
 const sfx = new Sfx();
+sfx.setEffects(settings.effects === "on");
+sfx.setMusic(settings.music === "on");
+// browsers only start audio after a user interaction: the first click, tap or key anywhere starts the music
+for (const ev of ["pointerdown", "keydown", "touchend"]) window.addEventListener(ev, () => sfx.unlock(), { once: true, capture: true });
 const debugFps = params.has("debug") || params.has("fps");
 const fixedSeed = params.has("seed") ? Number(params.get("seed")) : null;
 const newSeed = () => fixedSeed ?? Math.floor(Math.random() * 1e9); // UI only: the core never uses Math.random
@@ -168,6 +174,8 @@ function startMatch(kind: "play" | "watch" | "backdrop" | "tutorial", mapOverrid
   updateSpecBar();
   acc = 0;
   readyCd = 0;
+  // music: full on the menu, ducked well down while playing (a little less when watching)
+  sfx.setMusicScene(kind === "backdrop" ? "menu" : kind === "watch" ? "watch" : "play");
 }
 
 function hudCtx(): HudContext {
@@ -188,7 +196,7 @@ function onEvents(events: readonly GameEvent[]): void {
   const dist = (id: number) => { const a = g.agents[id]; return Math.hypot(a.x - camPos.x, a.y - camPos.y, a.z - camPos.z); };
   const me = s.spectator ? (s.rig.mode === "free" || s.rig.mode === "overview" ? -1 : s.rig.target) : s.self;
   for (const e of events) {
-    if (e.type === "shot") sfx.laser(dist(e.a), e.a === me);
+    if (e.type === "shot") { sfx.laser(dist(e.a), e.a === me); if (e.a === me || dist(e.a) < 15) sfx.duckLoud(0.35); }
     else if (e.type === "hit" && e.a === me) sfx.hit(e.part === "head");
     else if (e.type === "hit" && e.v === me && !e.blocked) sfx.hurt();
     else if (e.type === "kill") { if (e.a === me) sfx.kill(); sfx.eliminated(dist(e.v)); }
@@ -196,6 +204,7 @@ function onEvents(events: readonly GameEvent[]): void {
     else if (e.type === "jump" && e.a === me) sfx.jump();
     else if (e.type === "spawn" && e.a === me) sfx.spawn();
     else if (e.type === "ability" && (e.a === me || dist(e.a) < 45)) {
+      sfx.duckLoud(0.9);
       // you can hear another robot's Special Move nearby, from where it is (fair: a player would too)
       const a = g.agents[e.a];
       sfx.special(e.kind, e.a === me, { x: a.x, y: a.y + 1.2, z: a.z });
@@ -281,6 +290,7 @@ function frame(now: number): void {
   // end of match
   if (g.over && s.endedAt < 0) {
     s.endedAt = now;
+    if (!s.backdrop) sfx.setMusicScene("end");
     if (state === "play") input.unlock();
   }
   if (g.over && s.spectator && now - s.endedAt > 7000) {
@@ -444,7 +454,7 @@ function hideMenu(): void { $("menu").hidden = true; preview.running = false; }
 
 function refreshMenu(): void {
   for (const seg of document.querySelectorAll<HTMLElement>(".seg[data-setting]")) {
-    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics" | "limit" | "fireMode";
+    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics" | "limit" | "fireMode" | "effects" | "music";
     seg.setAttribute("role", "radiogroup");
     for (const b of seg.querySelectorAll<HTMLButtonElement>("button")) { b.classList.toggle("on", b.dataset.v === String(settings[key])); b.setAttribute("role", "radio"); }
   }
@@ -485,13 +495,15 @@ for (const seg of document.querySelectorAll<HTMLElement>(".seg[data-setting]")) 
   seg.addEventListener("click", (e) => {
     const b = (e.target as HTMLElement).closest("button") as HTMLButtonElement | null;
     if (!b) return;
-    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics" | "limit" | "fireMode";
+    const key = seg.dataset.setting as "mode" | "map" | "skill" | "graphics" | "limit" | "fireMode" | "effects" | "music";
     const v = b.dataset.v!;
     if (key === "graphics") {
       if (v !== settings.graphics) { store.set("graphics", v); location.reload(); }
       return;
     }
     (settings as Record<string, unknown>)[key] = key === "limit" ? Number(v) : v;
+    if (key === "effects") sfx.setEffects(v === "on");
+    if (key === "music") { sfx.unlock(); sfx.setMusic(v === "on"); }
     store.set(key, v);
     refreshMenu();
     if (key === "map" && state === "menu") startMatch("backdrop", settings.map);

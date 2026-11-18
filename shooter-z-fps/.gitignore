@@ -13,3 +13,6 @@ public/models/
 sst-env.d.ts
 # deploy settings (AWS profile, certificate ARN): local only
 .env
+# background music: Pixabay licence allows it inside the game, not redistribution (ASSETS.md)
+public/audio/
+media-src/
