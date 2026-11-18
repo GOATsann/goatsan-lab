@@ -214,18 +214,18 @@ export class RobotModel {
     if (character >= 0) {
       const acc = new THREE.MeshStandardMaterial({ color: CHARACTERS[character].accent, roughness: 0.35, metalness: 0.2, emissive: CHARACTERS[character].accent, emissiveIntensity: 0.25 });
       if (character === 0) {
-        // Zip: swept fins on the helmet and heel thrusters
+        // Dash: swept fins on the helmet and heel thrusters
         for (const sd of [-1, 1]) {
           const fin = add(this.headPivot, new THREE.ConeGeometry(0.05, 0.22, 4).rotateX(-Math.PI / 2 - 0.5), acc, sd * 0.17, 0.3, 0.06);
           fin.rotation.z = sd * 0.3;
         }
         for (const leg of this.legs) add(leg.knee, new THREE.CylinderGeometry(0.035, 0.05, 0.08, 8).rotateX(Math.PI / 2), acc, 0, -0.37, 0.11);
       } else if (character === 1) {
-        // Brick: heavy shoulder plates and a chin guard
+        // Bulwark: heavy shoulder plates and a chin guard
         for (const arm of this.arms) add(arm.shoulder, new RoundedBoxGeometry(0.2, 0.08, 0.24, 2, 0.03), acc, arm.side * 0.03, 0.1, 0);
         add(this.headPivot, new RoundedBoxGeometry(0.3, 0.06, 0.1, 2, 0.02), acc, 0, 0.07, -0.13);
       } else if (character === 2) {
-        // Sonar: a small radar dish on the back of the helmet
+        // Echo: a small radar dish on the back of the helmet
         const dish = add(this.headPivot, new THREE.SphereGeometry(0.12, 12, 6, 0, Math.PI * 2, 0, 1.0), acc, 0, 0.36, 0.12);
         dish.rotation.x = -0.9;
         (dish.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
@@ -235,7 +235,7 @@ export class RobotModel {
         for (const sd of [-1, 1]) add(this.spine, new RoundedBoxGeometry(0.05, 0.36, 0.02, 1, 0.01), acc, sd * 0.1, 0.05, 0.27);
       }
     }
-    // energy shield (Brick): a curved panel in front, faces where the robot looks
+    // energy shield (Bulwark): a curved panel in front, faces where the robot looks
     // same size as the core's shield (1.5 m x 1.96 m, 0.55 m in front), curved toward the robot
     const sg = new THREE.CylinderGeometry(1.6, 1.6, 1.96, 16, 1, true, -0.47, 0.94);
     sg.translate(0, 0.98, -1.6);

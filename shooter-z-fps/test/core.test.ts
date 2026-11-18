@@ -200,7 +200,7 @@ describe("scoring, respawn, protection", () => {
 });
 
 describe("abilities", () => {
-  it("Brick's shield stops lasers from the front, not from behind", () => {
+  it("Bulwark's shield stops lasers from the front, not from behind", () => {
     const front = lab({ characters: [0, 1] });
     place(front, 0, 11, -8); place(front, 1, 11, 2);
     front.agents[1].yaw = 0; // facing north, toward the shooter
@@ -226,7 +226,7 @@ describe("abilities", () => {
     const o = observe(g, 0, new Observation());
     expect(Array.from(o.label).filter((l) => l === L_SHIELD).length).toBeGreaterThan(10);
   });
-  it("Zip's dash moves ~2.8 m in a sixth of a second, then cools down 6 s", () => {
+  it("Dash's dash moves ~2.8 m in a sixth of a second, then cools down 6 s", () => {
     const g = lab({ characters: [0, 1] });
     place(g, 0, 11, -8); place(g, 1, -11, 8);
     g.agents[0].yaw = Math.PI; // facing south, down the corridor
@@ -235,7 +235,7 @@ describe("abilities", () => {
     expect(g.agents[0].z - -8).toBeGreaterThan(2.6);
     expect(g.agents[0].abilityCooldown).toBeGreaterThan(C.DASH_COOLDOWN - 20);
   });
-  it("Sonar's scan reveals enemies within 20 m through walls to the scanner's team", () => {
+  it("Echo's scan reveals enemies within 20 m through walls to the scanner's team", () => {
     const g = lab({ characters: [2, 0] });
     place(g, 0, 0, 5); place(g, 1, 12, 5); // a bulkhead between them
     expect(observe(g, 0, new Observation()).memSource[1]).toBe(0);

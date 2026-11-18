@@ -41,6 +41,8 @@ export class Hud {
   private specBar: HTMLElement;
   private abil: HTMLElement;
   private hitT = -1; private hitKind = ""; private toastT = -9;
+  /** who eliminated the HUD's robot last (shown on the death cam) */
+  private killer: { name: string; color: string; head: boolean } | null = null;
   private dmgArcs: { el: HTMLElement; yawW: number; t: number }[] = [];
   private numbers: { el: HTMLElement; t: number; x: number; y: number; z: number }[] = [];
   private now = 0;
@@ -86,6 +88,7 @@ export class Hud {
         this.damageArc(Math.atan2(-(a.x - g.agents[e.v].x), -(a.z - g.agents[e.v].z)));
       }
       if (e.type === "kill") this.killFeed(e, ctx);
+      if (e.type === "kill" && e.v === ctx.self) this.killer = { name: ctx.slots[e.a].name, color: ctx.colors[e.a], head: e.part === "head" };
       if (e.type === "reveal" && e.a === ctx.self && !ctx.spectator) this.say("You stood still too long: everyone can see you. Move!", 2.5);
       if (e.type === "blocked" && e.a === ctx.self && !ctx.spectator) { this.hitT = this.now; this.hitKind = "blocked"; }
       if (e.type === "blocked" && e.v === ctx.self && !ctx.spectator) this.say("Shield blocked a laser", 0.8);
@@ -124,6 +127,7 @@ export class Hud {
     const me = ctx.self >= 0 ? g.agents[ctx.self] : null;
     const firstPerson = !!me && !ctx.spectator;
     this.root.classList.toggle("spectating", !firstPerson);
+    this.root.classList.toggle("dead", !!me && !me.alive);
     // crosshair: opens up with movement / air (shows the real spread)
     if (me) {
       const hs = Math.sqrt(me.vx * me.vx + me.vz * me.vz) / C.RUN_SPEED;
@@ -153,16 +157,17 @@ export class Hud {
       this.abil.classList.toggle("ready", ready);
       this.abil.classList.toggle("active", active);
       (this.abil.querySelector(".fill") as HTMLElement).style.setProperty("--p", String(ready ? 1 : 1 - me.abilityCooldown / ch.cooldown));
-      this.abil.querySelector("b")!.textContent = `${ch.name}: ${ch.abilityName}`;
+      this.abil.querySelector("b")!.textContent = ch.name === ch.abilityName ? ch.name : `${ch.name}: ${ch.abilityName}`;
       this.abil.querySelector("small")!.textContent = active ? "active" : ready ? "ready (E or right-click)" : `${Math.ceil(me.abilityCooldown / C.TICK_HZ)} s`;
     }
     // centre message
     let msg = "";
     if (me && !me.alive && !g.over) {
-      msg = `Respawning in ${Math.ceil(me.respawnTicks / C.TICK_HZ)}`;
+      const who = this.killer ? `Eliminated by <b style="color:${this.killer.color}">${esc(this.killer.name)}</b>${this.killer.head ? " (headshot)" : ""}<br>` : "";
+      msg = `${who}<small>Respawning in ${Math.ceil(me.respawnTicks / C.TICK_HZ)}</small>`;
     } else if (me && me.protectTicks > 0 && firstPerson) msg = "Spawn shield (ends when you fire)";
     else if (me && firstPerson && me.idleTicks > C.IDLE_REVEAL_AFTER - 4 * C.TICK_HZ) msg = `Standing still: revealed in ${Math.ceil((C.IDLE_REVEAL_AFTER - me.idleTicks) / C.TICK_HZ)}`;
-    this.center.textContent = msg;
+    if (this.center.innerHTML !== msg) this.center.innerHTML = msg;
     this.toast.classList.toggle("on", this.now < this.toastT);
     // score
     this.score.innerHTML = this.scoreHtml(ctx);

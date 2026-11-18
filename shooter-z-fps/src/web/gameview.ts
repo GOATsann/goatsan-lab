@@ -38,6 +38,11 @@ export class GameView {
   private prev: { x: number; y: number; z: number; yaw: number }[];
   private crouchS: number[];
   private shotAt: number[]; private hitAt: number[]; private deadAt: number[];
+  /** who eliminated each robot last (for the death cam's highlight) */
+  private killedBy: number[];
+  /** death cam: the starting angle picked for the current death (one with a clear view of the robot) */
+  private deathAng = 0;
+  private deathKey = NaN;
   private colors: THREE.Color[];
   /** robot whose eyes we are in (first person / POV), or -1 */
   viewer = -1;
@@ -96,6 +101,7 @@ export class GameView {
     this.shotAt = g.agents.map(() => -99);
     this.hitAt = g.agents.map(() => -99);
     this.deadAt = g.agents.map(() => NaN);
+    this.killedBy = g.agents.map(() => -1);
     this.buildViewmodel(opts.colors[Math.max(0, this.self)]);
   }
 
@@ -156,6 +162,7 @@ export class GameView {
         if (e.v === this.viewer) this.shake = Math.min(1, this.shake + 0.35);
       } else if (e.type === "kill") {
         this.deadAt[e.v] = this.time;
+        this.killedBy[e.v] = e.a;
         const a = g.agents[e.v];
         const p = new THREE.Vector3(a.x, a.y + 1.1, a.z);
         this.fx.sparks(p, this.colors[e.v], 40, 6, 0.8);
@@ -235,14 +242,16 @@ export class GameView {
         pose.visibility = friendly ? 0.3 : d < CLOAK_SEE_DIST ? 0.22 : 0.05 + 0.03 * Math.sin(this.time * 7);
       } else pose.visibility = 1;
       r.pose(pose);
-      // first person: our own robot only casts its shadow
-      const hidden = a.id === this.viewer;
+      // first person: our own robot only casts its shadow (shown again on the death cam)
+      const hidden = a.id === this.viewer && a.alive;
       for (const m of r.meshes) m.layers.set(hidden ? SELF_LAYER : 0);
       // x-ray: outlined for the viewer after a hit, revealed when idle, teammates always
       let xr = false;
       if (outlineViewer >= 0 && a.alive && a.id !== outlineViewer) {
         const mate = a.team === g.agents[outlineViewer].team;
-        xr = mate || a.outlineFor[outlineViewer] > 0 || a.revealTicks > 0 || a.scanFor[g.agents[outlineViewer].team] > 0;
+        // death cam: the robot that got you is highlighted until you respawn
+        if (!g.agents[outlineViewer].alive && this.killedBy[outlineViewer] === a.id) xr = true;
+        xr = xr || mate || a.outlineFor[outlineViewer] > 0 || a.revealTicks > 0 || a.scanFor[g.agents[outlineViewer].team] > 0;
         if (mate && g.cloaked(a)) xr = false;
       }
       const pulse = 0.38 + 0.14 * Math.sin(this.time * 10);
@@ -255,7 +264,37 @@ export class GameView {
     // ---- camera
     const sh = this.shake;
     this.shake = Math.max(0, this.shake - dt * 3);
-    if (rig.mode === "fp" || rig.mode === "pov") {
+    const eyesId = rig.mode === "fp" ? this.self : rig.mode === "pov" ? rig.target : -1;
+    if (eyesId >= 0 && !g.agents[eyesId].alive) {
+      // death cam: pull back and circle your own robot as it goes down, then respawn into first person
+      const a = g.agents[eyesId];
+      const p = this.pos(eyesId, 1, new THREE.Vector3());
+      const age = Number.isNaN(this.deadAt[eyesId]) ? 1.5 : this.time - this.deadAt[eyesId];
+      const k = Math.min(1, age / 1.2), ease = 1 - (1 - k) * (1 - k);
+      const head = new THREE.Vector3(p.x, p.y + 1.2, p.z);
+      if (this.deathKey !== this.deadAt[eyesId]) {
+        // pick a starting angle where the camera ends up in the open with the fallen robot in view
+        this.deathKey = this.deadAt[eyesId];
+        this.deathAng = a.yaw + 0.5;
+        for (let k = 0; k < 12; k++) {
+          const ang = a.yaw + 0.5 + (k % 2 ? -1 : 1) * Math.ceil(k / 2) * (Math.PI / 6);
+          const cx = p.x - Math.sin(ang + 0.6) * 4.8, cz = p.z - Math.cos(ang + 0.6) * 4.8, cy = p.y + 2.9;
+          const dx = cx - head.x, dy = cy - head.y, dz = cz - head.z, l = Math.hypot(dx, dy, dz);
+          const room = g.world.raycast(head.x, head.y, head.z, dx / l, dy / l, dz / l, l);
+          if (room > 3.5 && g.world.clear(cx, cy, cz, p.x, p.y + 0.35, p.z)) { this.deathAng = ang; break; }
+        }
+      }
+      const ang = this.deathAng + Math.min(age, 2.5) * 0.25; // starts near the front of the robot, slowly circles
+      const r = 1.6 + ease * 3.2, h = 1.0 + ease * 1.9;
+      const want = new THREE.Vector3(p.x - Math.sin(ang) * r, p.y + h, p.z - Math.cos(ang) * r);
+      const d = new THREE.Vector3().subVectors(want, head);
+      const len = d.length();
+      d.divideScalar(len);
+      const t = g.world.raycast(head.x, head.y, head.z, d.x, d.y, d.z, len);
+      cam.position.copy(head).addScaledVector(d, Math.max(0.5, t - 0.3));
+      cam.lookAt(p.x, p.y + 0.5, p.z);
+      this.vmGun.visible = false;
+    } else if (rig.mode === "fp" || rig.mode === "pov") {
       const id = rig.mode === "fp" ? this.self : rig.target;
       const a = g.agents[id];
       const p = this.pos(id, alpha, new THREE.Vector3());
@@ -263,7 +302,7 @@ export class GameView {
       const speed = Math.sqrt(a.vx * a.vx + a.vz * a.vz);
       this.bob += dt * speed * 1.9 * (a.grounded ? 1 : 0);
       const bobY = Math.sin(this.bob * 2) * 0.025 * Math.min(1, speed / RUN_SPEED);
-      cam.position.set(p.x, p.y + eye + bobY + (a.alive ? 0 : -1.0), p.z);
+      cam.position.set(p.x, p.y + eye + bobY, p.z);
       const yaw = a.yaw + (rig.mode === "fp" ? rig.pendingYaw : 0), pitch = Math.max(-1.45, Math.min(1.45, a.pitch + (rig.mode === "fp" ? rig.pendingPitch : 0)));
       cam.rotation.set(pitch + (Math.random() - 0.5) * sh * 0.02, yaw + (Math.random() - 0.5) * sh * 0.02, 0);
       // blaster: sway with movement, kick on each shot, dip while reloading

@@ -24,7 +24,7 @@ Python -> server:
 
 - `mode`: `"duel"` (1v1), `"ffa"` (1 vs 3), `"team"` (2v2; the learner's teammate is a bot).
 - `map`: `"base"`, `"ship"` or `"random"`. `opponent_skill`: `"easy"`, `"normal"`, `"hard"` or
-  `"random"`. `character`: the learner's character index (0 Zip/dash, 1 Brick/shield, 2 Sonar/scan,
+  `"random"`. `character`: the learner's character index (0 Dash/dash, 1 Bulwark/shield, 2 Echo/scan,
   3 Wisp/cloak) or `"random"`. With "random", each episode's choice comes from its seed with the core's
   PRNG, so the same seed always gives the same map, opponents and characters. Bots always get random
   characters from the seed.
@@ -46,7 +46,7 @@ Server -> Python (abridged):
                    "won", "lost", "teamScore", "enemyScore", "ticks"],
   "end_causes": ["", "won", "lost"],
   "mode": "duel", "agents": 2, "learner_slot": 0,
-  "characters": [{ "id": 0, "name": "Zip", "ability": "dash" }, "..."],
+  "characters": [{ "id": 0, "name": "Dash", "ability": "dash" }, "..."],
   "obs_layout": { "rays": { "...": "..." }, "memory": { "...": "..." }, "self": ["..."] }
 }
 ```

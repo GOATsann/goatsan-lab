@@ -12,8 +12,9 @@ AI that sees only what you could see: no wall hacks. Two small maps, 1v1, 2v2 (y
 
 ## How to play
 
-First to 10 eliminations wins (you can change the limit). No round timer: you respawn after 2.5 s with
-2 s of spawn shield (firing ends it).
+First to 10 eliminations wins (you can change the limit). No round timer. When you're eliminated the
+camera pulls back so you see your robot go down, the robot that got you is highlighted and named, and
+after 2.5 s you respawn in first person with 2 s of spawn shield (firing ends it).
 
 | Key | Action |
 |---|---|
@@ -43,9 +44,9 @@ crouching more.
 
 | Character | Ability | What it does | Cooldown |
 |---|---|---|---|
-| Zip | Dash | A quick burst (~2.8 m) in the direction you're moving | 6 s |
-| Brick | Shield | A frontal energy shield for 2 s that stops lasers; you can still shoot | 12 s |
-| Sonar | Scan | Shows your team every enemy within 20 m for 1.5 s, through walls | 15 s |
+| Dash | Dash | A quick burst (~2.8 m) in the direction you're moving | 6 s |
+| Bulwark | Shield | A frontal energy shield for 2 s that stops lasers; you can still shoot | 12 s |
+| Echo | Scan | Shows your team every enemy within 20 m for 1.5 s, through walls | 15 s |
 | Wisp | Cloak | Nearly invisible for 3 s (visible within 6 m); firing breaks it | 15 s |
 
 The AI opponents get random characters. The robots are a stand-in look (a per-character accessory); the
@@ -54,8 +55,39 @@ final character art comes later.
 **On a phone** you can't play (it needs a mouse and keyboard), but you can **Watch AI vs AI**: a live bot
 match with follow, robot's-eyes, overview and free cameras. The same mode is on the desktop menu.
 
-**AI level** (Easy / Normal / Hard) sets the bots' human-like limits: reaction time (0.5 / 0.28 / 0.17 s),
-max turn speed, aim wobble, how close they go for the head, and how readily they strafe and take cover.
+**AI level** (Easy / Normal / Hard) sets the bots' human-like limits: reaction time, max turn speed, aim
+wobble, how close they go for the head, and how readily they strafe and take cover.
+
+### Tuning difficulty
+
+All bot difficulty numbers are in one file, [`src/core/difficulty.ts`](src/core/difficulty.ts). The weapon
+numbers (points per hit, fire rate, clip, reload) are in [`src/core/config.ts`](src/core/config.ts). Bump
+`VERSION` in `src/core/game.ts` after retuning (old replays won't match). Current values:
+
+| Setting (`difficulty.ts`) | Easy | Normal | Hard |
+|---|---|---|---|
+| Reaction time before aiming at a new target (`reactionTicks`, 1/60 s) | 30 (0.5 s) | 17 (0.28 s) | 10 (0.17 s) |
+| Max turn speed (`turnPerTick` x 60) | 2.6 rad/s | 5 rad/s | 8.5 rad/s |
+| Steady aim wobble (`aimNoise`, rad) | 0.03 | 0.014 | 0.007 |
+| Extra error on the first shots (`firstShotNoise`, rad) | 0.09 | 0.055 | 0.03 |
+| Goes for the head closer than (`headDist`) | never | 9 m | 22 m |
+| Fires when error < part size x (`fireTol`) | 1.7 | 1.25 | 1.0 |
+| Strafes while fighting (`strafeChance`) | 30% | 75% | 100% |
+| Crouch-fires at range (`crouchFire`) | 0% | 20% | 35% |
+| Seeks cover below health (`coverHealth`) | 30 | 40 | 45 |
+| Leads moving targets (`lead`) | 0 | 0.5 | 1 |
+
+| Weapon (`config.ts`) | Value |
+|---|---|
+| `BASE_DAMAGE` (torso hit) | 20 |
+| `PART_MULT` head / torso / legs | 2.5 / 1 / 0.75 (50 / 20 / 15 points) |
+| `MAX_HEALTH` | 100 |
+| `FIRE_TICKS` | 8 (7.5 shots per second) |
+| `CLIP` / `RELOAD_TICKS` | 24 / 90 (1.5 s) |
+| `SPREAD_BASE` / `SPREAD_MOVE` / `SPREAD_AIR` | 0.002 / 0.012 / 0.03 rad |
+| Health regen | after 5 s, 15 per second |
+
+Playtest note: the bots currently feel too strong; the plan is to tune points per shot and these limits.
 
 ## Run it locally
 
@@ -97,7 +129,7 @@ Same architecture as [Lights-Out Surfer](../runner/):
     teammate, enemy shield), memory slots from the minimap rules (outline, ping, idle reveal, scan,
     teammate), and own state (health, ammo, ability cooldown, damage direction, ...). Cloaked enemies
     only show up in rays within 6 m.
-  - `bot.ts` **heuristic bots**: patrol -> notice (sight, minimap pings, outlines, damage direction) ->
+  - `bot.ts` **heuristic bots** (their difficulty numbers live in `difficulty.ts`): patrol -> notice (sight, minimap pings, outlines, damage direction) ->
     engage (reaction delay, capped turn speed, aim noise, head when close, strafing) -> cover when hurt ->
     reposition. Team-aware in 2v2 (stays near its teammate, picks the enemy closest to it, steps out of
     its line of fire). Ability rules: dash out of trouble, shield in a losing fight, scan when lost, cloak to

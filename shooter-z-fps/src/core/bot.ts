@@ -16,37 +16,8 @@ import { L_HEAD, L_LEGS, L_MATE, L_TORSO, MEM_NONE, MEM_TEAMMATE, N_RAYS, RAY_PI
 import { Rng } from "./rng";
 import type { World } from "./world";
 
-export type SkillName = "easy" | "normal" | "hard";
-export const SKILL_NAMES: SkillName[] = ["easy", "normal", "hard"];
-
-export interface BotSkill {
-  /** ticks from first seeing an enemy until it starts aiming at it */
-  reactionTicks: number;
-  /** max turn per tick (radians) */
-  turnPerTick: number;
-  /** steady aim wobble (radians, sd) */
-  aimNoise: number;
-  /** extra error on the first shots at a new target (radians, sd), fades out */
-  firstShotNoise: number;
-  /** aims at the head when the enemy is closer than this (metres) */
-  headDist: number;
-  /** fires when the aim error is under (part half-size x this) */
-  fireTol: number;
-  /** chance to strafe while fighting */
-  strafeChance: number;
-  /** chance to crouch-fire at range */
-  crouchFire: number;
-  /** seeks cover below this health */
-  coverHealth: number;
-  /** 0..1: how well it leads a moving target */
-  lead: number;
-}
-
-export const SKILLS: Record<SkillName, BotSkill> = {
-  easy: { reactionTicks: 30, turnPerTick: 2.6 / 60, aimNoise: 0.03, firstShotNoise: 0.09, headDist: 0, fireTol: 1.7, strafeChance: 0.3, crouchFire: 0, coverHealth: 30, lead: 0 },
-  normal: { reactionTicks: 17, turnPerTick: 5 / 60, aimNoise: 0.014, firstShotNoise: 0.055, headDist: 9, fireTol: 1.25, strafeChance: 0.75, crouchFire: 0.2, coverHealth: 40, lead: 0.5 },
-  hard: { reactionTicks: 10, turnPerTick: 8.5 / 60, aimNoise: 0.007, firstShotNoise: 0.03, headDist: 22, fireTol: 1.0, strafeChance: 1, crouchFire: 0.35, coverHealth: 45, lead: 1 },
-};
+export { SKILLS, SKILL_NAMES, type BotSkill, type SkillName } from "./difficulty";
+import { SKILLS, type BotSkill, type SkillName } from "./difficulty";
 
 export type BotState = "patrol" | "hunt" | "engage" | "cover" | "regroup";
 
