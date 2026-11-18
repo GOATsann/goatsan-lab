@@ -98,7 +98,19 @@ def main() -> None:
         benches = []  # the final model (bench.json) and any benchmarked snapshots (bench_<steps>.json)
         for f in sorted(run_dir.glob("bench*.json"), key=lambda f: (f.stem != "bench", f.stem)):
             b = json.loads(f.read_text())
-            benches.append({"label": b.pop("label", run_dir.name), "results": b})
+            label = b.pop("label", run_dir.name)
+            rows_csv = f.with_suffix(".csv")
+            if rows_csv.exists():  # kill share per opponent (model vs model matches mostly end at the time limit)
+                with rows_csv.open() as fh:
+                    rows = list(csv.DictReader(fh))
+                for opp, res in b.items():
+                    key = opp[3:] if opp.startswith("vs ") else opp
+                    sub = [r for r in rows if r["opponent"] == key]
+                    k, d = sum(float(r["kills"]) for r in sub), sum(float(r["deaths"]) for r in sub)
+                    if k + d:
+                        res["kill_share"] = k / (k + d)
+                        res["kills_per_match"] = k / len(sub)
+            benches.append({"label": label, "results": b})
         runs[run_dir.name] = {
             "number": None, "change": "curriculum" if meta["args"].get("curriculum") else "straight self-play",
             "game_version": meta.get("game_version"), "target_steps": int(float(meta["args"]["timesteps"])),

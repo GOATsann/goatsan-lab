@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shooter Z Benchmark</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .page { grid-template-columns: minmax(0, 1fr); }
+  .lede { color: var(--dim); max-width: 75ch; margin: 0; }
+  .table-scroll { overflow-x: auto; }
+  table.results { border-collapse: collapse; width: 100%; min-width: 760px; font-variant-numeric: tabular-nums; }
+  .results th, .results td { text-align: right; padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .results th:nth-child(-n+2), .results td:nth-child(-n+2) { text-align: left; }
+  .results th { color: var(--dim); font-weight: 500; font-size: 0.8rem; }
+  .results td { font-family: var(--mono); font-size: 0.88rem; }
+  .results td.win { color: var(--reward-ink); }
+  .results td small { color: var(--muted); }
+  .results tr.group td { border-bottom: 0; padding-top: 18px; color: var(--ink); font-family: var(--text); font-weight: 600; }
+  .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .panel svg { width: 100%; height: auto; display: block; }
+  .panel text { font-family: var(--mono); font-size: 11px; fill: var(--dim); }
+  .panel text.name { fill: var(--ink); font-family: var(--text); font-size: 12px; }
+  .tip { position: fixed; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px;
+         font: 12px var(--mono); color: var(--ink); white-space: nowrap; z-index: 5; }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="head">
+    <div>
+      <nav class="nav projects" aria-label="Projects"><a href="./">CarRacing</a><a href="./?p=runner">Lights-Out Surfer</a><a href="./?p=shooter" aria-current="page">Shooter Z</a></nav>
+      <div class="kicker">BULSHY.FM · Shooter Z</div>
+      <h1>Shooter Z benchmark</h1>
+      <nav class="nav" aria-label="Pages"><a href="./?p=shooter">Training</a><a href="bench-shooter.html" aria-current="page">Benchmark</a></nav>
+    </div>
+    <div class="meta"><span id="updated"></span></div>
+  </header>
+
+  <p class="lede">Each model plays 100 fixed matches per opponent (seeds 5000–5099), best actions only, first to 10 eliminations,
+    3-minute limit. The training reward plays no part. Bots are a fixed yardstick only: the game itself has no bots.
+    Model vs model matches usually reach the time limit, so compare them by kill share.</p>
+
+  <section class="panels" id="panels" aria-label="Win rate per opponent"></section>
+
+  <section aria-label="All results">
+    <div class="table-scroll">
+      <table class="results">
+        <thead><tr><th>Model</th><th>Opponent</th><th>Win rate</th><th>95% range</th><th>Kill share</th><th>K/D</th><th>Hit rate</th><th>Headshots</th><th>Damage / min</th><th>Matches</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<div class="tip" id="tip" hidden></div>
+<script>
+const pct = v => (v * 100).toFixed(0) + "%";
+const OPP = ["easy", "normal", "hard"];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function models(data) {  // every benchmarked model of every run, best vs Normal first
+  const out = [];
+  for (const [run, r] of Object.entries(data.runs)) for (const b of r.shooter_bench || []) out.push({ run, label: b.label, res: b.results });
+  return out.sort((a, b) => (b.res.normal?.win_rate ?? -1) - (a.res.normal?.win_rate ?? -1));
+}
+
+function panels(ms) {
+  const box = document.getElementById("panels"), tip = document.getElementById("tip");
+  box.replaceChildren(...OPP.map(opp => {
+    const rows = ms.filter(m => m.res[opp]);
+    const card = document.createElement("article"); card.className = "card panel";
+    const h = document.createElement("h3"); h.textContent = `Win rate vs ${opp[0].toUpperCase() + opp.slice(1)} bots`;
+    const p = document.createElement("p"); p.textContent = "Dot = win rate, line = 95% range (100 matches).";
+    const W = 340, L = 128, R = 14, rowH = 26, H = 30 + rows.length * rowH;
+    const x = v => L + v * (W - L - R);
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Win rate vs ${opp} bots per model">`;
+    for (const t of [0, 0.25, 0.5, 0.75, 1]) s += `<line x1="${x(t)}" x2="${x(t)}" y1="8" y2="${H - 18}" stroke="${css("--grid")}"/><text x="${x(t)}" y="${H - 4}" text-anchor="middle">${pct(t)}</text>`;
+    rows.forEach((m, i) => {
+      const r = m.res[opp], y = 20 + i * rowH, [lo, hi] = r.win_ci || [r.win_rate, r.win_rate];
+      s += `<text class="name" x="0" y="${y + 4}">${m.label}</text>`;
+      s += `<line x1="${x(lo)}" x2="${x(hi)}" y1="${y}" y2="${y}" stroke="${css("--reward")}" stroke-width="2" stroke-linecap="round"/>`;
+      s += `<circle cx="${x(r.win_rate)}" cy="${y}" r="5" fill="${css("--reward")}" stroke="${css("--panel")}" stroke-width="2"/>`;
+      s += `<rect x="0" y="${y - rowH / 2}" width="${W}" height="${rowH}" fill="transparent" data-i="${i}"/>`;
+    });
+    card.innerHTML = s + "</svg>";
+    card.prepend(h, p);
+    card.querySelectorAll("rect[data-i]").forEach(el => {
+      const m = rows[+el.dataset.i], r = m.res[opp];
+      el.addEventListener("pointermove", e => {
+        tip.hidden = false; tip.style.left = e.clientX + 12 + "px"; tip.style.top = e.clientY + 12 + "px";
+        tip.textContent = `${m.label} vs ${opp}: win ${pct(r.win_rate)} (${pct(r.win_ci[0])}–${pct(r.win_ci[1])}), K/D ${r.kd.toFixed(2)}`;
+      });
+      el.addEventListener("pointerleave", () => { tip.hidden = true; });
+    });
+    return card;
+  }));
+}
+
+function table(ms) {
+  const body = document.getElementById("rows"); body.replaceChildren();
+  for (const m of ms) {
+    const g = document.createElement("tr"); g.className = "group";
+    const gt = document.createElement("td"); gt.colSpan = 10; gt.textContent = m.label + (m.label !== m.run ? `  (run ${m.run})` : ""); g.appendChild(gt); body.appendChild(g);
+    for (const [opp, r] of Object.entries(m.res)) {
+      const tr = document.createElement("tr");
+      const cells = ["", opp.startsWith("vs ") ? opp : opp + " bots", pct(r.win_rate), r.win_ci ? `${pct(r.win_ci[0])}–${pct(r.win_ci[1])}` : "–",
+        r.kill_share !== undefined ? pct(r.kill_share) : "–", r.kd !== undefined ? r.kd.toFixed(2) : "–", r.hit_rate !== undefined ? pct(r.hit_rate) : "–",
+        r.headshot_share !== undefined ? pct(r.headshot_share) : "–", r.damage_per_min !== undefined ? r.damage_per_min.toFixed(0) : "–", r.matches ?? 100];
+      cells.forEach((c, i) => { const td = document.createElement("td"); td.textContent = c; if (i === (opp.startsWith("vs ") ? 4 : 2)) td.className = "win"; tr.appendChild(td); });
+      body.appendChild(tr);
+    }
+  }
+}
+
+async function load() {
+  let data;
+  try { data = await (await fetch("data-shooter.json?t=" + Date.now(), { cache: "no-store" })).json(); } catch { return; }
+  document.getElementById("updated").textContent = "updated " + new Date(data.updated.replace(" ", "T")).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const ms = models(data);
+  panels(ms); table(ms);
+}
+load(); setInterval(load, 60000);
+</script>
+</body>
+</html>

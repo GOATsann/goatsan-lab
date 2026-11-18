@@ -127,7 +127,7 @@ document.getElementById("projects").replaceChildren(...Object.entries(PROJECTS).
   const a = document.createElement("a"); a.href = "bench.html" + (id === "car" ? "" : `?p=${id}`); a.textContent = p.name;
   if (id === PID) a.setAttribute("aria-current", "page");
   return a;
-}));
+}), Object.assign(document.createElement("a"), { href: "bench-shooter.html", textContent: "Shooter Z" }));
 document.getElementById("head-row").innerHTML = ["#", "Run", "Mean <small>± 95% CI</small>", "Median", "Worst", "Std", ...PROJECT.head].map(h => `<th>${h}</th>`).join("");
 document.getElementById("level-row").hidden = !PROJECT.levels;
 let LEVEL = "";

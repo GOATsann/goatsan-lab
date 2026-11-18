@@ -133,7 +133,7 @@ const PROJECTS = {
             videosNote: "Progress races on the same track (seed 7, Normal), rendered from replays. Newest first." },
   shooter: { name: "Shooter Z", kicker: "BULSHY.FM · Shooter Z", title: "Shooter Z training", data: "data-shooter.json", charts: SHOOTER_CHARTS,
              bestNote: "32 matches vs Normal bots", explore: "Randomness (entropy)", exploreFmt: v => v.toFixed(2), defaultRun: null,
-             latestLabel: "Latest win rate vs Normal", bestLabel: "Best win rate vs Normal", suffix: "%", noVideos: true, noBenchPage: true, videosNote: "" },
+             latestLabel: "Latest win rate vs Normal", bestLabel: "Best win rate vs Normal", suffix: "%", noVideos: true, benchPage: "bench-shooter.html", videosNote: "" },
 };
 const PID = PROJECTS[new URLSearchParams(location.search).get("p")] ? new URLSearchParams(location.search).get("p") : "car";
 const PROJECT = PROJECTS[PID];
@@ -146,7 +146,7 @@ document.getElementById("t-best-note").textContent = PROJECT.bestNote;
 document.getElementById("t-explore-label").textContent = PROJECT.explore;
 document.getElementById("nav-train").href = "./" + Q;
 document.getElementById("nav-bench").href = "bench.html" + Q;
-if (PROJECT.noBenchPage) document.getElementById("nav-bench").hidden = true;  // the benchmark table is on this page
+if (PROJECT.benchPage) document.getElementById("nav-bench").href = PROJECT.benchPage;  // Shooter Z has its own benchmark page
 if (PROJECT.noVideos) document.getElementById("videos-section").hidden = true;
 if (PROJECT.latestLabel) for (const id of ["t-latest-label", "th-latest"]) document.getElementById(id).textContent = PROJECT.latestLabel;
 if (PROJECT.bestLabel) for (const id of ["t-best-label", "th-best"]) document.getElementById(id).textContent = PROJECT.bestLabel;
