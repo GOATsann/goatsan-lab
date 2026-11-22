@@ -91,9 +91,14 @@ type Props = {
   sectionTitle?: (id: string) => string | undefined;
   onCite?: (id: string) => void;
   onFigure?: (fig: string, caption?: string) => void;
+  label?: string; // what is playing, shown on the board ("Overview", "Deep dive: Method"...)
+  onBack?: () => void; // shown on the board when it isn't the overview
+  onPlayStart?: () => void; // the big play button was pressed (before it plays)
+  mini?: boolean; // shrunk into a bar pinned to the top (phones, while scrolling the history)
+  onExpand?: () => void;
 };
 
-export function Whiteboard({ engine, voiceOn, toggleVoice, theme, paperSlug, onStart, startLabel, sectionTitle, onCite, onFigure }: Props) {
+export function Whiteboard({ engine, voiceOn, toggleVoice, theme, paperSlug, onStart, startLabel, sectionTitle, onCite, onFigure, label, onBack, onPlayStart, mini, onExpand }: Props) {
   const onKey = (ev: React.KeyboardEvent) => {
     if (!engine || (ev.target as HTMLElement).closest("input, textarea, button")) return;
     if (ev.key === " " || ev.key === "k") {
@@ -136,8 +141,18 @@ export function Whiteboard({ engine, voiceOn, toggleVoice, theme, paperSlug, onS
   const real = scenes.filter((s) => !s.pending).length;
 
   return (
-    <div className={`player theme-${theme}`} tabIndex={0} onKeyDown={onKey} aria-label={`Whiteboard: ${list.title}`}>
-      <div className="player-stage">
+    <div className={`player theme-${theme} ${mini ? "is-mini" : ""}`} tabIndex={0} onKeyDown={onKey} aria-label={`Whiteboard: ${list.title}`}>
+      <div className="player-stage" onClick={mini ? onExpand : undefined}>
+        {label && !mini ? (
+          <div className="board-label">
+            <span>{label}</span>
+            {onBack ? (
+              <button type="button" onClick={onBack}>
+                Back to the overview
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         <FigureClick.Provider value={onFigure ?? null}>
         <Board
           steps={scene.draw}
@@ -152,7 +167,16 @@ export function Whiteboard({ engine, voiceOn, toggleVoice, theme, paperSlug, onS
         />
         </FigureClick.Provider>
         {idle ? (
-          <button type="button" className="big-play" onClick={() => (onStart ? onStart() : engine.play())} aria-label={startLabel ?? "Play"}>
+          <button
+            type="button"
+            className="big-play"
+            onClick={() => {
+              onPlayStart?.();
+              if (onStart) onStart();
+              else engine.play();
+            }}
+            aria-label={startLabel ?? "Play"}
+          >
             <span className="big-play-pill">
               <svg viewBox="0 0 24 24" aria-hidden>
                 <path d="M8 5.5v13l11-6.5z" />
@@ -166,6 +190,30 @@ export function Whiteboard({ engine, voiceOn, toggleVoice, theme, paperSlug, onS
         ) : null}
       </div>
 
+      {mini ? (
+        <div className="mini-bar">
+          <button type="button" className="mini-label" onClick={onExpand}>
+            <span>{label ?? list.title}</span>
+            <span className="mini-caption">{engine.caption || list.title}</span>
+          </button>
+          <button
+            type="button"
+            className="ctl ctl-main"
+            onClick={() => (idle && onStart ? (onPlayStart?.(), onStart()) : (idle && onPlayStart?.(), engine.toggle()))}
+            aria-label={engine.playing ? "Pause" : "Play"}
+          >
+            {engine.playing ? (
+              <svg viewBox="0 0 24 24" aria-hidden>
+                <path d="M6.5 5h4v14h-4zM13.5 5h4v14h-4z" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" aria-hidden>
+                <path d="M8 5.5v13l11-6.5z" />
+              </svg>
+            )}
+          </button>
+        </div>
+      ) : null}
       <p className="caption" aria-live="polite">
         {engine.caption || <span className="caption-idle">{list.title}</span>}
       </p>
@@ -189,7 +237,11 @@ export function Whiteboard({ engine, voiceOn, toggleVoice, theme, paperSlug, onS
         <button
           type="button"
           className="ctl ctl-main"
-          onClick={() => (idle && onStart ? onStart() : engine.toggle())}
+          onClick={() => {
+            if (idle) onPlayStart?.();
+            if (idle && onStart) onStart();
+            else engine.toggle();
+          }}
           aria-label={engine.playing ? "Pause" : "Play"}
         >
           {engine.playing ? (
