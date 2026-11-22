@@ -20,6 +20,8 @@ const csp = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Dev only: let the owner's phone open the dev server over the private Tailscale network.
+  ...(isDev ? { allowedDevOrigins: (process.env.DEV_ORIGINS ?? "").split(",").filter(Boolean) } : {}),
   images: { unoptimized: true },
   // Native and worker-heavy packages stay outside the server bundle.
   serverExternalPackages: ["@napi-rs/canvas", "pdfjs-dist", "undici"],

@@ -9,6 +9,7 @@ import { splitSentences, type DrawStep, type Scene } from "@/lib/scenes/types";
 import { themeFor, type Figure, type PaperMeta, type Structure, type ThemeName } from "@/lib/types";
 import { paperContext, SCENE_RULES } from "./prompt";
 import { boardFromSteps, emptyBoard } from "./sanitize";
+import { checkedInOrder, checkNumbers } from "./verify";
 import { generateScenes, generateText, isLive, LIVE_MODEL, OVERVIEW_MODEL, savedScenes, sharedScenes, systemBlocks } from "./generate";
 
 // The live tutor: the 60-second overview (written once by the strongest model, then replayed for everyone),
@@ -74,28 +75,67 @@ function opener(meta: PaperMeta): Scene {
   };
 }
 
+// Re-run the numbers check over a saved overview and save the corrected version (used for overviews written
+// before the check existed).
+export async function recheckOverview(id: string, user: User | null): Promise<{ before: string[]; after: string[] } | null> {
+  const ctx = await context(id, user);
+  const saved = await savedScenes(overviewKey(id));
+  if (!saved) return null;
+  const [first, ...rest] = saved.scenes;
+  const fixed = await Promise.all(rest.map((sc) => checkNumbers(sc, ctx.system, `recheck ${id}`)));
+  const scenes = [first, ...fixed];
+  await getStore().putJSON(overviewKey(id), { ...saved, scenes });
+  return { before: saved.scenes.map((s) => s.say), after: scenes.map((s) => s.say) };
+}
+
 export async function cachedOverview(id: string, user: User | null) {
   await getState(id, user); // access check for uploads
   return savedScenes(overviewKey(id));
 }
 
+// One writer per overview: while the first request is still checking limits and loading the paper, others wait
+// for it and then join its stream (or read the saved result), so two tabs or two people never pay twice.
+const g = globalThis as unknown as { __ovStarting?: Map<string, Promise<void>> };
+const starting = (g.__ovStarting ??= new Map());
+
+const replay = (saved: { scenes: Scene[] }) => (async function* () { yield* saved.scenes; })();
+
 export async function overview(id: string, user: User | null, opts: { voice: boolean }) {
-  const saved = await cachedOverview(id, user);
-  const ctx = await context(id, user);
+  const key = overviewKey(id);
+  const ctx = await context(id, user); // also the access check for uploads
   const theme = themeForPaper(ctx.meta, ctx.structure);
-  if (saved) return { theme, cached: true, scenes: (async function* () { yield* saved.scenes; })() };
-  if (!isLive(overviewKey(id))) {
+  const waiting = starting.get(key);
+  if (waiting) await waiting.catch(() => undefined);
+  const saved = await savedScenes(key);
+  if (saved) return { theme, cached: true, scenes: replay(saved) };
+  if (!isLive(key)) {
     if (!user) throw new HttpError(401, "Sign in to make this paper's overview.");
-    await usePaperLimit(user.id, id);
+    let release = () => {};
+    starting.set(key, new Promise<void>((r) => (release = r)));
+    try {
+      await usePaperLimit(user.id, id);
+    } catch (e) {
+      starting.delete(key);
+      release();
+      throw e;
+    }
     // Map the paper at the same time (deep dives and chat use the map); it counts as the same new paper.
     if (!ctx.structure) void readPaper(id, user).catch((e) => console.error("[structure]", e));
+    const out = startOverview(id, ctx, theme, opts);
+    starting.delete(key);
+    release();
+    return out;
   }
+  return startOverview(id, ctx, theme, opts); // joins the stream already being written
+}
+
+function startOverview(id: string, ctx: Awaited<ReturnType<typeof context>>, theme: ThemeName, opts: { voice: boolean }) {
   const first = opener(ctx.meta);
   const scenes = sharedScenes(
     overviewKey(id),
     async function* () {
-      yield first;
-      yield* generateScenes({
+      yield first; // instant, and nothing in it to check
+      const written = generateScenes({
         label: `overview ${id}`,
         model: OVERVIEW_MODEL,
         system: ctx.system,
@@ -123,6 +163,8 @@ if it is simple or cropped to the part that matters. The paper's figures are att
         sectionIds: ctx.sectionIds,
         maxScenes: 8,
       });
+      // Numbers check against the paper before a scene is shown or saved.
+      yield* checkedInOrder(written, (sc) => checkNumbers(sc, ctx.system, `overview ${id}`));
     },
     { model: OVERVIEW_MODEL, theme },
     (all) => {

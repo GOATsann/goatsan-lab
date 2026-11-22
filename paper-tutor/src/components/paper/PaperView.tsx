@@ -93,11 +93,7 @@ export function PaperView({ slug }: { slug: string }) {
       } else {
         engine.load(titleCard(state.meta, state.structure));
         setOv("none");
-        // Back from sign-in to make the overview: start writing it now; it plays when they press play.
-        if (new URLSearchParams(location.search).get("after") === "overview") {
-          clearAfter();
-          startOverview(false);
-        }
+        if (new URLSearchParams(location.search).get("after") === "overview") clearAfter();
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -144,6 +140,15 @@ export function PaperView({ slug }: { slug: string }) {
     },
     [engine, state, me, slug],
   );
+
+  // Nobody has watched this paper yet and someone signed in is here: start writing the overview now, quietly,
+  // so pressing play joins a stream that is already under way. (Signed-out visitors don't start it.)
+  const preloaded = useRef(false);
+  useEffect(() => {
+    if (ov !== "none" || !me || preloaded.current) return;
+    preloaded.current = true;
+    startOverview(false);
+  }, [ov, me, startOverview]);
 
   // While the paper is being mapped (it starts with the first overview), check back for the map.
   useEffect(() => {
