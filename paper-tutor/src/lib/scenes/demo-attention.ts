@@ -4,7 +4,7 @@ import type { SceneList } from "./types";
 // It exercises every drawing tool, so the player can be checked before any AI writes scenes.
 // Numbers are from the paper: Table 2 (EN-DE BLEU) and section 5.2 (3.5 days on 8 P100 GPUs).
 export const attentionDemo: SceneList = {
-  title: "Attention Is All You Need, the short version",
+  title: "Attention Is All You Need: a hand-written walkthrough",
   paper: "1706.03762",
   theme: "diagram",
   scenes: [
@@ -12,8 +12,8 @@ export const attentionDemo: SceneList = {
       say: "In 2017, eight researchers at Google published a paper with a bold title: Attention Is All You Need. It introduced the Transformer, the design behind almost every modern language model.",
       draw: [
         { t: "title", id: "title", text: "Attention Is All You Need", y: 340, size: 96, sub: "Vaswani et al., Google, 2017", s: 0 },
-        { t: "text", id: "tf", text: "It introduced the Transformer", x: 800, y: 560, size: 46, ink: "accent", align: "center", s: 1 },
-        { t: "arrow", from: [800, 480], to: "tf", s: 1, dur: 0.5 },
+        { t: "icon", name: "sparkles", x: 800, y: 620, size: 90, ink: "accent", s: 1 },
+        { t: "text", id: "tf", text: "It introduced the Transformer", x: 800, y: 690, size: 46, ink: "accent", align: "center", s: 1 },
       ],
     },
     {
@@ -84,7 +84,7 @@ export const attentionDemo: SceneList = {
         { t: "box", x: 650, y: 334, w: 160, h: 74, text: "head 8", size: 28, s: 0 },
         { t: "text", text: "Each head looks for its own pattern", x: 110, y: 450, size: 36, ink: "muted", s: 0 },
         { t: "steps", items: ["6 encoder layers", "6 decoder layers", "Attention + feed-forward in each"], x: 110, y: 560, w: 700, size: 36, s: 1 },
-        { t: "figure", id: "arch", fig: "fig1", x: 990, y: 40, w: 520, caption: "Figure 1 of the paper", s: 1 },
+        { t: "figure", id: "arch", fig: "fig1", x: 1000, y: 40, w: 490, caption: "Figure 1 of the paper", s: 1 },
         { t: "camera", focus: "arch", zoom: 1.5, s: 2 },
       ],
     },

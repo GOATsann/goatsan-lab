@@ -618,15 +618,6 @@
   background: none;
   cursor: pointer;
 }
-.scene-seg span {
-  display: block;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--ink);
-  transform-origin: 0 50%;
-  box-shadow: 0 0 0 100vmax color-mix(in srgb, var(--ink) 14%, transparent) inset;
-  position: relative;
-}
 .scene-seg {
   position: relative;
 }
@@ -640,11 +631,16 @@
   border-radius: 3px;
   background: color-mix(in srgb, var(--ink) 14%, transparent);
 }
-.scene-seg span {
-  box-shadow: none;
-}
 .scene-seg[aria-current="step"]::before {
   background: color-mix(in srgb, var(--ink) 22%, transparent);
+}
+.scene-seg span {
+  position: relative;
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--ink);
+  transform-origin: 0 50%;
 }
 .scene-count {
   font-variant-numeric: tabular-nums;
@@ -675,4 +671,96 @@
   .caption {
     font-size: 1rem;
   }
+}
+
+.cite-line {
+  margin: -4px 2px 0;
+  font-size: 0.85rem;
+  color: var(--ink-3);
+}
+.cite-chip {
+  display: inline-block;
+  margin: 0 4px 2px 0;
+  padding: 1px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--pen) 35%, transparent);
+  background: color-mix(in srgb, var(--pen) 6%, transparent);
+  color: var(--pen);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cite-chip.is-static {
+  cursor: default;
+  color: var(--ink-2);
+  border-color: var(--line);
+}
+.scene-seg.is-pending::before {
+  background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--ink) 18%, transparent) 0 6px, transparent 6px 10px);
+}
+
+.el-icon {
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.icon-art {
+  transform-origin: 50% 60%;
+}
+.icon-art svg {
+  display: block;
+  overflow: visible;
+}
+.theme-chalkboard .icon-art svg {
+  filter: url(#chalk);
+}
+.theme-illustrated .icon-art {
+  border-radius: 28%;
+  background: radial-gradient(circle at 50% 55%, color-mix(in srgb, currentColor 14%, transparent), transparent 70%);
+}
+.icon-label {
+  margin-top: 8px;
+  font-size: 30px;
+  white-space: nowrap;
+  text-align: center;
+}
+.el-group {
+  width: 0;
+  height: 0;
+}
+.group-item {
+  position: absolute;
+  white-space: nowrap;
+  transform-origin: 0 0;
+}
+.group-item svg {
+  display: block;
+}
+
+.iconify-pic {
+  display: block;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+.el-sketch .icon-art svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.figure-crop {
+  position: relative;
+  overflow: hidden;
+}
+.el-figure.is-clickable {
+  cursor: zoom-in;
+}
+.layer .el-figure.is-clickable {
+  pointer-events: auto;
 }

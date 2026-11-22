@@ -92,17 +92,48 @@ function braced(s: string, from: number): { text: string; end: number } | null {
   return null;
 }
 
-// LaTeX -> readable text for captions (math kept as $...$).
-export function plainCaption(s: string): string {
-  return s
-    .replace(/\\label\{[^}]*\}/g, "")
-    .replace(/\\(?:cite|citep|citet|ref|eqref)\{[^}]*\}/g, "")
-    .replace(/\\(?:textbf|textit|emph|texttt|textsc|mathrm|text)\{([^{}]*)\}/g, "$1")
-    .replace(/~/g, " ")
-    .replace(/\\\\/g, " ")
-    .replace(/\\[a-zA-Z]+\*?(\[[^\]]*\])?\s*/g, (m) => (/^\\(alpha|beta|gamma|sqrt|frac|cdot|times|ldots)/.test(m) ? m : ""))
-    .replace(/[{}]/g, "")
+// Simple author macros without arguments, e.g. \newcommand{\groot}{GROOT-2} or \def\ours{GROOT}.
+export function simpleMacros(preamble: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const m of preamble.matchAll(/\\(?:re)?newcommand\*?\s*\{?\\([A-Za-z]+)\}?\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g)) out.set(m[1], m[2]);
+  for (const m of preamble.matchAll(/\\def\s*\\([A-Za-z]+)\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g)) out.set(m[1], m[2]);
+  return out;
+}
+
+// LaTeX -> readable text for captions (math kept as $...$, author macros expanded).
+export function plainCaption(s: string, macros: Map<string, string> = new Map()): string {
+  let t = s;
+  for (let k = 0; k < 2; k++) t = t.replace(/\\([A-Za-z]+)(\{\})?/g, (m, name: string) => (macros.has(name) ? macros.get(name)! : m));
+  t = t.replace(/\\xspace\b\s*/g, " ");
+  // siunitx: \SI{15}{\micro\meter} -> 15 µm, \si{\percent} -> %
+  const unit = (u: string) =>
+    u
+      .replace(/\\micro/g, "µ").replace(/\\milli/g, "m").replace(/\\nano/g, "n").replace(/\\kilo/g, "k").replace(/\\centi/g, "c")
+      .replace(/\\meter|\\metre/g, "m").replace(/\\second/g, "s").replace(/\\minute/g, "min").replace(/\\hour/g, "h")
+      .replace(/\\percent/g, "%").replace(/\\gram/g, "g").replace(/\\liter|\\litre/g, "L").replace(/\\hertz/g, "Hz")
+      .replace(/\\celsius|\\degreeCelsius/g, "°C").replace(/\\per\s*/g, "/").replace(/\\squared/g, "²").replace(/\\cubed/g, "³")
+      .replace(/[{}\\\s]/g, "");
+  t = t
+    .replace(/\\SI\s*\{([^{}]*)\}\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g, (_m, n: string, u: string) => `${n} ${unit(u)}`)
+    .replace(/\\si\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g, (_m, u: string) => unit(u))
+    .replace(/\\num\s*\{([^{}]*)\}/g, "$1");
+  const parts = t.split(/(\$[^$]*\$)/g);
+  return parts
+    .map((p) =>
+      p.startsWith("$") && p.endsWith("$") && p.length > 1
+        ? p
+        : p
+            .replace(/\\label\{[^}]*\}/g, "")
+            .replace(/\\(?:cite|citep|citet|ref|eqref|autoref|cref|Cref)\{[^}]*\}/g, "")
+            .replace(/\\(?:textbf|textit|emph|texttt|textsc|mathrm|text|textrm|underline)\{([^{}]*)\}/g, "$1")
+            .replace(/~/g, " ")
+            .replace(/\\\\/g, " ")
+            .replace(/\\[a-zA-Z]+\*?(\[[^\]]*\])?\s*/g, "")
+            .replace(/[{}]/g, ""),
+    )
+    .join("")
     .replace(/\s+/g, " ")
+    .replace(/\s+([,.;:])/g, "$1")
     .trim();
 }
 
@@ -169,6 +200,7 @@ export async function readLatex(files: Map<string, Buffer>): Promise<{ text: str
     .filter((l) => /\\(newcommand|renewcommand|def|DeclareMathOperator)/.test(l))
     .join("\n");
   const body = begin >= 0 ? full.slice(begin) : full;
+  const defs = simpleMacros(preamble);
 
   const gpath = [...preamble.matchAll(/\\graphicspath\{((?:\{[^}]*\})+)\}/g)].flatMap((m) =>
     [...m[1].matchAll(/\{([^}]*)\}/g)].map((x) => x[1]),
@@ -195,7 +227,7 @@ export async function readLatex(files: Map<string, Buffer>): Promise<{ text: str
     }
     if (!parts.length) continue;
     const img = stitch(parts);
-    figures.push({ label, caption: plainCaption(cap.text), png: await img.encode("png"), width: img.width, height: img.height });
+    figures.push({ label, caption: plainCaption(cap.text, defs), png: await img.encode("png"), width: img.width, height: img.height });
     if (figures.length >= 30) break;
   }
 

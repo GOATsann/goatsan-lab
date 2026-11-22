@@ -22,7 +22,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   images: { unoptimized: true },
   // Native and worker-heavy packages stay outside the server bundle.
-  serverExternalPackages: ["@napi-rs/canvas", "pdfjs-dist"],
+  serverExternalPackages: ["@napi-rs/canvas", "pdfjs-dist", "undici"],
   turbopack: { root: __dirname },
   async headers() {
     return [

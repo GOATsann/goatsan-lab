@@ -17,5 +17,5 @@ export default function proxy(request: NextRequest, event: Parameters<NonNullabl
 }
 
 export const config = {
-  matcher: ["/api/me", "/api/papers/:path*", "/api/upload", "/api/tts"],
+  matcher: ["/api/me", "/api/papers/:path*", "/api/upload", "/api/link", "/api/tts"],
 };

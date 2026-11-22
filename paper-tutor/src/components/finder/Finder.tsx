@@ -13,8 +13,9 @@ import { PaperRow } from "../PaperRow";
 
 type View = { kind: "trending" } | { kind: "browse"; cat: string } | { kind: "search"; q: string };
 
-const MAX_MB = 20;
-const MAX_PAGES = 60;
+const MAX_MB = 40;
+const MAX_PAGES = 150;
+const isLink = (t: string) => /^https?:\/\//i.test(t.trim());
 
 export function Finder() {
   const router = useRouter();
@@ -51,12 +52,35 @@ export function Finder() {
     };
   }, [view, router]);
 
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [opening, setOpening] = useState(false);
+
+  // Any other https link is read as a PDF (private to the person who opened it).
+  const openLink = async (url: string) => {
+    setLinkError(null);
+    if (me === null) {
+      location.assign(signInHref());
+      return;
+    }
+    setOpening(true);
+    try {
+      const r = await fetch("/api/link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "That link couldn't be opened.");
+      router.push(`/paper/${d.id}`);
+    } catch (err) {
+      setLinkError((err as Error).message);
+      setOpening(false);
+    }
+  };
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const text = q.trim();
     if (!text) return;
     const id = parseArxivId(text);
     if (id) router.push(`/paper/${idToSlug(id)}`);
+    else if (isLink(text)) void openLink(text);
     else setView({ kind: "search", q: text });
   };
 
@@ -98,7 +122,7 @@ export function Finder() {
 
   const heading =
     view.kind === "trending"
-      ? "Trending today on Hugging Face"
+      ? "Trending today"
       : view.kind === "browse"
         ? `Newest in ${CATEGORIES.find((c) => c.id === view.cat)?.label ?? view.cat}`
         : `Results for “${view.q}”`;
@@ -107,7 +131,7 @@ export function Finder() {
     <section className="finder" aria-label="Find a paper">
       <form className="search" onSubmit={submit} role="search">
         <label htmlFor="q" className="visually-hidden">
-          Search arXiv or paste an arXiv link
+          Search papers, or paste an arXiv or PDF link
         </label>
         <svg className="search-icon" viewBox="0 0 24 24" aria-hidden>
           <circle cx="10.5" cy="10.5" r="6.5" />
@@ -118,21 +142,21 @@ export function Finder() {
           type="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search arXiv, or paste an arXiv link"
+          placeholder="Search, or paste a link"
           autoComplete="off"
           spellCheck={false}
         />
-        <button type="submit" className="btn btn-pen">
-          {parseArxivId(q) ? "Open paper" : "Search"}
+        <button type="submit" className="btn btn-pen" disabled={opening}>
+          {opening ? "Opening…" : parseArxivId(q) || isLink(q) ? "Open" : "Search"}
         </button>
       </form>
 
       <div className="upload-line">
         <button type="button" className={`link-btn ${nudge ? "is-nudged" : ""}`} onClick={pickFile} disabled={uploading}>
-          {uploading ? "Uploading…" : "Upload a PDF instead"}
+          {uploading ? "Uploading…" : "Upload a PDF"}
         </button>
         <span className="upload-hint">
-          Up to {MAX_MB} MB and {MAX_PAGES} pages. Only you can see papers you upload.
+          Up to {MAX_MB} MB and {MAX_PAGES} pages. Papers you upload or open from a link are visible only to you.
         </span>
         <input
           ref={fileInput}
@@ -146,6 +170,7 @@ export function Finder() {
           }}
         />
         {uploadError ? <p className="error upload-error">{uploadError}</p> : null}
+        {linkError ? <p className="error upload-error">{linkError}</p> : null}
       </div>
 
       <nav className="tabs" aria-label="Lists">
@@ -180,13 +205,22 @@ export function Finder() {
           ))}
         </ul>
       ) : papers.length === 0 ? (
-        <p className="empty">No papers matched. Try fewer or different words, or paste an arXiv link.</p>
+        <div className="empty">
+          <p>No papers matched “{view.kind === "search" ? view.q : ""}”.</p>
+          <p>
+            If it&apos;s a whitepaper or a lab report, it may not be on arXiv. Paste the PDF link into the box above and
+            it opens here, visible only to you.
+          </p>
+        </div>
       ) : (
-        <ul className="rows">
-          {papers.map((p) => (
-            <PaperRow key={p.id} paper={p} />
-          ))}
-        </ul>
+        <>
+          <ul className="rows">
+            {papers.map((p) => (
+              <PaperRow key={p.id} paper={p} onOpenPdf={(u) => void openLink(u)} />
+            ))}
+          </ul>
+          {view.kind === "search" ? <p className="list-foot">Not here? Paste the paper&apos;s PDF link into the box above.</p> : null}
+        </>
       )}
     </section>
   );

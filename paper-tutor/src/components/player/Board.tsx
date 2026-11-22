@@ -1,9 +1,12 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
-import { BOARD_H, BOARD_W, type ArrowStep, type BoxStep, type DrawStep, type EquationStep, type FigureStep, type Ink, type PlotStep, type StepsStep, type TextStep, type TitleStep } from "@/lib/scenes/types";
+import { createContext, useContext, useLayoutEffect, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
+import { BOARD_H, BOARD_W, type ArrowStep, type BoxStep, type DrawStep, type EquationStep, type FigureStep, type Ink, type GroupStep, type IconStep, type SketchStep, type PlotStep, type StepsStep, type TextStep, type TitleStep } from "@/lib/scenes/types";
 import type { StepTiming } from "@/lib/player/engine";
 import { renderRich, renderTex } from "./math";
+import { ICONS } from "./Icon";
+import { isIconName } from "@/lib/scenes/icons";
+import { arrowPath, estimateRect } from "@/lib/scenes/layout";
 
 // Draws one moment of a scene. Every element is placed in board units (1600 x 900) inside a "world" that the
 // camera scales and moves. Each element gets a progress p (0..1) from the clock and draws itself up to p.
@@ -180,6 +183,12 @@ function Element({ e, rects, figureSrc, erased, highlights }: ElementProps) {
       return <Plot st={st} p={p} rects={rects} style={style} hidden={hidden} />;
     case "steps":
       return <Steps st={st} e={e} rects={rects} style={style} />;
+    case "icon":
+      return <IconEl st={st} p={p} rects={rects} style={style} hidden={hidden} />;
+    case "group":
+      return <Group st={st} p={p} rects={rects} style={style} hidden={hidden} />;
+    case "sketch":
+      return <SketchEl st={st} p={p} rects={rects} style={style} hidden={hidden} />;
   }
 }
 
@@ -277,51 +286,14 @@ function Box({ st, p, rects, style, hidden }: Common & { st: BoxStep }) {
   );
 }
 
-function edgePoint(r: Rect, toward: { x: number; y: number }, pad: number) {
-  const c = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
-  const dx = toward.x - c.x;
-  const dy = toward.y - c.y;
-  if (dx === 0 && dy === 0) return c;
-  const t = Math.min(dx ? r.w / 2 / Math.abs(dx) : Infinity, dy ? r.h / 2 / Math.abs(dy) : Infinity);
-  const len = Math.hypot(dx, dy);
-  return { x: c.x + dx * t + (dx / len) * pad, y: c.y + dy * t + (dy / len) * pad };
-}
-
-// Where a curved arrow leaves or meets a box: on the side facing the curve, spread along it toward the curve,
-// so several arcs from one box don't all start at the same corner.
-function arcAnchor(r: Rect, ctrl: { x: number; y: number }, pad: number) {
-  const c = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
-  const dx = ctrl.x - c.x;
-  const dy = ctrl.y - c.y;
-  if (Math.abs(dy) * r.w >= Math.abs(dx) * r.h) {
-    const x = c.x + Math.max(-r.w * 0.38, Math.min(r.w * 0.38, dx * 0.3));
-    return { x, y: dy < 0 ? r.y - pad : r.y + r.h + pad };
-  }
-  const y = c.y + Math.max(-r.h * 0.38, Math.min(r.h * 0.38, dy * 0.3));
-  return { x: dx < 0 ? r.x - pad : r.x + r.w + pad, y };
-}
-
 function Arrow({ st, p, rects, style }: Common & { st: ArrowStep }) {
   const resolve = (end: ArrowStep["from"]) =>
     Array.isArray(end) ? { x: end[0], y: end[1], w: 0, h: 0 } : (rects.current.get(end) ?? null);
   const a = resolve(st.from);
   const b = resolve(st.to);
   if (!a || !b) return null;
-  const ca = { x: a.x + a.w / 2, y: a.y + a.h / 2 };
-  const cb = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
-  const mid = { x: (ca.x + cb.x) / 2, y: (ca.y + cb.y) / 2 };
-  const dist = Math.hypot(cb.x - ca.x, cb.y - ca.y);
   const bend = st.bend ?? 0;
-  // Normal pointing "up" for a left-to-right arrow, so positive bend arcs above.
-  const nx = (cb.y - ca.y) / (dist || 1);
-  const ny = -(cb.x - ca.x) / (dist || 1);
-  const sign = cb.x >= ca.x ? 1 : -1;
-  // Arc height grows with distance, with a floor so short hops still read as arcs.
-  const lift = bend * Math.max(dist * 0.55, 220);
-  const ctrl = { x: mid.x + nx * lift * sign, y: mid.y + ny * lift * sign };
-  const pad = 10;
-  const s0 = a.w ? (bend ? arcAnchor(a, ctrl, pad) : edgePoint(a, cb, pad)) : ca;
-  const e0 = b.w ? (bend ? arcAnchor(b, ctrl, pad) : edgePoint(b, ca, pad)) : cb;
+  const { s: s0, c: ctrl, e: e0 } = arrowPath(a, b, bend);
   const d = `M ${s0.x} ${s0.y} Q ${ctrl.x} ${ctrl.y} ${e0.x} ${e0.y}`;
   const draw = easeOut(p);
   // Arrow head along the curve's end tangent.
@@ -420,22 +392,54 @@ function Equation({ st, p, rects, style, hidden, marks }: Common & { st: Equatio
   );
 }
 
+// Clicking a figure on the board opens it large (the page decides how).
+export const FigureClick = createContext<((fig: string, caption?: string) => void) | null>(null);
+
 function Figure({ st, p, rects, style, hidden, src }: Common & { st: FigureStep; src: string | null }) {
   const ref = useMeasure(st.id, rects, null);
   const [failed, setFailed] = useState(false);
+  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
+  const open = useContext(FigureClick);
   const e = easeOut(p);
+  const c = st.crop;
+  const img =
+    src && !failed ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={st.caption ?? st.fig}
+        onError={() => setFailed(true)}
+        onLoad={(ev) => setNatural({ w: ev.currentTarget.naturalWidth, h: ev.currentTarget.naturalHeight })}
+        style={
+          c
+            ? { position: "absolute", width: `${100 / (c[2] - c[0])}%`, maxWidth: "none", left: `${(-c[0] / (c[2] - c[0])) * 100}%`, top: `${(-c[1] / (c[3] - c[1])) * 100}%` }
+            : { clipPath: `inset(0 0 ${(1 - e) * 100}% 0)` }
+        }
+      />
+    ) : null;
   return (
     <div
       ref={ref}
-      className={`el el-figure ${hidden ? "is-hidden" : ""}`}
+      className={`el el-figure ${hidden ? "is-hidden" : ""} ${open ? "is-clickable" : ""}`}
       style={{ left: st.x, top: st.y, width: st.w, opacity: Math.min(1, e * 1.6), transform: `translateY(${(1 - e) * 18}px) rotate(var(--fig-tilt))`, ...style }}
+      onClick={open ? () => open(st.fig, st.caption) : undefined}
+      title={open ? "Open the figure" : undefined}
     >
       <div className="figure-card">
-        {src && !failed ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={src} alt={st.caption ?? st.fig} onError={() => setFailed(true)} style={{ clipPath: `inset(0 0 ${(1 - e) * 100}% 0)` }} />
+        {!img ? (
+          <div className="figure-missing">This figure isn&apos;t available.</div>
+        ) : c ? (
+          <div
+            className="figure-crop"
+            style={{
+              aspectRatio: natural ? `${natural.w * (c[2] - c[0])} / ${natural.h * (c[3] - c[1])}` : "4 / 3",
+              clipPath: `inset(0 0 ${(1 - e) * 100}% 0)`,
+            }}
+          >
+            {img}
+          </div>
         ) : (
-          <div className="figure-missing">The figure appears once the paper has been read.</div>
+          img
         )}
       </div>
       {st.caption ? <div className="figure-caption">{st.caption}</div> : null}
@@ -546,5 +550,79 @@ function Steps({ st, e, rects, style }: { st: StepsStep; e: Placed; rects: Rects
         );
       })}
     </ol>
+  );
+}
+
+// A built-in icon (Lucide) or an Iconify icon from our server, both drawn in the element's ink.
+function Picture({ name, size }: { name: string; size: number }) {
+  if (isIconName(name)) {
+    const Svg = ICONS[name];
+    return <Svg width={size} height={size} strokeWidth={1.6} aria-hidden />;
+  }
+  const [prefix, icon] = name.split(":");
+  const url = `url(/api/icons/${prefix}/${icon}.svg)`;
+  return <span className="iconify-pic" style={{ width: size, height: size, WebkitMaskImage: url, maskImage: url }} aria-hidden />;
+}
+
+function SketchEl({ st, p, rects, style, hidden }: Common & { st: SketchStep }) {
+  const size = st.size ?? 180;
+  if (st.id) rects.current.set(st.id, { x: st.x - size / 2, y: st.y - size / 2, w: size, h: size + (st.label ? 50 : 0) });
+  const e = easeOut(p);
+  return (
+    <div className={`el el-icon el-sketch ${inkClass(st.ink)} ${hidden ? "is-hidden" : ""}`} style={{ left: st.x, top: st.y - size / 2, ...style }}>
+      <div
+        className="icon-art"
+        style={{ width: size, height: size, clipPath: `inset(0 ${((1 - e) * 100).toFixed(1)}% 0 0)` }}
+        dangerouslySetInnerHTML={{ __html: st.svg }}
+      />
+      {st.label ? (
+        <div className="icon-label" style={{ opacity: clamp01((p - 0.6) / 0.4) }}>
+          {st.label}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function IconEl({ st, p, rects, style, hidden }: Common & { st: IconStep }) {
+  const size = st.size ?? 120;
+  if (st.id) rects.current.set(st.id, { x: st.x - size / 2, y: st.y - size / 2, w: size, h: size + (st.label ? 50 : 0) });
+  const e = easeOut(clamp01(p / 0.7));
+  const lp = clamp01((p - 0.5) / 0.5);
+  return (
+    <div className={`el el-icon ${inkClass(st.ink)} ${hidden ? "is-hidden" : ""}`} style={{ left: st.x, top: st.y - size / 2, ...style }}>
+      <div className="icon-art" style={{ width: size, height: size, opacity: Math.min(1, e * 1.4), transform: `scale(${0.6 + 0.4 * e}) rotate(${(1 - e) * -8}deg)` }}>
+        <Picture name={st.name} size={size} />
+      </div>
+      {st.label ? (
+        <div className="icon-label" style={{ opacity: lp }}>
+          {st.label}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Group({ st, p, rects, style, hidden }: Common & { st: GroupStep }) {
+  const box = estimateRect(st);
+  if (st.id && box) rects.current.set(st.id, box);
+  const n = st.items.length;
+  return (
+    <div className={`el el-group ${hidden ? "is-hidden" : ""}`} style={{ left: st.x, top: st.y, ...style }}>
+      {st.items.map((it, i) => {
+        const ip = easeOut(clamp01(p * (1 + n * 0.25) - i * 0.25));
+        const size = it.size ?? (it.icon ? 100 : 30);
+        const pic = it.icon ?? null;
+        return (
+          <div
+            key={i}
+            className={`group-item ${inkClass(it.ink)}`}
+            style={{ left: it.dx, top: it.dy, opacity: ip, transform: `scale(${0.7 + 0.3 * ip})`, fontSize: pic ? undefined : size }}
+          >
+            {pic ? <Picture name={pic} size={size} /> : <span dangerouslySetInnerHTML={{ __html: renderRich(it.text ?? "") }} />}
+          </div>
+        );
+      })}
+    </div>
   );
 }

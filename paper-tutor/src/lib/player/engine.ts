@@ -26,6 +26,7 @@ export class PlayerEngine {
   sentDur: number[] = [];
   current = -1; // sentence being spoken
   voiceError: string | null = null;
+  private cur: Scene = { say: "", draw: [] };
 
   private voiceOn: boolean;
   private loader: VoiceLoader;
@@ -47,7 +48,11 @@ export class PlayerEngine {
   }
 
   get scene(): Scene {
-    return this.list.scenes[this.sceneIndex];
+    return this.cur;
+  }
+  // Waiting for a scene that is still being written.
+  get waiting(): boolean {
+    return Boolean(this.cur.pending);
   }
   get lead(): number {
     return this.sceneIndex > 0 && !this.scene.keep ? WIPE : 0.15;
@@ -65,7 +70,7 @@ export class PlayerEngine {
   private key(sentence: string) {
     return `${this.voiceOn ? "v" : "m"}|${sentence}`;
   }
-  private load(sentence: string) {
+  private loadClip(sentence: string) {
     const k = this.key(sentence);
     if (this.clips.has(k)) return;
     const p = this.voiceOn
@@ -80,7 +85,7 @@ export class PlayerEngine {
   }
   private preload(index: number) {
     const scene = this.list.scenes[index];
-    if (scene) for (const s of splitSentences(scene.say)) this.load(s);
+    if (scene) for (const s of splitSentences(scene.say)) this.loadClip(s);
   }
 
   setVoice(on: boolean) {
@@ -100,6 +105,7 @@ export class PlayerEngine {
   // ---- scenes ----
   private enter(index: number) {
     this.sceneIndex = Math.max(0, Math.min(this.list.scenes.length - 1, index));
+    this.cur = this.list.scenes[this.sceneIndex] ?? { say: "", draw: [], pending: true };
     this.time = 0;
     this.sentences = splitSentences(this.scene.say);
     this.sentStart = this.sentences.map(() => NaN);
@@ -126,14 +132,67 @@ export class PlayerEngine {
     this.goto(this.time > 2 || this.sceneIndex === 0 ? this.sceneIndex : this.sceneIndex - 1);
   }
 
-  // A list that is still being written can grow while it plays.
-  setList(list: SceneList) {
+  // Play a different scene list (another track: the overview, a deep dive...). Starts paused at scene 1.
+  load(list: SceneList) {
+    this.pause();
     this.list = list;
+    this.enter(0);
+    this.emit();
+  }
+
+  // ---- lists that change while they play ----
+  // Scenes being streamed in sit behind a placeholder (pending) scene; the clock waits on it like on audio.
+
+  insertScenes(at: number, scenes: Scene[]) {
+    this.list.scenes.splice(Math.max(0, Math.min(this.list.scenes.length, at)), 0, ...scenes);
+    this.reconcile();
+  }
+
+  // A block of scenes that will arrive over time, starting at index `at`.
+  // The block belongs to its list: if the player switches to another track meanwhile, the scenes still land in
+  // the list they were written for.
+  openBlock(at: number, list: SceneList = this.list) {
+    const placeholder: Scene = { say: "", draw: [], pending: true, keep: true };
+    list.scenes.splice(Math.max(0, Math.min(list.scenes.length, at)), 0, placeholder);
+    if (list === this.list) this.reconcile();
+    let open = true;
+    return {
+      push: (scene: Scene) => {
+        if (!open) return;
+        const i = list.scenes.indexOf(placeholder);
+        if (i < 0) return;
+        list.scenes.splice(i, 0, scene);
+        if (list === this.list) this.reconcile();
+      },
+      close: () => {
+        if (!open) return;
+        open = false;
+        const i = list.scenes.indexOf(placeholder);
+        if (i >= 0) list.scenes.splice(i, 1);
+        if (list === this.list) this.reconcile();
+      },
+    };
+  }
+
+  private reconcile() {
+    const scenes = this.list.scenes;
+    const idx = scenes.indexOf(this.cur);
     this.timingCache = null;
-    this.preload(this.sceneIndex + 1);
-    if (this.ended && this.sceneIndex < list.scenes.length - 1) {
-      this.ended = false;
+    if (this.cur.pending && idx !== this.sceneIndex) {
+      // A real scene arrived where we were waiting (or the wait was cancelled): start it.
+      if (this.sceneIndex < scenes.length) this.enter(this.sceneIndex);
+      else {
+        this.sceneIndex = Math.max(0, scenes.length - 1);
+        this.cur = scenes[this.sceneIndex] ?? this.cur;
+        this.ended = true;
+        this.pause();
+      }
+    } else if (idx >= 0) {
+      this.sceneIndex = idx;
+    } else if (scenes.length) {
+      this.enter(Math.min(this.sceneIndex, scenes.length - 1));
     }
+    this.preload(this.sceneIndex + 1);
     this.emit();
   }
 
@@ -182,12 +241,17 @@ export class PlayerEngine {
   private startSentence(k: number): boolean {
     const clip = this.ready.get(this.key(this.sentences[k]));
     if (!clip) {
-      this.load(this.sentences[k]);
+      this.loadClip(this.sentences[k]);
       return false;
     }
     this.current = k;
-    this.sentStart[k] = this.time;
-    this.sentDur[k] = clip.seconds;
+    if (k === 0 && !Number.isNaN(this.sentStart[0])) {
+      // The drawing already started while the voice loaded: the sentence runs from then until the voice ends.
+      this.sentDur[0] = this.time - this.sentStart[0] + clip.seconds;
+    } else {
+      this.sentStart[k] = this.time;
+      this.sentDur[k] = clip.seconds;
+    }
     this.timingCache = null;
     if (this.audio) {
       if (clip.url) {
@@ -211,7 +275,16 @@ export class PlayerEngine {
 
   private tick(dt: number) {
     if (!this.playing) return;
+    if (this.cur.pending) {
+      this.buffering = true;
+      return;
+    }
     const n = this.sentences.length;
+    if (n === 0) {
+      this.time += dt;
+      if (this.time > this.lead + HOLD) this.advance();
+      return;
+    }
     // Is the next sentence due?
     const due =
       this.current === -1
@@ -220,7 +293,19 @@ export class PlayerEngine {
     if (due) {
       const ok = this.startSentence(this.current + 1);
       this.buffering = !ok;
-      if (!ok) return; // wait for the audio; the clock stands still
+      if (!ok) {
+        // A scene's first picture doesn't wait for its voice: start drawing (for up to 2.5 s) while the audio
+        // loads, then the voice joins in. Later sentences wait, so words and drawing stay in step.
+        if (this.current === -1 && this.time < this.lead + 2.5) {
+          if (Number.isNaN(this.sentStart[0])) {
+            this.sentStart[0] = this.lead;
+            this.sentDur[0] = estimateSeconds(this.sentences[0]);
+            this.timingCache = null;
+          }
+          this.time += dt;
+        }
+        return;
+      }
     }
     this.buffering = false;
     this.time += dt;
@@ -228,14 +313,16 @@ export class PlayerEngine {
     const narrationDone = this.current === n - 1 && this.time >= this.sentStart[n - 1] + this.sentDur[n - 1];
     if (narrationDone && this.time >= this.drawingEnd()) {
       if (this.doneAt < 0) this.doneAt = this.time;
-      if (this.time - this.doneAt >= HOLD) {
-        if (this.sceneIndex < this.list.scenes.length - 1) {
-          this.enter(this.sceneIndex + 1);
-        } else {
-          this.ended = true;
-          this.pause();
-        }
-      }
+      if (this.time - this.doneAt >= HOLD) this.advance();
+    }
+  }
+
+  private advance() {
+    if (this.sceneIndex < this.list.scenes.length - 1) {
+      this.enter(this.sceneIndex + 1);
+    } else {
+      this.ended = true;
+      this.pause();
     }
   }
 

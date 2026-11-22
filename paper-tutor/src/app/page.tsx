@@ -12,19 +12,19 @@ export default function Home() {
       <div className="wrap">
         <header className="topbar">
           <Link href="/" className="wordmark">
-            Paper Tutor <small>BULSHY.FM EP 3</small>
+            Paper Tutor
           </Link>
         </header>
 
         <section className="hero">
           <div className="hero-copy">
-            <h1>Any research paper, explained at a whiteboard.</h1>
+            <h1>Any research paper, explained at a whiteboard</h1>
             <p className="lede">
-              Pick a paper and a tutor draws and talks you through it in about a minute. Then go as deep as you like,
-              one section, equation or figure at a time.
+              Pick a paper and a tutor draws and talks you through it in about a minute. Then go deeper into any section,
+              equation or figure, and ask questions as it goes.
             </p>
           </div>
-          <Link href="/paper/1706.03762" className="hero-demo" aria-label="Watch the demo: Attention Is All You Need">
+          <Link href="/paper/1706.03762" className="hero-demo" aria-label="Watch the tutor explain Attention Is All You Need">
             <BoardStill list={attentionDemo} scene={3} theme="chalkboard" />
             <span className="hero-demo-label">
               <span className="hero-demo-play" aria-hidden>
@@ -33,7 +33,7 @@ export default function Home() {
                 </svg>
               </span>
               <span>
-                Watch the demo: <em>Attention Is All You Need</em>
+                Watch it explain Attention Is All You Need
               </span>
             </span>
           </Link>
@@ -42,11 +42,12 @@ export default function Home() {
         <Finder />
 
         <footer className="foot">
-          Made on camera for BULSHY.FM by{" "}
+          Made by{" "}
           <a href="https://www.instagram.com/_goatsan/" rel="noopener">
             @_goatsan
           </a>
-          . Papers come from arXiv and Hugging Face Daily Papers. The code is open source.
+          . Papers come from arXiv, Semantic Scholar and Hugging Face Daily Papers, or from your own PDF. The code is
+          open source.
         </footer>
       </div>
     </>

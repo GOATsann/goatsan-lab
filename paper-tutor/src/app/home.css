@@ -24,11 +24,9 @@
   display: block;
   color: var(--ink);
   text-decoration: none;
-  transform: rotate(0.6deg);
-  transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-.hero-demo:hover {
-  transform: rotate(0deg) translateY(-2px);
+.hero-demo:hover .hero-demo-label {
+  color: var(--pen);
 }
 .hero-demo .player {
   pointer-events: none;
@@ -39,12 +37,6 @@
   gap: 10px;
   margin-top: 14px;
   font-weight: 600;
-}
-.hero-demo-label em {
-  font-family: var(--serif);
-  font-style: italic;
-  font-weight: 500;
-  font-size: 1.08em;
 }
 .hero-demo-play {
   display: inline-grid;
@@ -246,8 +238,37 @@
   }
 }
 .empty {
-  padding: 24px 0;
+  padding: 16px 0 28px;
   color: var(--ink-2);
+  max-width: 60ch;
+}
+.empty p {
+  margin: 0 0 8px;
+}
+.list-foot {
+  margin: 4px 0 24px;
+  font-size: 0.9rem;
+  color: var(--ink-3);
+}
+.row-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.row-button:hover .marked,
+.row-button:focus-visible .marked {
+  background-size: 100% 100%;
+}
+.row-note {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.82rem;
+  color: var(--ink-3);
 }
 
 .foot {
@@ -261,9 +282,6 @@
     grid-template-columns: minmax(0, 1fr);
     gap: 28px;
     padding-top: 16px;
-  }
-  .hero-demo {
-    transform: none;
   }
 }
 @media (max-width: 560px) {

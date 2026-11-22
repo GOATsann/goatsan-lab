@@ -56,10 +56,28 @@ body {
 
 a {
   color: var(--pen);
+  text-underline-offset: 3px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--marker) 75%, transparent);
+  color: var(--ink);
+}
+
+input,
+textarea {
+  caret-color: var(--pen);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--ink) 25%, transparent) transparent;
 }
 
 button,
-input {
+input,
+textarea,
+select {
   font: inherit;
   color: inherit;
 }

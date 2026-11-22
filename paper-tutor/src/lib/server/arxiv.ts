@@ -71,16 +71,36 @@ function parseFeed(text: string): PaperCard[] {
 
 const API = "https://export.arxiv.org/api/query";
 
+// Forgiving spellings: names like GR00T are written with zeros, people type "groot". Each word also matches its
+// look-alike forms (o and 0, l and 1, with or without hyphens).
+export function spellings(word: string): string[] {
+  const w = word.toLowerCase();
+  const out = new Set([w]);
+  if (/[o0]/.test(w)) {
+    out.add(w.replace(/0/g, "o"));
+    if (/[a-z]/.test(w)) out.add(w.replace(/o/g, "0"));
+  }
+  if (/[a-z]1|1[a-z]/.test(w)) out.add(w.replace(/1/g, "l"));
+  if (w.includes("-")) out.add(w.replace(/-/g, ""));
+  return [...out].filter(Boolean).slice(0, 4);
+}
+
 export async function searchArxiv(q: string, start = 0): Promise<PaperCard[]> {
-  const terms = q.trim().slice(0, 200);
-  if (!terms) return [];
-  // all: searches title, abstract and authors. Quote multi-word input as one phrase-ish AND query.
-  const query = terms
+  const words = q
+    .trim()
+    .slice(0, 200)
     .split(/\s+/)
-    .map((w) => `all:${w.replace(/[^\p{L}\p{N}\-]/gu, "")}`)
-    .filter((w) => w !== "all:")
+    .map((w) => w.replace(/[^\p{L}\p{N}\-]/gu, ""))
+    .filter(Boolean)
+    .slice(0, 8);
+  if (!words.length) return [];
+  // all: searches title, abstract and authors. Words are ANDed; each word ORs its look-alike spellings.
+  const query = words
+    .map((w) => {
+      const alts = spellings(w).map((a) => `all:${encodeURIComponent(a)}`);
+      return alts.length > 1 ? `%28${alts.join("+OR+")}%29` : alts[0];
+    })
     .join("+AND+");
-  if (!query) return [];
   const url = `${API}?search_query=${query}&start=${start}&max_results=25&sortBy=relevance`;
   return cached(`search:${url}`, 60 * 60_000, async () => parseFeed(await (await arxivFetch(url)).text()));
 }

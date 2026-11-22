@@ -17,11 +17,14 @@ export type PaperCard = {
   categories?: string[];
   upvotes?: number; // Hugging Face Daily Papers
   thumbnail?: string;
+  pdfUrl?: string; // not on arXiv, but there is a free PDF (opened through a link import)
+  link?: string; // not on arXiv: where to read about it
 };
 
 export type PaperMeta = PaperCard & {
   source: "arxiv" | "upload";
   owner?: string; // uploads only: the WorkOS user id that may see it
+  sourceUrl?: string; // a PDF fetched from a link
   pages?: number;
 };
 

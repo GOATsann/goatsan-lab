@@ -1,11 +1,12 @@
 import "server-only";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import { fetchPdf } from "./safeFetch";
 import { getStore } from "./store";
 import { arxivMeta, arxivPdf, arxivSource } from "./arxiv";
 import { readLatex, unpackSource } from "./latex";
 import { pdfInfo, readPdf } from "./pdf";
 import { structurePaper } from "./structure";
-import { useLimit } from "./limits";
+import { useLimit, usePaperLimit } from "./limits";
 import type { User } from "./auth";
 import { isUploadId } from "@/lib/arxivId";
 import type { Figure, Ingest, PaperMeta, PaperState, Structure } from "@/lib/types";
@@ -13,9 +14,9 @@ import type { Figure, Ingest, PaperMeta, PaperState, Structure } from "@/lib/typ
 // Papers: metadata, reading (LaTeX source first, PDF as the fallback), and the AI structure pass.
 // arXiv papers are shared by everyone; uploads are private to the person who uploaded them.
 
-export const UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
-export const UPLOAD_MAX_PAGES = 60;
-const MAX_TEXT_CHARS = 400_000; // ~100k tokens: plenty for a normal paper
+export const UPLOAD_MAX_BYTES = 40 * 1024 * 1024;
+export const UPLOAD_MAX_PAGES = 150;
+const MAX_TEXT_CHARS = 240_000; // ~60k tokens: a whole normal paper; very long reports are cut (appendices last)
 
 export class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -90,6 +91,8 @@ export async function ingestPaper(id: string, user: User | null): Promise<Ingest
       const read = await readPdf(pdf, { maxPages: UPLOAD_MAX_PAGES });
       text = read.text;
       crops = read.figures;
+      // Uploads: the first page's big type is a better title than the PDF's metadata or its file name.
+      if (meta.source === "upload" && read.title) await store.putJSON(`${dir(id)}/meta.json`, { ...meta, title: read.title.slice(0, 300) });
     }
     if (text.length < 500) throw new HttpError(422, "Couldn't read any text from this paper (it may be scanned images).");
 
@@ -116,7 +119,7 @@ export async function readPaper(id: string, user: User): Promise<PaperState> {
     const store = getStore();
     const done = await store.getJSON<Structure>(`${dir(id)}/structure.json`);
     if (done) return done;
-    await useLimit(user.id, "paper");
+    await usePaperLimit(user.id, id);
     const text = (await store.getBlob(`${dir(id)}/text.txt`))?.toString("utf8") ?? "";
     const s = await structurePaper(state.meta, text, ingest.figures, ingest.via);
     await store.putJSON(`${dir(id)}/structure.json`, s);
@@ -133,7 +136,7 @@ export async function figurePng(id: string, figId: string, user: User | null): P
   return png;
 }
 
-export async function createUpload(user: User, data: Buffer, fileName: string): Promise<PaperMeta> {
+export async function createUpload(user: User, data: Buffer, fileName: string, sourceUrl?: string): Promise<PaperMeta> {
   if (data.length > UPLOAD_MAX_BYTES) throw new HttpError(413, `PDFs can be up to ${UPLOAD_MAX_BYTES / 1024 / 1024} MB.`);
   if (data.subarray(0, 5).toString() !== "%PDF-") throw new HttpError(415, "That file isn't a PDF.");
   let info: { pages: number; title: string | null };
@@ -155,9 +158,26 @@ export async function createUpload(user: User, data: Buffer, fileName: string): 
     authors: [],
     abstract: "",
     pages: info.pages,
+    ...(sourceUrl ? { sourceUrl } : {}),
   };
   const store = getStore();
   await store.putBlob(`${dir(id)}/paper.pdf`, data);
   await store.putJSON(`${dir(id)}/meta.json`, meta);
+  return meta;
+}
+
+// A PDF from any https link: fetched once per person and link, then private to them like an upload.
+export async function createFromLink(user: User, link: string): Promise<PaperMeta> {
+  const store = getStore();
+  const key = `links/${user.id.replace(/[^A-Za-z0-9_-]/g, "")}/${createHash("sha256").update(link.trim()).digest("hex").slice(0, 32)}.json`;
+  const known = await store.getJSON<{ id: string }>(key);
+  if (known) {
+    const meta = await store.getJSON<PaperMeta>(`${dir(known.id)}/meta.json`);
+    if (meta) return meta;
+  }
+  const { data, url } = await fetchPdf(link.trim(), UPLOAD_MAX_BYTES);
+  const name = decodeURIComponent(url.pathname.split("/").pop() || url.hostname);
+  const meta = await createUpload(user, data, name, url.toString());
+  await store.putJSON(key, { id: meta.id });
   return meta;
 }

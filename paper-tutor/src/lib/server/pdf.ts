@@ -58,13 +58,14 @@ const CAPTION = /^\s*(Figure|Fig\.?)\s*(\d+)\s*[:.|]/i;
 export async function readPdf(
   data: Buffer,
   opts: { maxPages: number; scale?: number },
-): Promise<{ pages: number; text: string; figures: PdfFigure[] }> {
+): Promise<{ pages: number; text: string; figures: PdfFigure[]; title: string | null }> {
   const doc = await open(data);
   const scale = opts.scale ?? 3;
   const pages = doc.numPages;
   const textParts: string[] = [];
   const figures: PdfFigure[] = [];
   const seen = new Set<string>();
+  let title: string | null = null;
   try {
     for (let p = 1; p <= Math.min(pages, opts.maxPages); p++) {
       const page = await doc.getPage(p);
@@ -73,6 +74,12 @@ export async function readPdf(
       textParts.push(items.map((i) => i.str + (i.hasEOL ? "\n" : "")).join(""));
 
       const lines = linesOf(items);
+      if (p === 1 && lines.length) {
+        // The title: the biggest type on the first page.
+        const big = Math.max(...lines.map((l) => l.size));
+        const t = lines.filter((l) => l.size >= big * 0.9).map((l) => l.text.trim()).join(" ").replace(/\s+/g, " ");
+        if (t.length >= 8 && t.length <= 240) title = t;
+      }
       const captions = lines.filter((l) => CAPTION.test(l.text));
       if (!captions.length) {
         page.cleanup();
@@ -122,6 +129,7 @@ export async function readPdf(
         crop.getContext("2d").drawImage(rendered, sx, sy, sw, sh, 0, 0, sw, sh);
         const trimmed = trimWhite(crop);
         figures.push({ caption: caption.replace(/\s+/g, " "), png: await trimmed.encode("png"), width: trimmed.width, height: trimmed.height });
+        if (figures.length >= 40) break;
         seen.add(num);
       }
       page.cleanup();
@@ -129,7 +137,7 @@ export async function readPdf(
   } finally {
     await doc.loadingTask.destroy();
   }
-  return { pages, text: textParts.join("\n\n"), figures };
+  return { pages, text: textParts.join("\n\n"), figures, title };
 }
 
 // Render page 1 of a (figure) PDF to a PNG, trimmed to its ink.

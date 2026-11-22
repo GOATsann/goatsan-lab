@@ -1,4 +1,5 @@
 import type { ThemeName } from "@/lib/types";
+import type { IconName } from "./icons";
 
 // The scene list: what the AI (or a person) writes, and what the whiteboard player draws and voices.
 // One scene = one short narration line ("say") plus drawing steps. The board is 1600 x 900 units, origin top-left.
@@ -70,6 +71,7 @@ export type FigureStep = StepBase & {
   y: number;
   w: number;
   caption?: string;
+  crop?: [number, number, number, number]; // show only this part: left, top, right, bottom as fractions 0..1
 };
 export type PlotStep = StepBase & {
   t: "plot";
@@ -93,6 +95,15 @@ export type StepsStep = StepBase & {
   size?: number;
   pace?: "sentence"; // item i appears with sentence s + i (default: one after another)
 };
+// A picture from the fixed icon list (robot, robot-arm, camera, brain, gpu...), centred on x,y.
+// `name` is one of the built-in names, or an Iconify id ("healthicons:bacteria-outline") the server looked up.
+export type IconStep = StepBase & { t: "icon"; name: IconName | string; x: number; y: number; size?: number; label?: string; ink?: Ink };
+// A small drawing the tutor made itself (cleaned SVG, drawn in the board's ink), centred on x,y.
+export type SketchStep = StepBase & { t: "sketch"; svg: string; x: number; y: number; size?: number; label?: string; ink?: Ink };
+// A small composed picture: icons and short labels placed relative to the group's top-left corner, drawn and
+// pointed at as one thing (e.g. a robot with a camera on its head and a label).
+export type GroupItem = { icon?: IconName | string; text?: string; dx: number; dy: number; size?: number; ink?: Ink };
+export type GroupStep = StepBase & { t: "group"; x: number; y: number; items: GroupItem[] };
 export type CameraStep = StepBase & { t: "camera"; focus?: string; x?: number; y?: number; zoom?: number };
 export type EraseStep = StepBase & { t: "erase"; target: string };
 
@@ -106,6 +117,9 @@ export type DrawStep =
   | FigureStep
   | PlotStep
   | StepsStep
+  | IconStep
+  | SketchStep
+  | GroupStep
   | CameraStep
   | EraseStep;
 
@@ -113,6 +127,8 @@ export type Scene = {
   say: string;
   draw: DrawStep[];
   keep?: boolean; // keep the previous scene's drawing instead of wiping the board
+  cite?: string[]; // ids of the paper sections this scene is based on
+  pending?: boolean; // player only: a placeholder for scenes that are still being written
 };
 
 export type SceneList = {
@@ -132,6 +148,9 @@ export const DEFAULT_DUR: Record<DrawStep["t"], number> = {
   figure: 1.0,
   plot: 1.8,
   steps: 0.7, // per item
+  icon: 0.7,
+  sketch: 1.2,
+  group: 1.0,
   camera: 1.2,
   erase: 0.45,
 };

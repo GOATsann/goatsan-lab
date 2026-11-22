@@ -1,30 +1,41 @@
 # Paper Tutor
 
-**Any research paper, explained at a whiteboard.** Pick a paper (today's trending AI papers, an arXiv search,
-an arXiv link, or your own PDF) and a tutor draws and talks you through it. Nothing is rendered to a video
-file: the tutor writes a list of scenes, and your browser draws and voices them live.
+**Any research paper, explained at a whiteboard.** Pick a paper (today's trending AI papers, a search across
+arXiv and Semantic Scholar, an arXiv link, any PDF link, or your own PDF) and a tutor draws and talks you
+through it in about a minute. Then deep dive into any section, ask it to explain an equation or a figure, or
+interrupt it with a question: it answers on the same board and carries on. Nothing is rendered to a video file:
+Claude writes a list of scenes, and your browser draws and voices them live.
 
-BULSHY.FM EP 3. Work in progress: finding papers, reading them, and the whiteboard player work. The AI that
-writes the scenes live is the next step (see "Where it's going").
+BULSHY.FM EP 3.
 
 > **New to this code?** Open this folder with an AI coding agent (Claude Code, Cursor, GitHub Copilot or
 > similar) and ask it to walk you through it. For example: *"Explain how a paper goes from an arXiv link to
 > the JSON map in .data/, and how the whiteboard player times each drawing step to the voice."*
 
-## What works now
+## What it does
 
-- **Find a paper.** Trending papers from Hugging Face Daily Papers; arXiv search; the newest papers in a
-  dozen arXiv categories; paste any arXiv link or id; or upload a PDF (up to 20 MB and 60 pages, visible
-  only to you). Every arXiv call goes through one queue that waits 3 seconds between requests, as arXiv
-  asks, and every answer is cached, so the same thing is never fetched twice.
-- **Read a paper.** The arXiv LaTeX source when there is one (clean equations, real sections, the original
-  figure files), else the PDF: pdf.js pulls out the text and the figures are cropped from rendered pages,
-  using the "Figure N:" captions to find them. Then one Claude pass maps the paper: sections with summaries,
-  key claims, each important equation with its symbols, the figures, and the paper type, which picks the
-  whiteboard style. The map is saved once per paper and shared (uploads stay private).
-- **The whiteboard player.** Plays a scene list with a small, fixed set of drawing tools, in three styles
-  (Chalkboard, Diagram, Illustrated), with a voice per sentence (OpenAI text-to-speech) or captions only.
-  A hand-written demo for *Attention Is All You Need* plays end to end at `/paper/1706.03762`.
+- **Find a paper.** Trending papers from Hugging Face Daily Papers; one search box over arXiv and Semantic
+  Scholar that forgives look-alike spellings ("groot" finds GR00T); the newest papers in a dozen arXiv
+  categories; any arXiv link; any https PDF link (whitepapers and lab reports that aren't on arXiv); or an upload.
+  PDFs from links and uploads are private to the person who opened them (up to 40 MB and 150 pages).
+- **Read a paper.** The arXiv LaTeX source when there is one (clean equations, real sections, the original figure
+  files), else the PDF: pdf.js pulls out the text and the figures are cropped from rendered pages. One Claude pass
+  maps it (sections, key claims, equations with symbols, figures, paper type -> whiteboard style).
+- **The one-minute overview**, the default on every paper page. The opening scene is drawn instantly from the
+  paper's title while Claude Opus 5.5 writes the rest, one validated scene per line, straight into the player.
+  It is saved and replayed free for everyone after the first viewer (scenes and voice).
+- **Deep dive, Explain this, and chat** (Claude Haiku 5.5, with the whole paper in a cached prompt): a section
+  deep dive (60 to 90 s), a 20 to 30 s explanation of any equation or figure, and questions answered as text
+  or on the whiteboard. Answers cite the section they come from. Ask while it plays: it pauses, answers on the
+  board you're looking at, then replays the scene it was on and carries on.
+- **Pictures for any topic.** Built-in icons (Lucide), any open-licensed icon from Iconify looked up by keyword
+  ("bacteria", "neuron", "robot arm"; sets with MIT, ISC, Apache-2.0 or CC0 licences only), small line drawings
+  the tutor writes itself (sanitized SVG), and the paper's own figures, used sparingly or cropped to the part
+  that matters. Click a figure to open it large.
+- **Layout checks** on every scene, hand-written or AI-written: estimated boxes, overlaps nudged into free
+  space, arrows re-routed (or dropped) so they never cut through text.
+- **Limits** per user per UTC day: 3 new papers, 10 deep dives or explanations, 50 chat messages, 5 uploads.
+  Anything already made (overviews, deep dives, explanations, voice) is free and needs no sign-in.
 
 ## Run it locally
 
@@ -38,15 +49,18 @@ npm run build
 
 - `?voice=off` on any paper page plays with captions only and costs nothing. The voice button under the
   board does the same and is remembered.
+- `/demo` plays a hand-written walkthrough of *Attention Is All You Need* that uses every drawing tool (no AI).
+- `/api/dev/layout` (dev only) runs the layout checks over the demo and the saved overviews.
 - `PAPER_TUTOR_DEV_USER=1` (dev only, ignored in production builds) pretends someone is signed in, so
   uploading and reading work without the login. For the real login locally, run the personal site on port
   3100, set `PAPER_TUTOR_DEV_USER=0`, and sign in there: the session cookie is shared across localhost ports.
 - Everything the app saves (paper metadata, LaTeX text, figure crops, maps, voice files, caches) goes to
   `.data/`, which is gitignored. Delete it to start fresh.
 
-What costs money: reading a paper with Claude (about $0.20 for *Attention Is All You Need*: 21k tokens in,
-6k out on Claude Opus 5.5) and new voice lines (OpenAI `gpt-4o-mini-tts`, a few cents for the whole demo).
-Both are cached, so a paper or a sentence is only paid for once.
+What costs money (all cached, so each thing is paid for once): the paper map (Claude Opus 5.5, about $0.20 for a
+normal paper, about $1 for a 135-page report), the overview (Opus, about $0.15 to $0.25 for a normal paper), deep
+dives, explanations and chat (Claude Haiku 5.5 with prompt caching, well under a cent each), and voice (OpenAI
+`gpt-4o-mini-tts`, about a cent per overview).
 
 ## The scene list
 
@@ -70,9 +84,12 @@ The one format everything speaks. One scene = one short narration line plus draw
 | `arrow` | from one element (by `id`) or point to another, straight or curved, with an optional label |
 | `equation` | KaTeX; mark parts as `\term{name}{...}` so they can be highlighted |
 | `highlight` | a marker swipe over an equation term, with an optional note underneath |
-| `figure` | a figure crop from the paper (`fig1`, `fig2`, ...) |
+| `figure` | a figure from the paper, or just part of it (`crop`); click to open it large |
 | `plot` | a simple bar or line chart |
 | `steps` | a numbered list that appears item by item (or one item per sentence) |
+| `icon` | a picture: a built-in name, or a keyword looked up on Iconify |
+| `sketch` | a small line drawing written by the tutor (whitelisted SVG shapes only) |
+| `group` | a few icons and labels composed into one picture |
 | `camera` | zoom and pan to a point or an element |
 | `erase` | fade an element out |
 
@@ -95,6 +112,11 @@ Next.js (App Router) + TypeScript, made to deploy with SST on AWS like the other
   - `store.ts` **the storage interface**: plain files in `.data/` locally, and DynamoDB + S3 on AWS later,
     with nothing above it changing. `limits.ts` per-user daily limits (3 new papers a day to start).
   - `tts.ts` one sentence of voice, cached by its exact text. `auth.ts` who is asking.
+  - `tutor/` the live tutor: `prompt.ts` the scene rules and the paper (one cached prompt for every request),
+    `generate.ts` streams Claude's lines and checks each scene, `sanitize.ts` and `sketch.ts` clean them,
+    `tutor.ts` the overview, deep dives, explanations and chat. `iconify.ts` icon lookups, `safeFetch.ts`
+    PDF links (https only, public addresses only, size cap), `s2.ts` Semantic Scholar.
+- `src/lib/scenes/layout.ts` the layout checks (overlaps and arrow routing), shared by server and browser.
 - `src/lib/player/engine.ts` the player's clock: sentences, buffering, pause, scenes.
   `src/components/player/` draws each moment (`Board.tsx`) and the controls (`Whiteboard.tsx`).
 - Login: the shared theonlygoatsan.com account (WorkOS AuthKit). Sign-in happens on the main site and the
@@ -103,15 +125,12 @@ Next.js (App Router) + TypeScript, made to deploy with SST on AWS like the other
 
 ## Where it's going
 
-1. **Live tutor (next):** Claude streams scene lists into the player, one scene per line, so the first
-   picture and word arrive in a few seconds. The 60-second overview per paper is made once and replayed for
-   everyone.
-2. Deep dive into any section and "Explain this" on any equation or figure.
-3. Chat about the paper, answered as text or on the whiteboard, and you can interrupt the tutor to ask.
-4. Limits and a monthly spending cap, then deploy.
+1. Move the local store to DynamoDB + S3 (the interface is ready), share the arXiv queue and limits across
+   server instances, and add a monthly spending cap.
+2. Deploy as papers.theonlygoatsan.com.
 
 ## Credits
 
 Code: MIT ([LICENSE](../LICENSE)). Papers belong to their authors and are fetched from arXiv and Hugging Face
 on demand; none are stored in this repo. Fonts: Newsreader, Hanken Grotesk and Kalam from Google Fonts.
-Equations: KaTeX. PDF reading: pdf.js.
+Equations: KaTeX. PDF reading: pdf.js. Icons: Lucide (ISC) and the open-licensed sets on Iconify.

@@ -8,12 +8,13 @@ export const TTS_MODEL = "gpt-4o-mini-tts";
 export const VOICES = ["coral", "ash", "sage", "verse"] as const;
 export type Voice = (typeof VOICES)[number];
 const INSTRUCTIONS =
-  "A warm, curious tutor explaining a research paper at a whiteboard. Clear and friendly, lightly enthusiastic, natural pace, never rushed.";
+  "A friendly tutor explaining a research paper at a whiteboard, like a good science explainer video. Speak at a lively, natural conversational pace (brisk, never slow or drawn out), with clear words and light enthusiasm.";
 
 export const MAX_SENTENCE_CHARS = 600;
+const SPEED = 1.1;
 
 export function ttsKey(text: string, voice: Voice): string {
-  const h = createHash("sha256").update(`${TTS_MODEL}|${voice}|${INSTRUCTIONS}|${text}`).digest("hex").slice(0, 40);
+  const h = createHash("sha256").update(`${TTS_MODEL}|${voice}|${SPEED}|${INSTRUCTIONS}|${text}`).digest("hex").slice(0, 40);
   return `tts/${h}.mp3`;
 }
 
@@ -43,7 +44,7 @@ async function make(text: string, voice: Voice, key: string): Promise<Buffer> {
   const res = await fetch("https://api.openai.com/v1/audio/speech", {
     method: "POST",
     headers: { Authorization: `Bearer ${key_}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: TTS_MODEL, voice, input: text, instructions: INSTRUCTIONS, response_format: "mp3" }),
+    body: JSON.stringify({ model: TTS_MODEL, voice, input: text, instructions: INSTRUCTIONS, response_format: "mp3", speed: SPEED }),
     signal: AbortSignal.timeout(60_000),
   });
   if (!res.ok) throw new Error(`OpenAI TTS answered ${res.status}`);
