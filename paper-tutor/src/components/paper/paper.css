@@ -1,0 +1,348 @@
+.back-link {
+  margin-left: 22px;
+  font-size: 0.92rem;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+.back-link:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.paper-head {
+  padding: 18px 0 22px;
+  max-width: 60rem;
+}
+.paper-source {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--ink-3);
+}
+.paper-source a {
+  font-weight: 600;
+}
+.paper-title {
+  margin: 10px 0 0;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: clamp(1.9rem, 3.4vw, 2.9rem);
+  line-height: 1.08;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+.paper-authors {
+  margin: 12px 0 0;
+  color: var(--ink-2);
+  font-size: 0.95rem;
+}
+
+.paper-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 4fr);
+  gap: 36px;
+  align-items: start;
+  padding-bottom: 64px;
+}
+.paper-main {
+  position: sticky;
+  top: 16px;
+}
+
+.style-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 12px;
+  border-radius: 999px;
+  background: var(--sheet);
+  border: 1px solid var(--line);
+}
+.style-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 14px 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.style-opt[aria-checked="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+.style-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+.style-chalkboard .style-swatch {
+  background: radial-gradient(circle at 35% 35%, #f5d76e 0 18%, transparent 20%), #22302b;
+}
+.style-diagram .style-swatch {
+  background:
+    linear-gradient(#2b59c3 0 0) center / 10px 2px no-repeat,
+    linear-gradient(90deg, #ccd8ec 1px, transparent 1px) 0 0 / 5px 5px,
+    #fbfcfe;
+}
+.style-illustrated .style-swatch {
+  background: radial-gradient(circle at 30% 30%, rgba(132, 214, 186, 0.9), transparent 60%), radial-gradient(circle at 70% 75%, rgba(250, 196, 120, 0.9), transparent 55%), #f4f7f1;
+}
+
+.overview-note {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+  color: var(--ink-3);
+}
+
+.paper-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.side-block,
+.read-card {
+  padding: 18px 20px;
+  background: var(--sheet);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.side-block h2,
+.read-card h2 {
+  margin: 0 0 8px;
+  font-family: var(--serif);
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+.side-block p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--ink-2);
+}
+.abstract p.is-clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.abstract .link-btn {
+  margin-top: 8px;
+  font-size: 0.9rem;
+}
+.read-card {
+  border: 1.5px solid color-mix(in srgb, var(--pen) 45%, transparent);
+  background:
+    linear-gradient(transparent 0 0),
+    var(--sheet);
+}
+.read-card p {
+  margin: 0 0 14px;
+  font-size: 0.95rem;
+  color: var(--ink-2);
+}
+.read-card .btn {
+  width: 100%;
+}
+.read-card .read-hint {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+  color: var(--ink-3);
+}
+.read-card .error {
+  margin: 10px 0 0;
+}
+.one-line {
+  font-family: var(--serif);
+  font-size: 1.1rem !important;
+  color: var(--ink) !important;
+  line-height: 1.4;
+}
+
+.sections {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: sec;
+}
+.section {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.section:first-child {
+  border-top: 0;
+  padding-top: 2px;
+}
+.section h3 {
+  margin: 0 0 3px;
+  font-size: 0.98rem;
+  font-weight: 650;
+}
+.section.lvl-2,
+.section.lvl-3 {
+  padding-left: 16px;
+  border-left: 2px solid var(--paper-2);
+  border-top: 0;
+}
+.section.lvl-2 h3,
+.section.lvl-3 h3 {
+  font-weight: 600;
+  font-size: 0.93rem;
+}
+.section p {
+  font-size: 0.9rem !important;
+}
+
+.claims {
+  margin: 0;
+  padding-left: 1.1em;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.93rem;
+  color: var(--ink-2);
+}
+
+.equations {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.equation {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.equation:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.eq-math {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+  font-size: 0.95rem;
+}
+.eq-math .katex-display {
+  margin: 0.2em 0;
+}
+.equation p {
+  font-size: 0.9rem !important;
+}
+.equation details {
+  margin-top: 6px;
+  font-size: 0.88rem;
+}
+.equation summary {
+  cursor: pointer;
+  color: var(--pen);
+  font-weight: 600;
+}
+.equation dl {
+  margin: 8px 0 0;
+  display: grid;
+  gap: 4px;
+}
+.equation dl div {
+  display: grid;
+  grid-template-columns: minmax(3.5em, auto) 1fr;
+  gap: 10px;
+  align-items: baseline;
+}
+.equation dt {
+  text-align: right;
+}
+.equation dd {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.figures {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.figures img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 360px;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+}
+.figures p {
+  margin-top: 6px !important;
+  font-size: 0.88rem !important;
+}
+.side-status {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ink-3);
+}
+
+.paper-missing {
+  padding: 60px 0;
+  max-width: 34rem;
+}
+.paper-missing h1 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 2.2rem;
+  margin: 0 0 10px;
+}
+.paper-missing p {
+  color: var(--ink-2);
+  margin: 0 0 20px;
+}
+
+.ghost {
+  border-radius: 12px;
+  background: linear-gradient(90deg, var(--paper-2), color-mix(in srgb, var(--paper-2) 50%, var(--sheet)), var(--paper-2));
+  background-size: 200% 100%;
+  animation: ghost 1.4s linear infinite;
+}
+.ghost-title {
+  height: 46px;
+  width: min(720px, 90%);
+  margin: 26px 0 12px;
+}
+.ghost-line {
+  height: 18px;
+  width: 40%;
+  margin-bottom: 28px;
+}
+.ghost-board {
+  aspect-ratio: 16 / 9;
+}
+.ghost-side {
+  height: 420px;
+}
+@keyframes ghost {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (max-width: 960px) {
+  .paper-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .paper-main {
+    position: static;
+  }
+}

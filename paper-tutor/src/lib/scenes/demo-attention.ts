@@ -1,0 +1,131 @@
+import type { SceneList } from "./types";
+
+// A hand-written scene list for "Attention Is All You Need" (Vaswani et al., 2017, arXiv 1706.03762).
+// It exercises every drawing tool, so the player can be checked before any AI writes scenes.
+// Numbers are from the paper: Table 2 (EN-DE BLEU) and section 5.2 (3.5 days on 8 P100 GPUs).
+export const attentionDemo: SceneList = {
+  title: "Attention Is All You Need, the short version",
+  paper: "1706.03762",
+  theme: "diagram",
+  scenes: [
+    {
+      say: "In 2017, eight researchers at Google published a paper with a bold title: Attention Is All You Need. It introduced the Transformer, the design behind almost every modern language model.",
+      draw: [
+        { t: "title", id: "title", text: "Attention Is All You Need", y: 340, size: 96, sub: "Vaswani et al., Google, 2017", s: 0 },
+        { t: "text", id: "tf", text: "It introduced the Transformer", x: 800, y: 560, size: 46, ink: "accent", align: "center", s: 1 },
+        { t: "arrow", from: [800, 480], to: "tf", s: 1, dur: 0.5 },
+      ],
+    },
+    {
+      say: "Before it, translation models read a sentence one word at a time, like links in a chain. Each step had to wait for the one before it, so training was slow, and long sentences got blurry.",
+      draw: [
+        { t: "text", text: "Before: recurrent networks read one word at a time", x: 140, y: 130, size: 46, s: 0 },
+        { t: "box", id: "w1", x: 140, y: 360, w: 200, h: 100, text: "The", s: 0 },
+        { t: "box", id: "w2", x: 420, y: 360, w: 200, h: 100, text: "cat", s: 0 },
+        { t: "box", id: "w3", x: 700, y: 360, w: 200, h: 100, text: "sat", s: 0 },
+        { t: "box", id: "w4", x: 980, y: 360, w: 200, h: 100, text: "on the", s: 1 },
+        { t: "box", id: "w5", x: 1260, y: 360, w: 200, h: 100, text: "mat", s: 1 },
+        { t: "arrow", from: "w1", to: "w2", s: 1 },
+        { t: "arrow", from: "w2", to: "w3", s: 1 },
+        { t: "arrow", from: "w3", to: "w4", s: 1 },
+        { t: "arrow", from: "w4", to: "w5", s: 1 },
+        { t: "text", text: "Step 5 waits for steps 1 to 4, so training is slow", x: 800, y: 600, size: 40, ink: "warn", align: "center", s: 2 },
+      ],
+    },
+    {
+      say: "The Transformer drops the chain. Every word looks at every other word at the same time, and decides how much attention to pay to each one. Here, the word “it” pays the most attention to “animal”.",
+      draw: [
+        { t: "text", text: "Self-attention: every word looks at every word, all at once", x: 110, y: 130, size: 46, s: 0 },
+        { t: "box", id: "a1", x: 110, y: 560, w: 190, h: 96, text: "The", s: 0 },
+        { t: "box", id: "a2", x: 345, y: 560, w: 190, h: 96, text: "animal", s: 0 },
+        { t: "box", id: "a3", x: 580, y: 560, w: 190, h: 96, text: "crossed", s: 0 },
+        { t: "box", id: "a4", x: 815, y: 560, w: 190, h: 96, text: "because", s: 0 },
+        { t: "box", id: "a5", x: 1050, y: 560, w: 190, h: 96, text: "it", ink: "accent", s: 1 },
+        { t: "box", id: "a6", x: 1285, y: 560, w: 190, h: 96, text: "was tired", s: 1 },
+        { t: "arrow", from: "a5", to: "a1", bend: 0.42, ink: "muted", s: 1 },
+        { t: "arrow", from: "a5", to: "a3", bend: 0.55, ink: "muted", s: 1 },
+        { t: "arrow", from: "a5", to: "a4", bend: 0.7, ink: "muted", s: 1 },
+        { t: "arrow", from: "a5", to: "a6", bend: -0.6, ink: "muted", s: 1 },
+        { t: "arrow", from: "a5", to: "a2", bend: 0.48, ink: "accent", weight: 2.4, label: "most attention", s: 2 },
+      ],
+    },
+    {
+      say: "Here is the heart of it: scaled dot-product attention. Each word sends a query, Q, and compares it with every word's key, K. Dividing by the square root of d k keeps those scores from growing too big. Then a softmax turns the scores into weights, and the output is a weighted blend of the values, V.",
+      draw: [
+        { t: "text", text: "Scaled dot-product attention", x: 800, y: 110, size: 46, align: "center", s: 0 },
+        {
+          t: "equation",
+          id: "eq",
+          tex: "\\mathrm{Attention}(Q,K,V) = \\term{sm}{\\mathrm{softmax}}\\left(\\frac{\\term{qk}{QK^{T}}}{\\term{dk}{\\sqrt{d_k}}}\\right)\\term{v}{V}",
+          x: 800,
+          y: 330,
+          size: 70,
+          s: 0,
+        },
+        { t: "camera", focus: "eq", zoom: 1.12, s: 1 },
+        { t: "highlight", eq: "eq", term: "qk", note: "query times keys: how well two words match", s: 1 },
+        { t: "highlight", eq: "eq", term: "dk", note: "keeps the scores from growing too big", ink: "warn", s: 2 },
+        { t: "highlight", eq: "eq", term: "sm", s: 3 },
+        { t: "highlight", eq: "eq", term: "v", note: "a weighted blend of the values", ink: "good", s: 3 },
+        { t: "camera", zoom: 1, s: 3 },
+      ],
+    },
+    {
+      say: "It runs eight of these attention heads side by side, each free to look for a different pattern. Stack six such layers for the encoder and six for the decoder, and you have the full Transformer. This is the paper's own diagram of it.",
+      draw: [
+        { t: "text", text: "Multi-head attention", x: 110, y: 110, size: 50, s: 0 },
+        { t: "box", x: 110, y: 240, w: 160, h: 74, text: "head 1", size: 28, s: 0 },
+        { t: "box", x: 290, y: 240, w: 160, h: 74, text: "head 2", size: 28, s: 0 },
+        { t: "box", x: 470, y: 240, w: 160, h: 74, text: "head 3", size: 28, s: 0 },
+        { t: "box", x: 650, y: 240, w: 160, h: 74, text: "head 4", size: 28, s: 0 },
+        { t: "box", x: 110, y: 334, w: 160, h: 74, text: "head 5", size: 28, s: 0 },
+        { t: "box", x: 290, y: 334, w: 160, h: 74, text: "head 6", size: 28, s: 0 },
+        { t: "box", x: 470, y: 334, w: 160, h: 74, text: "head 7", size: 28, s: 0 },
+        { t: "box", x: 650, y: 334, w: 160, h: 74, text: "head 8", size: 28, s: 0 },
+        { t: "text", text: "Each head looks for its own pattern", x: 110, y: 450, size: 36, ink: "muted", s: 0 },
+        { t: "steps", items: ["6 encoder layers", "6 decoder layers", "Attention + feed-forward in each"], x: 110, y: 560, w: 700, size: 36, s: 1 },
+        { t: "figure", id: "arch", fig: "fig1", x: 990, y: 40, w: 520, caption: "Figure 1 of the paper", s: 1 },
+        { t: "camera", focus: "arch", zoom: 1.5, s: 2 },
+      ],
+    },
+    {
+      say: "And it worked. On English to German translation it scored 28.4 BLEU, more than two points above the best earlier models, even ensembles. The big model trained in three and a half days on eight GPUs, a fraction of the cost of its rivals.",
+      draw: [
+        { t: "text", text: "English to German translation (BLEU, higher is better)", x: 120, y: 90, size: 40, s: 0 },
+        {
+          t: "plot",
+          kind: "bar",
+          x: 120,
+          y: 190,
+          w: 900,
+          h: 560,
+          labels: ["ByteNet", "GNMT + RL", "ConvS2S", "MoE", "Transformer base", "Transformer big"],
+          values: [23.75, 24.6, 25.16, 26.03, 27.3, 28.4],
+          highlight: 5,
+          yMin: 20,
+          ylabel: "BLEU",
+          s: 0,
+        },
+        { t: "text", text: "28.4 BLEU: more than 2 points above the best earlier models", x: 1110, y: 280, w: 420, size: 38, ink: "accent", s: 1 },
+        { t: "text", text: "3.5 days of training on 8 GPUs", x: 1110, y: 520, w: 420, size: 38, s: 2 },
+      ],
+    },
+    {
+      say: "Three ideas made it last. Attention replaces recurrence. Everything runs in parallel, so it scales with more data and more chips. And positional encodings tell the model where each word sits. That recipe became the base of BERT, GPT, and the assistants you use today.",
+      draw: [
+        { t: "text", text: "Why it lasted", x: 180, y: 120, size: 56, s: 0 },
+        {
+          t: "steps",
+          items: ["Attention instead of recurrence", "Fully parallel, so it scales", "Positional encodings keep word order"],
+          x: 180,
+          y: 260,
+          w: 1100,
+          size: 44,
+          s: 1,
+          pace: "sentence",
+        },
+        { t: "text", text: "Today: BERT, GPT and the assistants you use", x: 180, y: 690, size: 44, ink: "accent", s: 4 },
+      ],
+    },
+  ],
+};

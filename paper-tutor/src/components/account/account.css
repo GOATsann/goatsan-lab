@@ -1,0 +1,79 @@
+/* The account control: fixed top-right on every app page, same look everywhere.
+   Dark glass so it sits on any page; colours can be themed with --acct-* vars. */
+.acct {
+  --acct-ink: #eef1fb;
+  --acct-dim: #9aa4c4;
+  --acct-bg: rgba(8, 12, 28, 0.72);
+  --acct-line: rgba(200, 215, 255, 0.22);
+  --acct-accent: #ffc94a;
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top));
+  right: calc(12px + env(safe-area-inset-right));
+  z-index: 30;
+  min-width: 36px;
+  min-height: 36px;
+  font-family: inherit;
+}
+.acct-signin,
+.acct-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  border: 1px solid var(--acct-line);
+  background: var(--acct-bg);
+  color: var(--acct-ink);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+}
+.acct-signin {
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+.acct-avatar {
+  width: 36px;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--acct-accent);
+  font: inherit;
+  font-weight: 600;
+}
+.acct-signin:focus-visible,
+.acct-avatar:focus-visible,
+.acct-item:focus-visible {
+  outline: 2px solid var(--acct-accent);
+  outline-offset: 2px;
+}
+.acct-menu {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  min-width: 220px;
+  padding: 8px;
+  border: 1px solid var(--acct-line);
+  border-radius: 12px;
+  background: rgba(8, 12, 28, 0.95);
+  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.7);
+}
+.acct-email {
+  margin: 4px 8px 8px;
+  font-size: 0.8rem;
+  color: var(--acct-dim);
+  overflow-wrap: anywhere;
+}
+.acct-item {
+  display: block;
+  padding: 10px 8px;
+  border-radius: 8px;
+  color: var(--acct-ink);
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+.acct-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+}

@@ -1,0 +1,27 @@
+# Secrets: never in git (public repo). Keys live in .env.local (local) and SST secrets (AWS).
+.env
+.env.*
+!.env.example
+
+# Local store: downloaded papers, uploaded PDFs, figure crops, voice files, caches.
+# Papers are other people's work and uploads are private, so none of it is published.
+.data/
+
+# Build output and dependencies
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# SST (deploy): local state and generated types
+.sst/
+sst-env.d.ts
+
+# Any stray paper or model file
+*.pdf
+*.tar.gz
+*.onnx
+*.safetensors
+
+.DS_Store
