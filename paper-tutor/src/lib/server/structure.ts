@@ -24,6 +24,7 @@ const SCHEMA = obj({
     items: obj({ id: str, tex: str, meaning: str, section: str, symbols: { type: "array", items: obj({ tex: str, meaning: str }) } }),
   },
   figures: { type: "array", items: obj({ id: str, caption: str, explanation: str, section: str }) },
+  pronunciations: { type: "array", items: obj({ written: str, spoken: str }) },
 });
 
 const SYSTEM = `You read research papers and map their structure for a tutor that explains them on a whiteboard.
@@ -40,6 +41,11 @@ Return JSON that matches the schema. Rules:
 - paperType: "math" for proof- or derivation-heavy papers, "ai-systems" for AI, ML and computer systems,
   "bio-medicine" for biology and medicine, "physics" for physics, else "other".
 - oneLine: what the paper does, in one plain sentence.
+- pronunciations: how to say this paper's tricky names out loud, for a voice that reads text: stylised
+  spellings, digits used as letters, acronyms, model and dataset names (for example "GR00T" -> "Groot",
+  "LLM" -> "L L M", "SoTA" -> "state of the art"), as people in the field say them: names normally said as a
+  word stay a word (NVIDIA -> "Nvidia"). Only names in the paper a voice would likely get wrong; at most 15;
+  [] if there are none.
 Never invent content that is not in the paper.`;
 
 export async function structurePaper(meta: PaperMeta, text: string, figures: Figure[], via: "latex" | "pdf"): Promise<Structure> {

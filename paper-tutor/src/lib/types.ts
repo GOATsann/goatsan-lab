@@ -54,6 +54,8 @@ export type FigureNote = { id: string; caption: string; explanation: string; sec
 export type PaperType = "math" | "ai-systems" | "bio-medicine" | "physics" | "other";
 
 // The one AI structure pass, saved as JSON per paper.
+export type Pronunciation = { written: string; spoken: string };
+
 export type Structure = {
   paperType: PaperType;
   theme: ThemeName;
@@ -62,6 +64,7 @@ export type Structure = {
   claims: Claim[];
   equations: Equation[];
   figures: FigureNote[];
+  pronunciations?: Pronunciation[]; // how to say tricky names out loud
   model: string;
   createdAt: string;
 };

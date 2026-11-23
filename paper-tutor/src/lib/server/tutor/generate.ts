@@ -43,18 +43,20 @@ type GenOpts = {
   figures: Figure[];
   board: BoardState;
   baseSteps?: DrawStep[]; // what is on the board already (for a first scene that keeps it)
+  speak?: (line: string) => string; // rewrites a spoken line for the ear (names as pronounced)
   sectionIds?: Set<string>;
   maxScenes: number;
 };
 
 // Every scene, however it was written (a line of text or a tool input), is checked, gets its pictures looked up,
 // and gets the layout checks, against what is already on the board.
-export function sceneCleaner(o: Pick<GenOpts, "label" | "figures" | "board" | "baseSteps" | "sectionIds">) {
+export function sceneCleaner(o: Pick<GenOpts, "label" | "figures" | "board" | "baseSteps" | "sectionIds" | "speak">) {
   const figSizes = Object.fromEntries(o.figures.map((f) => [f.id, f]));
   let base: DrawStep[] = o.baseSteps ?? [];
   return async (raw: unknown): Promise<Scene | null> => {
     let clean = sanitizeScene(raw, o.figures, o.board, o.sectionIds);
     if (!clean) return null;
+    if (o.speak) clean = { ...clean, say: o.speak(clean.say) };
     clean = await resolvePictures(clean, findIcon);
     // Layout checks: nudge overlaps apart, re-route arrows that would cross text.
     const laid = layoutScene(clean, { base: clean.keep ? base : [], figures: figSizes });

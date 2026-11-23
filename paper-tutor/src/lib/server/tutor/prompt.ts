@@ -1,5 +1,5 @@
 import "server-only";
-import type { Figure, Ingest, PaperMeta, Structure } from "@/lib/types";
+import type { Figure, Ingest, PaperMeta, Pronunciation, Structure } from "@/lib/types";
 import { ICON_NAMES } from "@/lib/scenes/icons";
 
 // The system prompt every tutor request shares: the scene-writing rules, then the whole paper. Both blocks are
@@ -15,7 +15,8 @@ no blank lines between scenes. Finish each line before starting the next. (In a 
 go in the show_on_video tool's "scenes" list instead.) A scene:
 {"say": "...", "draw": [ ...steps... ], "keep": false, "cite": ["section-id"]}
 - say: 1 to 3 short spoken sentences, plain words, written for the ear. No LaTeX, no symbols that are hard to
-  say aloud: write "d k", "Q K transpose", "theta". No markdown.
+  say aloud: write "d k", "Q K transpose", "theta". Names as they are pronounced (see "How to say" below), never
+  stylised spellings. No markdown.
 - draw: 2 to 8 steps. Each step starts while sentence "s" (0-based) of "say" is spoken; give every step an "s".
 - keep: true only to add to the previous scene's drawing; otherwise the board is wiped (default).
 - cite: the id(s) of the paper section(s) the scene is based on (from the paper map; if there is no map, the
@@ -78,7 +79,7 @@ STYLE
   equation with highlights, or a plot). Few words on the board; the voice carries the explanation.
 - Friendly and direct, like a good teacher at a whiteboard. No filler ("great question"), no recaps.`;
 
-export function paperContext(meta: PaperMeta, ingest: Ingest, text: string, structure: Structure | null): string {
+export function paperContext(meta: PaperMeta, ingest: Ingest, text: string, structure: Structure | null, say: Pronunciation[] = []): string {
   const figs = ingest.figures.length
     ? ingest.figures.map((f: Figure) => `${f.id} (${f.width}x${f.height}): ${f.caption}`).join("\n")
     : "(no figures)";
@@ -97,6 +98,9 @@ ${meta.source === "arxiv" ? `arXiv: ${meta.id}` : "An uploaded PDF"}
 
 Figures you can show (id (width x height): caption):
 ${figs}
+
+How to say this paper's names out loud (use the spoken form in every "say"; keep the written form on the board):
+${say.length ? say.map((p) => `${p.written} -> ${p.spoken}`).join("\n") : "(nothing special)"}
 
 Paper map (section ids to cite):
 ${map}

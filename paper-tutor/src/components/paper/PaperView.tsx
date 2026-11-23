@@ -66,6 +66,7 @@ export function PaperView({ slug }: { slug: string }) {
   const overviewList = useRef<SceneList | null>(null);
   const liveAbort = useRef<AbortController | null>(null);
   const started = useRef(false);
+  const playWhenReady = useRef(false); // play was pressed before the overview had loaded
   const stageSlot = useRef<HTMLDivElement>(null);
 
   // ---- the paper ----
@@ -133,9 +134,11 @@ export function PaperView({ slug }: { slug: string }) {
         if (d.overview.theme) setAutoTheme(d.overview.theme);
         engine.load(list);
         setOv("ready");
+        if (playWhenReady.current) engine.play();
       } else {
         engine.load(titleCard(state.meta, state.structure));
         setOv("none");
+        if (playWhenReady.current) startOverview(true);
         if (new URLSearchParams(location.search).get("after") === "overview") clearAfter();
       }
     })();
@@ -373,14 +376,14 @@ export function PaperView({ slug }: { slug: string }) {
       setTab("session");
       setAsking(true);
       const snap = snapshot();
-      engine.pause(); // asking pauses whatever is playing
-      if (snap?.interrupted && mode === "text") setResumable(snap.interrupted);
+      // Text replies don't touch the board; only a video answer pauses it (and then offers Resume).
       let text = "";
       const scenes: Scene[] = [];
       let block: ReturnType<typeof startAnswerTrack> = null;
       const openVideo = () => {
         if (block || !snap) return;
-        block = startAnswerTrack(snap);
+        // The board kept playing while the text was written: resume from where it is now.
+        block = startAnswerTrack({ ...snap, interrupted: snapshot()?.interrupted ?? null });
         patchCard(card, { mode: "board" });
       };
       try {
@@ -409,8 +412,6 @@ export function PaperView({ slug }: { slug: string }) {
             },
           },
         );
-        // A plain-text reply to something that was playing: offer to carry on from where it paused.
-        if (!block && snap?.interrupted) setResumable(snap.interrupted);
         const cites = [...new Set(scenes.flatMap((sc) => sc.cite ?? []))];
         patchCard(card, { pending: false, answer: text.trim() || (scenes.length ? "" : "(no answer)"), cites, ...(scenes.length ? { scenes, mode: "board" as const } : {}) });
       } catch (err) {
@@ -582,7 +583,7 @@ export function PaperView({ slug }: { slug: string }) {
               paperSlug={slug}
               label={boardLabel}
               onBack={track.kind !== "overview" ? () => playOverview(false) : undefined}
-              onStart={ov === "loading" ? () => {} : track.kind === "overview" && ov === "none" ? () => startOverview(true) : undefined}
+              onStart={ov === "loading" ? () => (playWhenReady.current = true) : track.kind === "overview" && ov === "none" ? () => startOverview(true) : undefined}
               action={
                 resumable
                   ? {

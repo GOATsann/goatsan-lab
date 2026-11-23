@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { PlayerEngine, type Clip } from "@/lib/player/engine";
 import type { DrawStep, SceneList } from "@/lib/scenes/types";
-import { THEMES, type ThemeName } from "@/lib/types";
+import type { ThemeName } from "@/lib/types";
 import { idToSlug } from "@/lib/arxivId";
 import { signInHref } from "@/lib/client/useMe";
 import { Board, FigureClick } from "./Board";
+import { SettingsPanel } from "./Settings";
 import { ChevronLeft, Maximize, Minimize, Pause, Play, Settings, SkipBack, SkipForward, Volume2, VolumeX } from "lucide-react";
 import "./player.css";
 
@@ -99,7 +100,6 @@ type Props = {
   action?: { label: string; onClick: () => void }; // one clear call to action on the board ("Resume overview")
 };
 
-const SPEEDS = [0.75, 1, 1.25, 1.5];
 
 // Like a video player: the controls sit inside the frame, at the bottom, and hide while it plays; a tap or a
 // mouse move brings them back.
@@ -202,11 +202,12 @@ export function Whiteboard({ engine, voiceOn, toggleVoice, theme, onTheme, paper
         onPointerMove={(e) => e.pointerType === "mouse" && poke()}
         onPointerDown={(e) => {
           // A tap on the board shows the controls (or hides them, if they are showing while it plays).
-          if ((e.target as HTMLElement).closest(".pbar, .board-label, .big-play, .board-action, .settings-menu, .el-figure")) return;
+          if ((e.target as HTMLElement).closest(".pbar, .board-label, .big-play, .board-action, .settings, .el-figure")) return;
           if (e.pointerType !== "mouse" && controlsVisible && playing && !menu) setShown(false);
           else poke();
         }}
       >
+        <div className="frame">
         <FigureClick.Provider value={onFigure ?? null}>
           <Board
             steps={scene.draw}
@@ -250,7 +251,7 @@ export function Whiteboard({ engine, voiceOn, toggleVoice, theme, onTheme, paper
         {engine.playing && engine.buffering ? (
           <div className="buffering">{engine.waiting ? "The tutor is writing the next scene…" : "Getting the voice ready…"}</div>
         ) : null}
-        {fs !== "off" && engine.caption ? <p className="fs-caption">{engine.caption}</p> : null}
+        {engine.caption ? <p className="frame-caption">{engine.caption}</p> : null}
 
         {!idle ? (
           <div className="pbar" aria-hidden={!controlsVisible} inert={!controlsVisible}>
@@ -295,45 +296,17 @@ export function Whiteboard({ engine, voiceOn, toggleVoice, theme, onTheme, paper
           </div>
         ) : null}
 
+        </div>
         {menu ? (
-          <div className="settings-menu" role="dialog" aria-label="Player settings">
-            {onTheme ? (
-              <div className="settings-group">
-                <p>Style</p>
-                <div className="settings-options">
-                  {THEMES.map((t) => (
-                    <button key={t.id} type="button" aria-pressed={theme === t.id} onClick={() => onTheme(t.id)}>
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            <div className="settings-group">
-              <p>Speed</p>
-              <div className="settings-options">
-                {SPEEDS.map((v) => (
-                  <button key={v} type="button" aria-pressed={engine.speed === v} onClick={() => engine.setSpeed(v)}>
-                    {v === 1 ? "Normal" : `${v}×`}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="settings-group">
-              <p>Voice</p>
-              <div className="settings-options">
-                <button type="button" aria-pressed={voiceOn} onClick={() => !voiceOn && toggleVoice()}>
-                  On
-                </button>
-                <button type="button" aria-pressed={!voiceOn} onClick={() => voiceOn && toggleVoice()}>
-                  Off (captions only)
-                </button>
-              </div>
-            </div>
-            <button type="button" className="settings-done" onClick={() => setMenu(false)}>
-              Done
-            </button>
-          </div>
+          <SettingsPanel
+            onClose={() => setMenu(false)}
+            theme={theme}
+            onTheme={onTheme}
+            speed={engine.speed}
+            onSpeed={(v) => engine.setSpeed(v)}
+            voiceOn={voiceOn}
+            onVoice={(on) => on !== voiceOn && toggleVoice()}
+          />
         ) : null}
       </div>
 

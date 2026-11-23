@@ -766,10 +766,21 @@
   .stage-slot .board-label {
     right: 52px;
   }
-  .stage-slot .caption {
-    min-height: 2.9em;
-    margin-bottom: 0;
-    font-size: 0.98rem;
+  /* phones: captions sit inside the frame; the pinned player is just the board */
+  .stage-slot .caption,
+  .stage-slot .voice-note {
+    display: none;
+  }
+  .stage-slot .frame-caption {
+    display: block;
+    font-size: 0.78rem;
+  }
+  /* like a video title: on a small board the label shows with the controls */
+  .stage-slot .controls-off .board-label span {
+    opacity: 0;
+  }
+  .stage-slot .controls-on .frame-caption {
+    bottom: 64px;
   }
   .stage-slot .cite-line {
     display: none;
@@ -1001,5 +1012,19 @@
     margin: 0 0 12px;
     padding: 10px 0;
     background: var(--paper);
+  }
+}
+
+/* phones held sideways: the board fits the screen height, and isn't pinned (it would fill the screen) */
+@media (max-width: 960px) and (max-height: 500px) {
+  .stage-slot {
+    position: static;
+  }
+  .stage-slot .player {
+    max-width: calc((100dvh - 20px) * 16 / 9);
+    margin: 0 auto;
+  }
+  .side-tabs {
+    top: 0;
   }
 }

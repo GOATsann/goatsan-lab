@@ -9,6 +9,7 @@ import { splitSentences, type DrawStep, type Scene } from "@/lib/scenes/types";
 import { themeFor, type Figure, type PaperMeta, type Structure, type ThemeName } from "@/lib/types";
 import { paperContext, SCENE_RULES } from "./prompt";
 import { emptyBoard } from "./sanitize";
+import { pronunciations, speakable } from "./say";
 import { checkedInOrder, checkNumbers } from "./verify";
 import { generateScenes, isLive, LIVE_MODEL, OVERVIEW_MODEL, savedScenes, sharedScenes, systemBlocks } from "./generate";
 import { runAgent, type AgentPart, type ToolName } from "./agent";
@@ -33,9 +34,11 @@ async function context(id: string, user: User | null) {
   const state = await getState(id, user);
   const ingest = state.ingest ?? (await ingestPaper(id, user));
   const text = (await getStore().getBlob(`${dir(id)}/text.txt`))?.toString("utf8") ?? "";
-  const system = systemBlocks(SCENE_RULES, paperContext(state.meta, ingest, text, state.structure));
+  const say = await pronunciations(dir(id), state.meta, state.structure, text);
+  const system = systemBlocks(SCENE_RULES, paperContext(state.meta, ingest, text, state.structure, say));
   const sectionIds = new Set(state.structure?.sections.map((s) => s.id) ?? []);
-  return { ...state, ingest, system, sectionIds };
+  const speak = (line: string) => speakable(line, say);
+  return { ...state, ingest, system, sectionIds, speak };
 }
 
 // The paper's figures as images, so the tutor can see them (to judge which are simple, and what to crop).
@@ -91,7 +94,10 @@ export async function recheckOverview(id: string, user: User | null): Promise<{ 
 
 export async function cachedOverview(id: string, user: User | null) {
   await getState(id, user); // access check for uploads
-  return savedScenes(overviewKey(id));
+  const saved = await savedScenes(overviewKey(id));
+  if (!saved) return null;
+  const ctx = await context(id, user);
+  return { ...saved, scenes: saved.scenes.map((sc) => ({ ...sc, say: ctx.speak(sc.say) })) };
 }
 
 // One writer per overview: while the first request is still checking limits and loading the paper, others wait
@@ -99,7 +105,10 @@ export async function cachedOverview(id: string, user: User | null) {
 const g = globalThis as unknown as { __ovStarting?: Map<string, Promise<void>> };
 const starting = (g.__ovStarting ??= new Map());
 
-const replay = (saved: { scenes: Scene[] }) => (async function* () { yield* saved.scenes; })();
+const replay = (saved: { scenes: Scene[] }, speak: (s: string) => string) =>
+  (async function* () {
+    for (const sc of saved.scenes) yield { ...sc, say: speak(sc.say) };
+  })();
 
 export async function overview(id: string, user: User | null, opts: { voice: boolean }) {
   const key = overviewKey(id);
@@ -108,7 +117,7 @@ export async function overview(id: string, user: User | null, opts: { voice: boo
   const waiting = starting.get(key);
   if (waiting) await waiting.catch(() => undefined);
   const saved = await savedScenes(key);
-  if (saved) return { theme, cached: true, scenes: replay(saved) };
+  if (saved) return { theme, cached: true, scenes: replay(saved, ctx.speak) };
   if (!isLive(key)) {
     if (!user) throw new HttpError(401, "Sign in to make this paper's overview.");
     let release = () => {};
@@ -131,7 +140,8 @@ export async function overview(id: string, user: User | null, opts: { voice: boo
 }
 
 function startOverview(id: string, ctx: Awaited<ReturnType<typeof context>>, theme: ThemeName, opts: { voice: boolean }) {
-  const first = opener(ctx.meta);
+  const op = opener(ctx.meta);
+  const first = { ...op, say: ctx.speak(op.say) };
   const scenes = sharedScenes(
     overviewKey(id),
     async function* () {
@@ -162,6 +172,7 @@ if it is simple or cropped to the part that matters. The paper's figures are att
         figures: ctx.ingest.figures,
         board: emptyBoard(),
         sectionIds: ctx.sectionIds,
+        speak: ctx.speak,
         maxScenes: 8,
       });
       // Numbers check against the paper before a scene is shown or saved.
@@ -238,7 +249,7 @@ figure, cropped or zoomed (camera) to the part you talk about. Say why it matter
   }
 
   const saved = await savedScenes(key);
-  if (saved) return { theme, cached: true, scenes: (async function* () { yield* saved.scenes; })() };
+  if (saved) return { theme, cached: true, scenes: replay(saved, ctx.speak) };
   if (!isLive(key)) {
     if (!user) throw new HttpError(401, "Sign in for deep dives and explanations.");
     await useLimit(user.id, "deepdive");
@@ -258,6 +269,7 @@ short sentence.`,
         images,
         tools: ["show_on_video"],
         stopAfterVideo: true,
+        speak: ctx.speak,
         maxScenes,
         figures: ctx.ingest.figures,
         sectionIds: ctx.sectionIds,
@@ -325,6 +337,7 @@ the board above. Greetings, thanks, yes/no and one-fact questions get text only.
     }`,
     tools,
     maxScenes: 3,
+    speak: ctx.speak,
     figures: ctx.ingest.figures,
     sectionIds: ctx.sectionIds,
     board: req.video ? req.board : undefined,

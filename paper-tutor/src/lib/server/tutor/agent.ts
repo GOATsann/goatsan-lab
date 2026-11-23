@@ -98,6 +98,7 @@ export type AgentOpts = {
   sectionIds: Set<string>;
   board?: { say?: string; draw?: DrawStep[] }; // what the viewer is looking at (for video answers)
   stopAfterVideo?: boolean; // deep dives and explanations: done once the video is written
+  speak?: (line: string) => string; // spoken lines written for the ear
 };
 
 export async function* runAgent(o: AgentOpts): AsyncGenerator<AgentPart> {
@@ -109,6 +110,7 @@ export async function* runAgent(o: AgentOpts): AsyncGenerator<AgentPart> {
     board: o.board?.draw?.length ? boardFromSteps(o.board.draw) : emptyBoard(),
     baseSteps: (o.board?.draw ?? []).slice(0, 60),
     sectionIds: o.sectionIds,
+    speak: o.speak,
   });
   const messages: MessageParam[] = [
     ...o.history,
