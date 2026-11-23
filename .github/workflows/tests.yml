@@ -74,6 +74,24 @@ jobs:
         uses: actions/upload-artifact@v4
         with: { name: runner-e2e-traces, path: runner/test-results, retention-days: 7 }
 
+  paper-tutor:
+    name: Paper Tutor (typecheck + e2e on desktop and iPhone, canned AI, no secrets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults: { run: { working-directory: paper-tutor } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: paper-tutor/package-lock.json }
+      - run: npm ci
+      - run: npx next typegen # the route types (PageProps, RouteContext) that next dev/build would generate
+      - run: npm run typecheck
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:e2e
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with: { name: paper-tutor-e2e-traces, path: paper-tutor/test-results, retention-days: 7 }
+
   python:
     name: CarRacing, dashboard, explainers
     runs-on: ubuntu-latest
