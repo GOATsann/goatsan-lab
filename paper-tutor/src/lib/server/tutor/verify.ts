@@ -2,7 +2,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import type { TextBlockParam } from "@anthropic-ai/sdk/resources/messages/messages";
 import type { Scene } from "@/lib/scenes/types";
-import { LIVE_MODEL } from "./generate";
+import { CHECK_MODEL } from "./generate";
 
 // A numbers check for overview scenes: every number and quantity a scene says or draws is compared with the
 // paper (same cached prompt), and anything that doesn't match, including rounding that changes the meaning
@@ -69,7 +69,7 @@ export async function checkNumbers(scene: Scene, system: TextBlockParam[], label
   if (!QUANTITY.test(content)) return scene;
   try {
     const msg = await anthropic().messages.create({
-      model: LIVE_MODEL,
+      model: CHECK_MODEL,
       max_tokens: 2000,
       system,
       thinking: { type: "disabled" },

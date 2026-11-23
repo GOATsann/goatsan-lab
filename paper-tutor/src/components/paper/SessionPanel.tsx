@@ -75,25 +75,27 @@ export function SessionHistory({ items, currentId, onReplay, sectionTitle, onCit
             </p>
             {it.error ? (
               <p className="error">{it.error}</p>
-            ) : it.mode === "board" ? (
+            ) : (
               <>
-                <button
-                  type="button"
-                  className={`play-card ${current ? "is-current" : ""}`}
-                  onClick={() => it.scenes?.length && onReplay(it)}
-                  disabled={it.pending || !it.scenes?.length}
-                >
-                  <Presentation aria-hidden size={16} strokeWidth={2} />
-                  <span>{it.pending ? "Answering on the board…" : "Played on the board"}</span>
-                </button>
-                {it.answer ? <p className="answer-says">{it.answer}</p> : null}
+                {it.answer || it.pending ? (
+                  <div className="answer">
+                    <MessageSquareText aria-hidden size={16} strokeWidth={2} className="answer-icon" />
+                    <AnswerText text={it.answer || "…"} sectionTitle={sectionTitle} onCite={onCite} />
+                  </div>
+                ) : null}
+                {it.mode === "board" ? (
+                  <button
+                    type="button"
+                    className={`play-card ${current ? "is-current" : ""}`}
+                    onClick={() => it.scenes?.length && onReplay(it)}
+                    disabled={it.pending || !it.scenes?.length}
+                  >
+                    <Presentation aria-hidden size={16} strokeWidth={2} />
+                    <span>{it.pending ? "Making the video answer…" : "Played as video"}</span>
+                  </button>
+                ) : null}
                 <Cites cites={it.cites} sectionTitle={sectionTitle} onCite={onCite} />
               </>
-            ) : (
-              <div className="answer">
-                <MessageSquareText aria-hidden size={16} strokeWidth={2} className="answer-icon" />
-                <AnswerText text={it.answer || (it.pending ? "…" : "")} sectionTitle={sectionTitle} onCite={onCite} />
-              </div>
             )}
           </li>
         );
@@ -158,7 +160,7 @@ export function AskBox({ onAsk, busy, signedIn }: Pick<Props, "onAsk" | "busy" |
     <form className="ask" onSubmit={submit}>
       <div className="answer-mode" role="radiogroup" aria-label="Answer">
         <button type="button" role="radio" aria-checked={mode === "board"} onClick={() => setMode("board")}>
-          On the board
+          As video
         </button>
         <button type="button" role="radio" aria-checked={mode === "text"} onClick={() => setMode("text")}>
           As text

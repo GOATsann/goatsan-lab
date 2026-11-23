@@ -11,11 +11,13 @@ import { findIcon } from "../iconify";
 // Claude writes scenes, one JSON object per line, and each line is checked and handed on the moment it is
 // complete, so the player can draw scene 1 while scene 2 is still being written.
 
-export const LIVE_MODEL = "claude-haiku-5-5"; // live scenes and chat: fast and cheap
+export const LIVE_MODEL = "claude-sonnet-5-5"; // live scenes and chat: better judgment, still quick
+export const CHECK_MODEL = "claude-haiku-5-5"; // small fast checks: numbers, question or small talk
 export const OVERVIEW_MODEL = "claude-opus-5-5"; // the cached 60-second overview: the strongest model
 
 let client: Anthropic | null = null;
 const anthropic = () => (client ??= new Anthropic());
+export const anthropicClient = anthropic;
 
 export type Usage = { input: number; cacheRead: number; cacheWrite: number; output: number; model: string };
 
@@ -45,6 +47,23 @@ type GenOpts = {
   maxScenes: number;
 };
 
+// Every scene, however it was written (a line of text or a tool input), is checked, gets its pictures looked up,
+// and gets the layout checks, against what is already on the board.
+export function sceneCleaner(o: Pick<GenOpts, "label" | "figures" | "board" | "baseSteps" | "sectionIds">) {
+  const figSizes = Object.fromEntries(o.figures.map((f) => [f.id, f]));
+  let base: DrawStep[] = o.baseSteps ?? [];
+  return async (raw: unknown): Promise<Scene | null> => {
+    let clean = sanitizeScene(raw, o.figures, o.board, o.sectionIds);
+    if (!clean) return null;
+    clean = await resolvePictures(clean, findIcon);
+    // Layout checks: nudge overlaps apart, re-route arrows that would cross text.
+    const laid = layoutScene(clean, { base: clean.keep ? base : [], figures: figSizes });
+    if (laid.issues.length) console.log(`[layout] ${o.label}: ${laid.issues.join("; ")}`);
+    base = clean.keep ? [...base, ...laid.scene.draw] : laid.scene.draw;
+    return laid.scene;
+  };
+}
+
 // Yields clean scenes as Claude finishes each line.
 export async function* generateScenes(o: GenOpts): AsyncGenerator<Scene> {
   const started = Date.now();
@@ -63,29 +82,20 @@ export async function* generateScenes(o: GenOpts): AsyncGenerator<Scene> {
           fallbacks: "default",
           output_config: { effort: "low" },
         })
-      : anthropic().messages.stream({ ...params, thinking: { type: "disabled" }, output_config: { effort: "low" } });
+      : anthropic().messages.stream({ ...params, thinking: { type: "between_tools" }, output_config: { effort: "low" } });
 
   let buf = "";
   let count = 0;
   let firstAt = 0;
-  const figSizes = Object.fromEntries(o.figures.map((f) => [f.id, f]));
-  let base: DrawStep[] = o.baseSteps ?? [];
+  const clean = sceneCleaner(o);
   const take = async (line: string): Promise<Scene | null> => {
     const t = line.trim().replace(/^```(json)?$/, "");
     if (!t.startsWith("{")) return null;
-    let clean: Scene | null;
     try {
-      clean = sanitizeScene(JSON.parse(t), o.figures, o.board, o.sectionIds);
+      return await clean(JSON.parse(t));
     } catch {
       return null;
     }
-    if (!clean) return null;
-    clean = await resolvePictures(clean, findIcon);
-    // Layout checks: nudge overlaps apart, re-route arrows that would cross text.
-    const laid = layoutScene(clean, { base: clean.keep ? base : [], figures: figSizes });
-    if (laid.issues.length) console.log(`[layout] ${o.label}: ${laid.issues.join("; ")}`);
-    base = clean.keep ? [...base, ...laid.scene.draw] : laid.scene.draw;
-    return laid.scene;
   };
   for await (const ev of stream as AsyncIterable<{ type: string; delta?: { type: string; text?: string } }>) {
     if (ev.type !== "content_block_delta" || ev.delta?.type !== "text_delta") continue;
@@ -120,30 +130,6 @@ export async function* generateScenes(o: GenOpts): AsyncGenerator<Scene> {
     },
     Date.now() - started,
   );
-}
-
-// Plain text answers (chat in text mode), streamed as they are written.
-export async function* generateText(o: { label: string; system: TextBlockParam[]; messages: MessageParam[] }): AsyncGenerator<string> {
-  const started = Date.now();
-  const stream = anthropic().messages.stream({
-    model: LIVE_MODEL,
-    max_tokens: 4000,
-    system: o.system,
-    messages: o.messages,
-    thinking: { type: "disabled" },
-    output_config: { effort: "low" },
-  });
-  for await (const ev of stream) {
-    if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") yield ev.delta.text;
-  }
-  const msg = await stream.finalMessage();
-  logUsage(o.label, {
-    model: msg.model,
-    input: msg.usage.input_tokens,
-    cacheRead: msg.usage.cache_read_input_tokens ?? 0,
-    cacheWrite: msg.usage.cache_creation_input_tokens ?? 0,
-    output: msg.usage.output_tokens,
-  }, Date.now() - started);
 }
 
 // ---- cached scene lists, shared while being written ----

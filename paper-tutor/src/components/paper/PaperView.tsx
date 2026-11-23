@@ -2,15 +2,16 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { THEMES, type PaperState, type ThemeName } from "@/lib/types";
+import type { PaperState, ThemeName } from "@/lib/types";
 import { titleCard } from "@/lib/scenes";
 import type { DrawStep, Scene, SceneList } from "@/lib/scenes/types";
 import { isUploadId, slugToId } from "@/lib/arxivId";
 import { signInHref, useMe } from "@/lib/client/useMe";
-import { readScenes, readText, StreamError } from "@/lib/client/streams";
+import { readChat, readScenes, StreamError } from "@/lib/client/streams";
 import { usePlayer, Whiteboard } from "@/components/player/Whiteboard";
-import { renderRich, renderTex } from "@/components/player/math";
+import { renderRich } from "@/components/player/math";
 import { AskBox, SessionHistory, type AskMode, type HistoryItem } from "./SessionPanel";
+import { SectionsPanel, shortLabel } from "./SectionsPanel";
 import { Lightbox } from "./Lightbox";
 import "./paper.css";
 
@@ -18,15 +19,16 @@ import "./paper.css";
 // explanations, answers to questions); the history lists everything that played or was asked, in order, and
 // replays any of it. The question box is always there. Pages are public; making the AI work asks for sign-in.
 
-type Track = { kind: "overview" } | { kind: "live"; label: string };
+type Track = { kind: "overview" } | { kind: "live"; label: string } | { kind: "answer" };
+// What an answer goes back to when it ends: the list and scene it interrupted (only if that was playing).
+type Resume = { list: SceneList; index: number; track: Track };
 type OverviewState = "loading" | "none" | "writing" | "ready";
 type Tab = "session" | "paper";
 
 const EMPTY: SceneList = { title: "", scenes: [{ say: "", draw: [] }] };
-// Answers inserted into a track, and the replayed scene after them, belong to that viewing only.
-const transient = new WeakSet<Scene>();
-const answers = new WeakSet<Scene>();
 const MAX_HISTORY = 60;
+// After a video answer that interrupted something: false = pause and offer "Resume", true = carry on by itself.
+const AUTO_RESUME = false;
 const newId = () => Math.random().toString(36).slice(2, 10);
 
 declare global {
@@ -54,10 +56,13 @@ export function PaperView({ slug }: { slug: string }) {
   const [lightbox, setLightbox] = useState<{ src: string; caption: string } | null>(null);
   const closeLightbox = useCallback(() => setLightbox(null), []);
   const [tab, setTab] = useState<Tab>("session");
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set());
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
-  const [mini, setMini] = useState(false);
+  const answerList = useRef<SceneList | null>(null);
+  const [resumable, setResumable] = useState<Resume | null>(null);
+  const resumeRef = useRef<Resume | null>(null);
   const overviewList = useRef<SceneList | null>(null);
   const liveAbort = useRef<AbortController | null>(null);
   const started = useRef(false);
@@ -208,10 +213,10 @@ export function PaperView({ slug }: { slug: string }) {
     (fromCard: boolean) => {
       if (!engine || !state) return;
       liveAbort.current?.abort();
+      setResumable(null);
       setTrack({ kind: "overview" });
       const saved = overviewList.current;
       if (saved) {
-        saved.scenes = saved.scenes.filter((s) => !transient.has(s));
         engine.load(saved);
         if (fromCard) engine.play();
       } else {
@@ -232,6 +237,7 @@ export function PaperView({ slug }: { slug: string }) {
         return;
       }
       liveAbort.current?.abort();
+      setResumable(null);
       const ctrl = new AbortController();
       liveAbort.current = ctrl;
       const list: SceneList = { title: label, paper: state.meta.source === "arxiv" ? state.meta.id : undefined, scenes: [] };
@@ -264,55 +270,89 @@ export function PaperView({ slug }: { slug: string }) {
     startLive({ mode: "explain", fig }, label, { id: newId(), kind: "explain", fig, label });
   };
 
+  const sectionTitle = useCallback((sid: string) => state?.structure?.sections.find((s) => s.id === sid)?.title, [state]);
+  const goToSection = useCallback((sid: string) => {
+    setTab("paper");
+    setOpenSections((o) => new Set(o).add(sid));
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`sec-${sid}`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.remove("is-flashed");
+      void el.offsetWidth;
+      el.classList.add("is-flashed");
+    });
+  }, []);
+
   // ---- asking ----
-  // On the board: pause, answer on the same board, then replay the interrupted scene and carry on.
-  const askOnBoard = useCallback(
-    async (question: string, hist: { role: "user" | "assistant"; text: string }[], card: string) => {
-      if (!engine) throw new Error("The player isn't ready.");
-      const e = engine;
-      const list = e.list;
-      let i = e.sceneIndex;
-      while (i > 0 && list.scenes[i]?.pending) i--;
-      const cur = list.scenes[i] ?? { say: "", draw: [] };
-      const base: DrawStep[] = [];
-      for (let k = i; k > 0 && list.scenes[k]?.keep; k--) base.unshift(...list.scenes[k - 1].draw);
-      const wasEnded = e.ended || (i === list.scenes.length - 1 && e.time > 0 && !e.playing);
-      e.pause();
-      const at = i + 1;
-      const block = e.openBlock(at);
-      if (!wasEnded && cur.say) {
-        const replay: Scene = { ...cur, keep: false, draw: [...base.filter((s) => s.t !== "camera"), ...cur.draw] };
-        transient.add(replay);
-        e.insertScenes(at + 1, [replay]);
-      }
-      e.goto(at);
-      e.play();
+  // Every message gets a written answer. With "As video" on, the tutor may also show it on the board: the answer
+  // gets its own short track that starts from the board the viewer was looking at (so it can point at what's
+  // there) and plays only its own scenes. It never runs on into other content. When it ends after interrupting
+  // something, the board offers to resume it (or resumes by itself, with AUTO_RESUME).
+  const snapshot = useCallback(() => {
+    if (!engine) return null;
+    const list = engine.list;
+    let i = engine.sceneIndex;
+    while (i > 0 && list.scenes[i]?.pending) i--;
+    const cur = list.scenes[i] ?? { say: "", draw: [] };
+    const base: DrawStep[] = [];
+    for (let k = i; k > 0 && list.scenes[k]?.keep; k--) base.unshift(...list.scenes[k - 1].draw);
+    const interrupted: Resume | null = engine.playing && list !== answerList.current ? { list, index: i, track: trackRef.current } : null;
+    return { cur, base, interrupted };
+  }, [engine]);
+
+  const startAnswerTrack = useCallback(
+    (snap: NonNullable<ReturnType<typeof snapshot>>) => {
+      if (!engine || !state) return null;
+      const shown = [...snap.base, ...snap.cur.draw].filter((st) => st.t !== "camera");
+      const alist: SceneList = {
+        title: "Answering your question",
+        paper: state.meta.source === "arxiv" ? state.meta.id : undefined,
+        scenes: [{ say: snap.cur.say || "…", draw: shown, backdrop: true }],
+      };
+      answerList.current = alist;
+      resumeRef.current = snap.interrupted;
+      setResumable(null);
+      engine.load(alist);
+      const block = engine.openBlock(1, alist);
+      engine.goto(1);
+      engine.play();
+      setTrack({ kind: "answer" });
       showStage();
-      const scenes: Scene[] = [];
-      const cites = new Set<string>();
-      try {
-        await readScenes(
-          `/api/papers/${slug}/tutor`,
-          { mode: "ask", question, history: hist, board: { say: cur.say, draw: [...base, ...cur.draw] } },
-          {
-            scene: (s) => {
-              scenes.push(s);
-              s.cite?.forEach((c) => cites.add(c));
-              transient.add(s);
-              answers.add(s);
-              block.push(s);
-              patchCard(card, { answer: scenes.map((x) => x.say).join(" "), cites: [...cites] });
-            },
-          },
-        );
-      } finally {
-        block.close();
-      }
-      return { scenes, cites: [...cites] };
+      return block;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [engine, slug, patchCard],
+    [engine, state],
   );
+
+  const resume = useCallback(
+    (r: Resume) => {
+      if (!engine) return;
+      setResumable(null);
+      if (engine.list !== r.list) {
+        engine.load(r.list);
+        engine.goto(r.index);
+      }
+      engine.play();
+      setTrack(r.track);
+    },
+    [engine],
+  );
+
+  // When a video answer finishes.
+  useEffect(() => {
+    if (!engine) return;
+    const off = engine.subscribe(() => {
+      if (!engine.ended || !answerList.current || engine.list !== answerList.current) return;
+      answerList.current = null;
+      const r = resumeRef.current;
+      resumeRef.current = null;
+      if (!r) return;
+      if (AUTO_RESUME) resume(r);
+      else setResumable(r);
+    });
+    return () => void off();
+  }, [engine, resume]);
 
   const ask = useCallback(
     async (question: string, mode: AskMode) => {
@@ -320,6 +360,7 @@ export function PaperView({ slug }: { slug: string }) {
         location.assign(signInHref());
         return;
       }
+      if (!engine) return;
       const hist = history
         .filter((h): h is Extract<HistoryItem, { kind: "ask" }> => h.kind === "ask" && !h.pending && !h.error)
         .slice(-4)
@@ -328,25 +369,58 @@ export function PaperView({ slug }: { slug: string }) {
           { role: "assistant" as const, text: h.answer },
         ]);
       const card = newId();
-      addCard({ id: card, kind: "ask", question, mode, answer: "", cites: [], pending: true });
+      addCard({ id: card, kind: "ask", question, mode: "text", answer: "", cites: [], pending: true });
       setTab("session");
       setAsking(true);
+      const snap = snapshot();
+      engine.pause(); // asking pauses whatever is playing
+      if (snap?.interrupted && mode === "text") setResumable(snap.interrupted);
+      let text = "";
+      const scenes: Scene[] = [];
+      let block: ReturnType<typeof startAnswerTrack> = null;
+      const openVideo = () => {
+        if (block || !snap) return;
+        block = startAnswerTrack(snap);
+        patchCard(card, { mode: "board" });
+      };
       try {
-        if (mode === "board") {
-          const out = await askOnBoard(question, hist, card);
-          patchCard(card, { pending: false, scenes: out.scenes, cites: out.cites, answer: out.scenes.map((s) => s.say).join(" ") || "(no answer)" });
-        } else {
-          engine?.pause();
-          const text = await readText(`/api/papers/${slug}/chat`, { question, history: hist }, (all) => patchCard(card, { answer: all }));
-          patchCard(card, { pending: false, answer: text });
-        }
+        await readChat(
+          `/api/papers/${slug}/chat`,
+          {
+            question,
+            history: hist,
+            video: mode === "board",
+            board: mode === "board" && snap ? { say: snap.cur.say, draw: [...snap.base, ...snap.cur.draw] } : undefined,
+          },
+          {
+            text: (piece) => {
+              text += piece;
+              patchCard(card, { answer: text });
+            },
+            video: openVideo,
+            scene: (sc) => {
+              openVideo();
+              scenes.push(sc);
+              (block as ReturnType<typeof startAnswerTrack>)?.push(sc);
+            },
+            action: (a) => {
+              const f = state?.ingest?.figures.find((x) => x.id === a.fig);
+              if (f) setLightbox({ src: `/api/papers/${slug}/figures/${f.id}`, caption: f.caption });
+            },
+          },
+        );
+        // A plain-text reply to something that was playing: offer to carry on from where it paused.
+        if (!block && snap?.interrupted) setResumable(snap.interrupted);
+        const cites = [...new Set(scenes.flatMap((sc) => sc.cite ?? []))];
+        patchCard(card, { pending: false, answer: text.trim() || (scenes.length ? "" : "(no answer)"), cites, ...(scenes.length ? { scenes, mode: "board" as const } : {}) });
       } catch (err) {
         patchCard(card, { pending: false, error: (err as Error).message });
       } finally {
+        (block as ReturnType<typeof startAnswerTrack>)?.close();
         setAsking(false);
       }
     },
-    [me, history, addCard, patchCard, askOnBoard, engine, slug],
+    [me, engine, history, addCard, patchCard, snapshot, startAnswerTrack, slug, state],
   );
 
   // ---- replaying a card ----
@@ -354,6 +428,7 @@ export function PaperView({ slug }: { slug: string }) {
     (it: HistoryItem) => {
       if (!engine) return;
       setTutorError(null);
+      setResumable(null);
       if (it.kind === "overview") {
         playOverview(true);
         setCurrentId(it.id);
@@ -362,11 +437,16 @@ export function PaperView({ slug }: { slug: string }) {
       else if (it.kind === "explain") startLive({ mode: "explain", ...(it.eq ? { eq: it.eq } : { fig: it.fig ?? "" }) }, it.label, null, it.id);
       else if (it.kind === "ask" && it.scenes?.length && state) {
         liveAbort.current?.abort();
-        const scenes = it.scenes.map((s) => ({ ...s, keep: false }));
-        scenes.forEach((s) => answers.add(s));
-        engine.load({ title: "Answering your question", paper: state.meta.source === "arxiv" ? state.meta.id : undefined, scenes });
+        const alist: SceneList = {
+          title: "Answering your question",
+          paper: state.meta.source === "arxiv" ? state.meta.id : undefined,
+          scenes: it.scenes.map((sc) => ({ ...sc, keep: false })),
+        };
+        answerList.current = alist;
+        resumeRef.current = null;
+        engine.load(alist);
         engine.play();
-        setTrack({ kind: "live", label: "Answering your question" });
+        setTrack({ kind: "answer" });
         setCurrentId(it.id);
         showStage();
       }
@@ -404,45 +484,15 @@ export function PaperView({ slug }: { slug: string }) {
     }
   }, [me, state, read]);
 
-  const sectionTitle = useCallback((sid: string) => state?.structure?.sections.find((s) => s.id === sid)?.title, [state]);
-  const goToSection = useCallback((sid: string) => {
-    setTab("paper");
-    requestAnimationFrame(() => {
-      const el = document.getElementById(`sec-${sid}`);
-      if (!el) return;
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.classList.remove("is-flashed");
-      void el.offsetWidth;
-      el.classList.add("is-flashed");
-    });
-  }, []);
 
-  // ---- phones: the board shrinks into a mini player pinned to the top while the history scrolls ----
+  // Phones: the full player stays pinned at the top; the tabs pin right under it.
   useEffect(() => {
     const slot = stageSlot.current;
     if (!slot) return;
-    const phone = window.matchMedia("(max-width: 960px)");
-    const io = new IntersectionObserver(
-      ([e]) => setMini(phone.matches && !e.isIntersecting && e.boundingClientRect.top < 0),
-      { threshold: 0, rootMargin: "-56px 0px 0px 0px" },
-    );
-    io.observe(slot);
-    const onChange = () => !phone.matches && setMini(false);
-    phone.addEventListener("change", onChange);
-    return () => {
-      io.disconnect();
-      phone.removeEventListener("change", onChange);
-    };
-  }, [state]);
-  // Keep the slot's height while the board is pinned, so the page doesn't jump.
-  const [slotHeight, setSlotHeight] = useState<number | null>(null);
-  useEffect(() => {
-    const slot = stageSlot.current;
-    if (!slot || mini) return;
-    const ro = new ResizeObserver(() => setSlotHeight(slot.offsetHeight));
+    const ro = new ResizeObserver(() => document.documentElement.style.setProperty("--stage-h", `${slot.offsetHeight}px`));
     ro.observe(slot);
     return () => ro.disconnect();
-  }, [mini, state]);
+  }, [state]);
 
   // Phones: keep the question box above the on-screen keyboard.
   useEffect(() => {
@@ -498,11 +548,11 @@ export function PaperView({ slug }: { slug: string }) {
   const figNotes = new Map(structure?.figures.map((f) => [f.id, f]) ?? []);
   const year = meta.published ? new Date(meta.published).getFullYear() : null;
   const mapping = !structure && (ov === "writing" || ov === "ready" || reading);
-  const answering = engine ? answers.has(engine.scene) || (engine.scene.pending && asking && track.kind === "overview") : false;
-  const boardLabel = answering ? "Answering your question" : track.kind === "overview" ? (ov === "writing" ? "Overview (writing it now)" : "Overview") : track.label;
+  const boardLabel =
+    track.kind === "answer" ? "Answering your question" : track.kind === "overview" ? (ov === "writing" ? "Overview (writing it now)" : "Overview") : track.label;
 
   return (
-    <div className={`wrap paper-page ${mini ? "has-mini" : ""}`}>
+    <div className="wrap paper-page">
       <TopBar />
 
       <div className="paper-grid">
@@ -522,24 +572,25 @@ export function PaperView({ slug }: { slug: string }) {
             <h1 className="paper-title">{meta.title}</h1>
             {meta.authors.length ? <p className="paper-authors">{meta.authors.join(", ")}</p> : null}
           </header>
-          <div className="style-switch" role="radiogroup" aria-label="Whiteboard style">
-            {THEMES.map((t) => (
-              <button key={t.id} type="button" role="radio" aria-checked={activeTheme === t.id} className={`style-opt style-${t.id}`} onClick={() => setTheme(t.id)}>
-                <span className="style-swatch" aria-hidden />
-                {t.label}
-              </button>
-            ))}
-          </div>
-          <div className="stage-slot" ref={stageSlot} style={mini && slotHeight ? { height: slotHeight } : undefined}>
+          <div className="stage-slot" ref={stageSlot}>
             <Whiteboard
               engine={engine}
               voiceOn={voiceOn}
               toggleVoice={toggleVoice}
               theme={activeTheme}
+              onTheme={setTheme}
               paperSlug={slug}
               label={boardLabel}
-              onBack={track.kind === "live" ? () => playOverview(false) : undefined}
+              onBack={track.kind !== "overview" ? () => playOverview(false) : undefined}
               onStart={ov === "loading" ? () => {} : track.kind === "overview" && ov === "none" ? () => startOverview(true) : undefined}
+              action={
+                resumable
+                  ? {
+                      label: resumeLabel(resumable.track),
+                      onClick: () => resume(resumable),
+                    }
+                  : undefined
+              }
               onPlayStart={() => {
                 if (track.kind === "overview") addCard({ id: newId(), kind: "overview" });
               }}
@@ -551,8 +602,6 @@ export function PaperView({ slug }: { slug: string }) {
                 const f = state.ingest?.figures.find((x) => x.id === fig);
                 setLightbox({ src: `/api/papers/${slug}/figures/${fig}`, caption: f?.caption ?? "" });
               }}
-              mini={mini}
-              onExpand={() => stageSlot.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
             />
           </div>
           {tutorError ? <p className="error tutor-error">{tutorError}</p> : null}
@@ -576,121 +625,67 @@ export function PaperView({ slug }: { slug: string }) {
               <SessionHistory items={history} currentId={currentId} onReplay={replay} sectionTitle={sectionTitle} onCite={goToSection} />
             ) : (
               <div className="paper-map">
-                {meta.abstract ? <Abstract text={meta.abstract} /> : null}
-                {!structure ? (
-                  mapping ? (
-                    <section className="read-card">
-                      <h2>Mapping the paper</h2>
-                      <p>The tutor is reading the whole paper to map its sections, equations and figures for deep dives. This takes about a minute.</p>
-                    </section>
-                  ) : (
-                    <section className="read-card">
-                      <h2>Map this paper</h2>
-                      <p>
-                        The tutor reads the whole paper once and maps its sections, key claims, equations and figures, so you
-                        can deep dive into any part. It takes about a minute.
-                        {isUploadId(meta.id) ? " The map stays private, like your PDF." : " Everyone who opens this paper after you gets the map for free."}
-                      </p>
-                      <button type="button" className="btn btn-pen" onClick={() => void read()} disabled={reading}>
-                        {reading ? "Mapping the paper…" : "Map the paper"}
-                      </button>
-                      {me === null ? <p className="read-hint">You&apos;ll be asked to sign in first.</p> : null}
-                      {readError ? <p className="error">{readError}</p> : null}
-                    </section>
-                  )
+                {structure ? (
+                  <SectionsPanel
+                    slug={slug}
+                    structure={structure}
+                    figures={figures}
+                    abstract={meta.abstract}
+                    onDeepDive={deepDive}
+                    onExplainEq={explainEq}
+                    onExplainFig={explainFig}
+                    onOpenFigure={(src, caption) => setLightbox({ src, caption })}
+                    open={openSections}
+                    setOpen={setOpenSections}
+                  />
                 ) : (
                   <>
-                    <section className="side-block">
-                      <h2>In one line</h2>
-                      <p className="one-line">{structure.oneLine}</p>
-                    </section>
-                    <section className="side-block">
-                      <h2>Sections</h2>
-                      <ol className="sections">
-                        {structure.sections.map((s) => (
-                          <li key={s.id} id={`sec-${s.id}`} className={`section lvl-${Math.min(3, s.level)}`}>
-                            <div className="section-head">
-                              <h3>{s.title}</h3>
-                              <button type="button" className="mini-btn" onClick={() => deepDive(s.id, s.title)}>
-                                Deep dive
-                              </button>
-                            </div>
-                            <p>{s.summary}</p>
-                          </li>
-                        ))}
-                      </ol>
-                    </section>
-                    {structure.claims.length ? (
-                      <section className="side-block">
-                        <h2>Key claims</h2>
-                        <ul className="claims">
-                          {structure.claims.map((c, i) => (
-                            <li key={i} dangerouslySetInnerHTML={{ __html: renderRich(c.text) }} />
-                          ))}
-                        </ul>
+                    {meta.abstract ? <Abstract text={meta.abstract} /> : null}
+                    {mapping ? (
+                      <section className="read-card">
+                        <h2>Mapping the paper</h2>
+                        <p>The tutor is reading the whole paper to map its sections, equations and figures for deep dives. This takes about a minute.</p>
                       </section>
-                    ) : null}
-                    {structure.equations.length ? (
+                    ) : (
+                      <section className="read-card">
+                        <h2>Map this paper</h2>
+                        <p>
+                          The tutor reads the whole paper once and maps its sections, key claims, equations and figures, so you
+                          can deep dive into any part. It takes about a minute.
+                          {isUploadId(meta.id) ? " The map stays private, like your PDF." : " Everyone who opens this paper after you gets the map for free."}
+                        </p>
+                        <button type="button" className="btn btn-pen" onClick={() => void read()} disabled={reading}>
+                          {reading ? "Mapping the paper…" : "Map the paper"}
+                        </button>
+                        {me === null ? <p className="read-hint">You&apos;ll be asked to sign in first.</p> : null}
+                        {readError ? <p className="error">{readError}</p> : null}
+                      </section>
+                    )}
+                    {figures.length ? (
                       <section className="side-block">
-                        <h2>Equations</h2>
-                        <ul className="equations">
-                          {structure.equations.map((eq) => (
-                            <li key={eq.id} className="equation">
-                              <div className="eq-math" dangerouslySetInnerHTML={{ __html: renderTex(eq.tex, true) }} />
-                              <p dangerouslySetInnerHTML={{ __html: renderRich(eq.meaning) }} />
-                              <div className="eq-actions">
-                                <button type="button" className="mini-btn" onClick={() => explainEq(eq.id, shortLabel(eq.meaning))}>
-                                  Explain this
-                                </button>
-                                {eq.symbols.length ? (
-                                  <details>
-                                    <summary>What the symbols mean</summary>
-                                    <dl>
-                                      {eq.symbols.map((s, k) => (
-                                        <div key={k}>
-                                          <dt dangerouslySetInnerHTML={{ __html: renderTex(s.tex, false) }} />
-                                          <dd>{s.meaning}</dd>
-                                        </div>
-                                      ))}
-                                    </dl>
-                                  </details>
-                                ) : null}
-                              </div>
+                        <h2>Figures</h2>
+                        <ul className="figures">
+                          {figures.map((f) => (
+                            <li key={f.id}>
+                              <button
+                                type="button"
+                                className="figure-open"
+                                onClick={() => setLightbox({ src: `/api/papers/${slug}/figures/${f.id}`, caption: f.caption })}
+                                aria-label={`Open figure ${f.id.replace("fig", "")} large`}
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={`/api/papers/${slug}/figures/${f.id}`} alt={f.caption} width={f.width} height={f.height} loading="lazy" />
+                              </button>
+                              <p dangerouslySetInnerHTML={{ __html: renderRich(f.caption) }} />
                             </li>
                           ))}
                         </ul>
                       </section>
+                    ) : ingesting ? (
+                      <p className="side-status">Getting the paper&apos;s figures…</p>
                     ) : null}
                   </>
                 )}
-                {figures.length ? (
-                  <section className="side-block">
-                    <h2>Figures</h2>
-                    <ul className="figures">
-                      {figures.map((f) => (
-                        <li key={f.id}>
-                          <button
-                            type="button"
-                            className="figure-open"
-                            onClick={() => setLightbox({ src: `/api/papers/${slug}/figures/${f.id}`, caption: f.caption })}
-                            aria-label={`Open figure ${f.id.replace("fig", "")} large`}
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={`/api/papers/${slug}/figures/${f.id}`} alt={f.caption} width={f.width} height={f.height} loading="lazy" />
-                          </button>
-                          <p dangerouslySetInnerHTML={{ __html: renderRich(figNotes.get(f.id)?.explanation ?? f.caption) }} />
-                          {structure ? (
-                            <button type="button" className="mini-btn" onClick={() => explainFig(f.id)}>
-                              Explain this
-                            </button>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                ) : ingesting ? (
-                  <p className="side-status">Getting the paper&apos;s figures…</p>
-                ) : null}
               </div>
             )}
           </div>
@@ -705,11 +700,12 @@ export function PaperView({ slug }: { slug: string }) {
   );
 }
 
-const shortLabel = (s: string) => {
-  const plain = s.replace(/\$[^$]*\$/g, "").replace(/\s+/g, " ").trim();
-  const words = plain.split(" ");
-  return words.length > 7 ? `${words.slice(0, 7).join(" ")}…` : plain;
-};
+// "Resume overview", "Resume deep dive: Method", "Resume: Explain equation 3"
+function resumeLabel(t: Track): string {
+  if (t.kind === "overview") return "Resume overview";
+  if (t.kind === "live") return t.label.startsWith("Deep dive:") ? `Resume deep dive:${t.label.slice("Deep dive:".length)}` : `Resume: ${t.label}`;
+  return "Resume";
+}
 
 function clearAfter() {
   const params = new URLSearchParams(location.search);

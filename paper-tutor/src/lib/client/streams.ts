@@ -60,3 +60,48 @@ export async function readText(url: string, body: unknown, onChunk: (all: string
   }
   return all;
 }
+
+// One chat turn: text pieces, then (maybe) a video answer's scenes.
+export async function readChat(
+  url: string,
+  body: unknown,
+  on: {
+    text: (piece: string) => void;
+    video: () => void;
+    scene: (s: Scene) => void;
+    action?: (a: { type: "show_figure"; fig: string }) => void;
+  },
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
+  if (!res.ok || !res.body) {
+    const d = await res.json().catch(() => null);
+    throw new StreamError(res.status, d?.error ?? `The tutor couldn't answer (${res.status}).`);
+  }
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (value) buf += dec.decode(value, { stream: true });
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      const msg = JSON.parse(line) as {
+        text?: string;
+        video?: boolean;
+        scene?: Scene;
+        action?: { type: "show_figure"; fig: string };
+        error?: string;
+      };
+      if (msg.text) on.text(msg.text);
+      if (msg.video) on.video();
+      if (msg.scene) on.scene(msg.scene);
+      if (msg.action) on.action?.(msg.action);
+      if (msg.error) throw new StreamError(500, msg.error);
+    }
+    if (done) break;
+  }
+}

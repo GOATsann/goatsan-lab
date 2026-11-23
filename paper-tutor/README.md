@@ -98,6 +98,17 @@ over the sentences). A sentence starts when the one before it has finished, so t
 real voice, and the player simply waits if a sentence's audio isn't ready yet. That is what will let scene 1
 play while the AI is still writing scene 2.
 
+## How the tutor works
+
+- **The overview** is written once per paper by Claude Opus 5.5 (one scene per line), number-checked against the
+  paper by Claude Haiku 5.5, saved, and replayed for everyone.
+- **Everything interactive is one small agent** (Claude Sonnet 5.5, the whole paper in a cached prompt) with two
+  tools: `show_on_video` (a list of scenes, checked and laid out before they play) and `show_figure` (opens a
+  figure). A chat message always gets a text answer with its sources as `[[section]]` citations; the video tool is
+  offered only when "As video" is on, and the model uses it only when a picture helps. Deep dives and Explain
+  this are the same agent with a starting instruction. Every tool input is validated and a turn has at most 4
+  model calls.
+
 ## How it's built
 
 Next.js (App Router) + TypeScript, made to deploy with SST on AWS like the other builds (not deployed yet).

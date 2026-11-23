@@ -26,6 +26,7 @@ export class PlayerEngine {
   sentDur: number[] = [];
   current = -1; // sentence being spoken
   voiceError: string | null = null;
+  speed = 1; // playback speed (voice and drawing pace)
   private cur: Scene = { say: "", draw: [] };
 
   private voiceOn: boolean;
@@ -102,6 +103,20 @@ export class PlayerEngine {
     return this.voiceOn;
   }
 
+  setSpeed(v: number) {
+    const next = Math.min(2, Math.max(0.5, v));
+    const k = this.current;
+    // The sentence being spoken keeps its place: only what is left of it is re-timed.
+    if (k >= 0 && this.speaking()) {
+      const left = this.sentStart[k] + this.sentDur[k] - this.time;
+      this.sentDur[k] = this.time - this.sentStart[k] + (left * this.speed) / next;
+      this.timingCache = null;
+    }
+    this.speed = next;
+    if (this.audio) this.audio.playbackRate = next;
+    this.emit();
+  }
+
   // ---- scenes ----
   private enter(index: number) {
     this.sceneIndex = Math.max(0, Math.min(this.list.scenes.length - 1, index));
@@ -121,6 +136,8 @@ export class PlayerEngine {
   }
 
   goto(index: number) {
+    // A backdrop (the board an answer starts from) is never played: go to the scene after it.
+    if (this.list.scenes[index]?.backdrop && index + 1 < this.list.scenes.length) index++;
     this.enter(index);
     this.emit();
   }
@@ -197,7 +214,7 @@ export class PlayerEngine {
   }
 
   play() {
-    if (this.ended) this.enter(0);
+    if (this.ended) this.goto(0);
     this.playing = true;
     this.unlockAudio();
     if (this.audio && this.current >= 0 && this.audio.src && this.speaking()) void this.audio.play().catch(() => {});
@@ -247,16 +264,17 @@ export class PlayerEngine {
     this.current = k;
     if (k === 0 && !Number.isNaN(this.sentStart[0])) {
       // The drawing already started while the voice loaded: the sentence runs from then until the voice ends.
-      this.sentDur[0] = this.time - this.sentStart[0] + clip.seconds;
+      this.sentDur[0] = this.time - this.sentStart[0] + clip.seconds / this.speed;
     } else {
       this.sentStart[k] = this.time;
-      this.sentDur[k] = clip.seconds;
+      this.sentDur[k] = clip.seconds / this.speed;
     }
     this.timingCache = null;
     if (this.audio) {
       if (clip.url) {
         this.audio.src = clip.url;
         this.audio.currentTime = 0;
+        this.audio.playbackRate = this.speed;
         if (this.playing) void this.audio.play().catch(() => {});
       } else {
         this.audio.pause();
@@ -299,7 +317,7 @@ export class PlayerEngine {
         if (this.current === -1 && this.time < this.lead + 2.5) {
           if (Number.isNaN(this.sentStart[0])) {
             this.sentStart[0] = this.lead;
-            this.sentDur[0] = estimateSeconds(this.sentences[0]);
+            this.sentDur[0] = estimateSeconds(this.sentences[0]) / this.speed;
             this.timingCache = null;
           }
           this.time += dt;

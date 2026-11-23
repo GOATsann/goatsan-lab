@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePlayer, Whiteboard } from "@/components/player/Whiteboard";
 import { handWritten } from "@/lib/scenes";
-import { THEMES, type ThemeName } from "@/lib/types";
+import type { ThemeName } from "@/lib/types";
 import "@/components/paper/paper.css";
 
 // A hand-written walkthrough of "Attention Is All You Need", with every drawing tool. No AI involved.
@@ -30,18 +30,7 @@ export function DemoPlayer() {
         <p className="paper-authors">A hand-written walkthrough of the 2017 Transformer paper.</p>
       </header>
       <div className="demo-main">
-        <div className="player-bar">
-          <span />
-          <div className="style-switch" role="radiogroup" aria-label="Whiteboard style">
-            {THEMES.map((t) => (
-              <button key={t.id} type="button" role="radio" aria-checked={theme === t.id} className={`style-opt style-${t.id}`} onClick={() => setTheme(t.id)}>
-                <span className="style-swatch" aria-hidden />
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <Whiteboard engine={engine} voiceOn={voiceOn} toggleVoice={toggleVoice} theme={theme} paperSlug="1706.03762" startLabel="Play" />
+        <Whiteboard engine={engine} voiceOn={voiceOn} toggleVoice={toggleVoice} theme={theme} onTheme={setTheme} paperSlug="1706.03762" startLabel="Play" />
       </div>
     </div>
   );

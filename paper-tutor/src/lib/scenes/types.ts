@@ -129,6 +129,7 @@ export type Scene = {
   keep?: boolean; // keep the previous scene's drawing instead of wiping the board
   cite?: string[]; // ids of the paper sections this scene is based on
   pending?: boolean; // player only: a placeholder for scenes that are still being written
+  backdrop?: boolean; // player only: the board an answer starts from; shown under the next scene, never played
 };
 
 export type SceneList = {

@@ -23,19 +23,3 @@ export function sceneStream(meta: Record<string, unknown>, scenes: AsyncGenerato
     headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" },
   });
 }
-
-export function textStream(chunks: AsyncGenerator<string>): Response {
-  const enc = new TextEncoder();
-  const body = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      try {
-        for await (const c of chunks) controller.enqueue(enc.encode(c));
-      } catch (e) {
-        controller.enqueue(enc.encode(`\n\n[The answer stopped: ${(e as Error).message}]`));
-      } finally {
-        controller.close();
-      }
-    },
-  });
-  return new Response(body, { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
-}

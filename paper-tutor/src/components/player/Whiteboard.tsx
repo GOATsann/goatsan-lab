@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { PlayerEngine, type Clip } from "@/lib/player/engine";
 import type { DrawStep, SceneList } from "@/lib/scenes/types";
-import type { ThemeName } from "@/lib/types";
+import { THEMES, type ThemeName } from "@/lib/types";
 import { idToSlug } from "@/lib/arxivId";
 import { signInHref } from "@/lib/client/useMe";
 import { Board, FigureClick } from "./Board";
+import { ChevronLeft, Maximize, Minimize, Pause, Play, Settings, SkipBack, SkipForward, Volume2, VolumeX } from "lucide-react";
 import "./player.css";
 
 // The whiteboard player: draws and voices a scene list. Play, pause, skip scenes, voice on or off.
@@ -85,6 +86,7 @@ type Props = {
   voiceOn: boolean;
   toggleVoice: () => void;
   theme: ThemeName;
+  onTheme?: (t: ThemeName) => void; // offered in the settings menu when given
   paperSlug?: string;
   onStart?: () => void; // the big play button (e.g. to start writing an overview); default: play
   startLabel?: string;
@@ -94,19 +96,65 @@ type Props = {
   label?: string; // what is playing, shown on the board ("Overview", "Deep dive: Method"...)
   onBack?: () => void; // shown on the board when it isn't the overview
   onPlayStart?: () => void; // the big play button was pressed (before it plays)
-  mini?: boolean; // shrunk into a bar pinned to the top (phones, while scrolling the history)
-  onExpand?: () => void;
+  action?: { label: string; onClick: () => void }; // one clear call to action on the board ("Resume overview")
 };
 
-export function Whiteboard({ engine, voiceOn, toggleVoice, theme, paperSlug, onStart, startLabel, sectionTitle, onCite, onFigure, label, onBack, onPlayStart, mini, onExpand }: Props) {
+const SPEEDS = [0.75, 1, 1.25, 1.5];
+
+// Like a video player: the controls sit inside the frame, at the bottom, and hide while it plays; a tap or a
+// mouse move brings them back.
+export function Whiteboard({ engine, voiceOn, toggleVoice, theme, onTheme, paperSlug, onStart, startLabel, sectionTitle, onCite, onFigure, label, onBack, onPlayStart, action }: Props) {
+  const frame = useRef<HTMLDivElement>(null);
+  const [shown, setShown] = useState(true);
+  const [menu, setMenu] = useState(false);
+  const [fs, setFs] = useState<"off" | "native" | "css">("off");
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const playing = Boolean(engine?.playing);
+
+  // Auto-hide: visible while paused or the menu is open; hidden 2.5 s after the last touch while playing.
+  const poke = useCallback(() => {
+    setShown(true);
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = setTimeout(() => setShown(false), 2500);
+  }, []);
+  useEffect(() => {
+    if (!playing || menu) {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+      setShown(true);
+    } else poke();
+  }, [playing, menu, poke]);
+  useEffect(() => () => void (hideTimer.current && clearTimeout(hideTimer.current)), []);
+
+  // Fullscreen: the browser's when it can do it for the frame, else a fixed full-window view (iPhone Safari).
+  useEffect(() => {
+    const on = () => setFs(document.fullscreenElement ? "native" : (f) => (f === "native" ? "off" : f));
+    document.addEventListener("fullscreenchange", on);
+    return () => document.removeEventListener("fullscreenchange", on);
+  }, []);
+  const toggleFs = () => {
+    const el = frame.current;
+    if (fs === "native") void document.exitFullscreen?.();
+    else if (fs === "css") setFs("off");
+    else if (el?.requestFullscreen && document.fullscreenEnabled) void el.requestFullscreen().catch(() => setFs("css"));
+    else setFs("css");
+  };
+  useEffect(() => {
+    if (fs !== "css") return;
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setFs("off");
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [fs]);
+
   const onKey = (ev: React.KeyboardEvent) => {
     if (!engine || (ev.target as HTMLElement).closest("input, textarea, button")) return;
+    poke();
     if (ev.key === " " || ev.key === "k") {
       ev.preventDefault();
       engine.toggle();
     } else if (ev.key === "ArrowRight") engine.next();
     else if (ev.key === "ArrowLeft") engine.prev();
     else if (ev.key === "v") toggleVoice();
+    else if (ev.key === "f") toggleFs();
   };
 
   const list = engine?.list;
@@ -126,57 +174,65 @@ export function Whiteboard({ engine, voiceOn, toggleVoice, theme, paperSlug, onS
   const i = engine.sceneIndex;
   const scenes = list.scenes;
   const scene = engine.scene;
-  // Drawing that stays from earlier scenes (keep), and the scene being wiped away.
   const base: DrawStep[] = [];
   for (let k = i; k > 0 && scenes[k]?.keep; k--) base.unshift(...scenes[k - 1].draw);
   const prev = i > 0 && !scene.keep ? scenes[i - 1].draw : [];
   const fade = prev.length ? Math.max(0, 1 - engine.time / 0.45) : 0;
-  const prevCamera = prev.filter((s) => s.t === "camera");
-  // Before the first play, show the opening scene fully drawn behind the play button.
+  const prevCamera = prev.filter((st) => st.t === "camera");
   const idle = !engine.playing && engine.time === 0 && i === 0 && !engine.ended;
   const timings = idle
-    ? scene.draw.map((s) => ({ start: 0, dur: 1, items: s.t === "steps" ? s.items.map(() => 0) : undefined }))
+    ? scene.draw.map((st) => ({ start: 0, dur: 1, items: st.t === "steps" ? st.items.map(() => 0) : undefined }))
     : engine.timings();
   const cites = (scene.cite ?? []).map((c) => ({ id: c, title: sectionTitle?.(c) ?? c }));
-  const real = scenes.filter((s) => !s.pending).length;
+  const real = scenes.filter((x) => !x.pending && !x.backdrop).length;
+  const shownIndex = Math.max(0, i - scenes.slice(0, i).filter((x) => x.backdrop).length);
+  const start = () => {
+    onPlayStart?.();
+    if (onStart) onStart();
+    else engine.play();
+  };
+  const togglePlay = () => (idle ? start() : engine.toggle());
+  const controlsVisible = shown || !playing || menu;
 
   return (
-    <div className={`player theme-${theme} ${mini ? "is-mini" : ""}`} tabIndex={0} onKeyDown={onKey} aria-label={`Whiteboard: ${list.title}`}>
-      <div className="player-stage" onClick={mini ? onExpand : undefined}>
-        {label && !mini ? (
-          <div className="board-label">
+    <div className={`player theme-${theme} ${fs !== "off" ? "is-fullscreen" : ""} ${fs === "css" ? "is-css-fs" : ""}`} tabIndex={0} onKeyDown={onKey} aria-label={`Whiteboard: ${list.title}`}>
+      <div
+        ref={frame}
+        className={`player-stage ${controlsVisible ? "controls-on" : "controls-off"}`}
+        onPointerMove={(e) => e.pointerType === "mouse" && poke()}
+        onPointerDown={(e) => {
+          // A tap on the board shows the controls (or hides them, if they are showing while it plays).
+          if ((e.target as HTMLElement).closest(".pbar, .board-label, .big-play, .board-action, .settings-menu, .el-figure")) return;
+          if (e.pointerType !== "mouse" && controlsVisible && playing && !menu) setShown(false);
+          else poke();
+        }}
+      >
+        <FigureClick.Provider value={onFigure ?? null}>
+          <Board
+            steps={scene.draw}
+            timings={timings}
+            time={idle ? 1e6 : engine.time}
+            base={base}
+            fading={prev}
+            fade={fade}
+            prevCamera={prevCamera}
+            figureSrc={figureSrc}
+            sceneKey={`s${keyOf(scene)}`}
+          />
+        </FigureClick.Provider>
+        {label ? (
+          <div className={`board-label ${controlsVisible ? "" : "is-faded"}`}>
             <span>{label}</span>
             {onBack ? (
               <button type="button" onClick={onBack}>
+                <ChevronLeft size={14} strokeWidth={2.2} aria-hidden />
                 Back to the overview
               </button>
             ) : null}
           </div>
         ) : null}
-        <FigureClick.Provider value={onFigure ?? null}>
-        <Board
-          steps={scene.draw}
-          timings={timings}
-          time={idle ? 1e6 : engine.time}
-          base={base}
-          fading={prev}
-          fade={fade}
-          prevCamera={prevCamera}
-          figureSrc={figureSrc}
-          sceneKey={`s${keyOf(scene)}`}
-        />
-        </FigureClick.Provider>
         {idle ? (
-          <button
-            type="button"
-            className="big-play"
-            onClick={() => {
-              onPlayStart?.();
-              if (onStart) onStart();
-              else engine.play();
-            }}
-            aria-label={startLabel ?? "Play"}
-          >
+          <button type="button" className="big-play" onClick={start} aria-label={startLabel ?? "Play"}>
             <span className="big-play-pill">
               <svg viewBox="0 0 24 24" aria-hidden>
                 <path d="M8 5.5v13l11-6.5z" />
@@ -185,35 +241,102 @@ export function Whiteboard({ engine, voiceOn, toggleVoice, theme, paperSlug, onS
             </span>
           </button>
         ) : null}
+        {action && !engine.playing ? (
+          <button type="button" className="board-action" onClick={action.onClick}>
+            <Play size={16} fill="currentColor" strokeWidth={0} aria-hidden />
+            {action.label}
+          </button>
+        ) : null}
         {engine.playing && engine.buffering ? (
           <div className="buffering">{engine.waiting ? "The tutor is writing the next scene…" : "Getting the voice ready…"}</div>
         ) : null}
+        {fs !== "off" && engine.caption ? <p className="fs-caption">{engine.caption}</p> : null}
+
+        {!idle ? (
+          <div className="pbar" aria-hidden={!controlsVisible} inert={!controlsVisible}>
+            <div className="pbar-scenes" role="group" aria-label="Scenes">
+              {scenes.map((sc, k) => (sc.backdrop ? null : (
+                <button
+                  type="button"
+                  key={k}
+                  className={`pbar-seg ${sc.pending ? "is-pending" : ""}`}
+                  onClick={() => !sc.pending && (engine.goto(k), poke())}
+                  aria-label={sc.pending ? "Being written" : `Scene ${k + 1}`}
+                  aria-current={k === i ? "step" : undefined}
+                >
+                  <span style={{ transform: `scaleX(${k < i ? 1 : k === i ? engine.progress : 0})` }} />
+                </button>
+              )))}
+            </div>
+            <div className="pbar-row">
+              <button type="button" className="pbtn" onClick={() => (engine.prev(), poke())} aria-label="Previous scene">
+                <SkipBack size={18} strokeWidth={2} fill="currentColor" />
+              </button>
+              <button type="button" className="pbtn pbtn-main" onClick={() => (togglePlay(), poke())} aria-label={engine.playing ? "Pause" : "Play"}>
+                {engine.playing ? <Pause size={20} fill="currentColor" strokeWidth={0} /> : <Play size={20} fill="currentColor" strokeWidth={0} />}
+              </button>
+              <button type="button" className="pbtn" onClick={() => (engine.next(), poke())} aria-label="Next scene" disabled={i >= scenes.length - 1}>
+                <SkipForward size={18} strokeWidth={2} fill="currentColor" />
+              </button>
+              <span className="pbar-count">
+                {Math.min(shownIndex + 1, real)} / {real}
+              </span>
+              <span className="pbar-spacer" />
+              <button type="button" className="pbtn" onClick={() => (toggleVoice(), poke())} aria-label={voiceOn ? "Mute the voice" : "Turn the voice on"} aria-pressed={!voiceOn}>
+                {voiceOn ? <Volume2 size={19} strokeWidth={2} /> : <VolumeX size={19} strokeWidth={2} />}
+              </button>
+              <button type="button" className="pbtn" onClick={() => setMenu((m) => !m)} aria-label="Settings" aria-expanded={menu}>
+                <Settings size={19} strokeWidth={2} />
+              </button>
+              <button type="button" className="pbtn" onClick={toggleFs} aria-label={fs === "off" ? "Full screen" : "Exit full screen"}>
+                {fs === "off" ? <Maximize size={18} strokeWidth={2} /> : <Minimize size={18} strokeWidth={2} />}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {menu ? (
+          <div className="settings-menu" role="dialog" aria-label="Player settings">
+            {onTheme ? (
+              <div className="settings-group">
+                <p>Style</p>
+                <div className="settings-options">
+                  {THEMES.map((t) => (
+                    <button key={t.id} type="button" aria-pressed={theme === t.id} onClick={() => onTheme(t.id)}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            <div className="settings-group">
+              <p>Speed</p>
+              <div className="settings-options">
+                {SPEEDS.map((v) => (
+                  <button key={v} type="button" aria-pressed={engine.speed === v} onClick={() => engine.setSpeed(v)}>
+                    {v === 1 ? "Normal" : `${v}×`}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="settings-group">
+              <p>Voice</p>
+              <div className="settings-options">
+                <button type="button" aria-pressed={voiceOn} onClick={() => !voiceOn && toggleVoice()}>
+                  On
+                </button>
+                <button type="button" aria-pressed={!voiceOn} onClick={() => voiceOn && toggleVoice()}>
+                  Off (captions only)
+                </button>
+              </div>
+            </div>
+            <button type="button" className="settings-done" onClick={() => setMenu(false)}>
+              Done
+            </button>
+          </div>
+        ) : null}
       </div>
 
-      {mini ? (
-        <div className="mini-bar">
-          <button type="button" className="mini-label" onClick={onExpand}>
-            <span>{label ?? list.title}</span>
-            <span className="mini-caption">{engine.caption || list.title}</span>
-          </button>
-          <button
-            type="button"
-            className="ctl ctl-main"
-            onClick={() => (idle && onStart ? (onPlayStart?.(), onStart()) : (idle && onPlayStart?.(), engine.toggle()))}
-            aria-label={engine.playing ? "Pause" : "Play"}
-          >
-            {engine.playing ? (
-              <svg viewBox="0 0 24 24" aria-hidden>
-                <path d="M6.5 5h4v14h-4zM13.5 5h4v14h-4z" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" aria-hidden>
-                <path d="M8 5.5v13l11-6.5z" />
-              </svg>
-            )}
-          </button>
-        </div>
-      ) : null}
       <p className="caption" aria-live="polite">
         {engine.caption || <span className="caption-idle">{list.title}</span>}
       </p>
@@ -227,71 +350,6 @@ export function Whiteboard({ engine, voiceOn, toggleVoice, theme, paperSlug, onS
           ))}
         </p>
       ) : null}
-
-      <div className="controls">
-        <button type="button" className="ctl" onClick={() => engine.prev()} aria-label="Previous scene">
-          <svg viewBox="0 0 24 24" aria-hidden>
-            <path d="M6 5h2v14H6zM20 5.5v13L9.5 12z" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          className="ctl ctl-main"
-          onClick={() => {
-            if (idle) onPlayStart?.();
-            if (idle && onStart) onStart();
-            else engine.toggle();
-          }}
-          aria-label={engine.playing ? "Pause" : "Play"}
-        >
-          {engine.playing ? (
-            <svg viewBox="0 0 24 24" aria-hidden>
-              <path d="M6.5 5h4v14h-4zM13.5 5h4v14h-4z" />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 24 24" aria-hidden>
-              <path d="M8 5.5v13l11-6.5z" />
-            </svg>
-          )}
-        </button>
-        <button type="button" className="ctl" onClick={() => engine.next()} aria-label="Next scene" disabled={i >= scenes.length - 1}>
-          <svg viewBox="0 0 24 24" aria-hidden>
-            <path d="M16 5h2v14h-2zM4 5.5v13L14.5 12z" />
-          </svg>
-        </button>
-
-        <div className="scenes" role="group" aria-label="Scenes">
-          {scenes.map((s, k) => (
-            <button
-              type="button"
-              key={k}
-              className={`scene-seg ${s.pending ? "is-pending" : ""}`}
-              onClick={() => !s.pending && engine.goto(k)}
-              aria-label={s.pending ? "Being written" : `Scene ${k + 1}`}
-              aria-current={k === i ? "step" : undefined}
-            >
-              <span style={{ transform: `scaleX(${k < i ? 1 : k === i ? engine.progress : 0})` }} />
-            </button>
-          ))}
-        </div>
-        <span className="scene-count">
-          {Math.min(i + 1, real)} / {real}
-        </span>
-
-        <button type="button" className={`ctl ctl-voice ${voiceOn ? "is-on" : ""}`} onClick={toggleVoice} aria-pressed={voiceOn} aria-label={voiceOn ? "Turn the voice off" : "Turn the voice on"}>
-          {voiceOn ? (
-            <svg viewBox="0 0 24 24" aria-hidden>
-              <path d="M4 9h4l5-4v14l-5-4H4z" />
-              <path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 24 24" aria-hidden>
-              <path d="M4 9h4l5-4v14l-5-4H4z" />
-              <path d="M16.5 9.5l5 5M21.5 9.5l-5 5" fill="none" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          )}
-        </button>
-      </div>
 
       {voiceOn && engine.voiceError ? (
         <p className="voice-note">

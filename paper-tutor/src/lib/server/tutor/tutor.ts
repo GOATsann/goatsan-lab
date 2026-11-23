@@ -8,9 +8,10 @@ import type { User } from "../auth";
 import { splitSentences, type DrawStep, type Scene } from "@/lib/scenes/types";
 import { themeFor, type Figure, type PaperMeta, type Structure, type ThemeName } from "@/lib/types";
 import { paperContext, SCENE_RULES } from "./prompt";
-import { boardFromSteps, emptyBoard } from "./sanitize";
+import { emptyBoard } from "./sanitize";
 import { checkedInOrder, checkNumbers } from "./verify";
-import { generateScenes, generateText, isLive, LIVE_MODEL, OVERVIEW_MODEL, savedScenes, sharedScenes, systemBlocks } from "./generate";
+import { generateScenes, isLive, LIVE_MODEL, OVERVIEW_MODEL, savedScenes, sharedScenes, systemBlocks } from "./generate";
+import { runAgent, type AgentPart, type ToolName } from "./agent";
 
 // The live tutor: the 60-second overview (written once by the strongest model, then replayed for everyone),
 // deep dives, "Explain this", and chat answers on the whiteboard or as text.
@@ -190,51 +191,11 @@ async function prewarmVoice(scenes: Scene[]) {
 
 // ---- deep dives and "Explain this" ----
 
-export type LiveRequest =
-  | { mode: "deepdive"; section: string }
-  | { mode: "explain"; eq?: string; fig?: string }
-  | { mode: "ask"; question: string; history: { role: "user" | "assistant"; text: string }[]; board?: { say?: string; draw?: DrawStep[] } };
+export type LiveRequest = { mode: "deepdive"; section: string } | { mode: "explain"; eq?: string; fig?: string };
 
 export async function liveScenes(id: string, user: User | null, req: LiveRequest) {
   const ctx = await context(id, user);
   const theme = themeForPaper(ctx.meta, ctx.structure);
-
-  if (req.mode === "ask") {
-    if (!user) throw new HttpError(401, "Sign in to ask the tutor.");
-    const question = req.question.trim().slice(0, 600);
-    if (!question) throw new HttpError(400, "Ask a question.");
-    await useLimit(user.id, "chat");
-    const board = boardFromSteps(req.board?.draw);
-    const boardText = req.board?.draw?.length
-      ? `The viewer paused on this board. Narration: "${(req.board.say ?? "").slice(0, 400)}"
-Board steps (ids you can point at, highlight or erase): ${JSON.stringify(req.board.draw).slice(0, 6000)}`
-      : "The board is empty.";
-    const messages: MessageParam[] = [
-      ...history(req.history),
-      {
-        role: "user",
-        content: `${boardText}
-
-The viewer asks: ${question}
-
-Answer on the whiteboard in 1 to 3 scenes, 25 to 70 spoken words in total. Your first scene may set "keep": true
-to add to the board above (highlight a term of an equation by its id, an arrow, or a short note in empty space),
-or start a fresh board. Cite the section(s) the answer comes from. If the paper doesn't say, say so plainly.`,
-      },
-    ];
-    const scenes = generateScenes({
-      label: `ask ${id}`,
-      model: LIVE_MODEL,
-      system: ctx.system,
-      messages,
-      figures: ctx.ingest.figures,
-      board,
-      baseSteps: (req.board?.draw ?? []).slice(0, 60),
-      sectionIds: ctx.sectionIds,
-      maxScenes: 3,
-    });
-    return { theme, cached: false, scenes };
-  }
 
   if (!ctx.structure) throw new HttpError(409, "Map this paper first.");
   let key: string;
@@ -282,27 +243,26 @@ figure, cropped or zoomed (camera) to the part you talk about. Say why it matter
     if (!user) throw new HttpError(401, "Sign in for deep dives and explanations.");
     await useLimit(user.id, "deepdive");
   }
+  // The same tutor agent as chat, with a starting instruction and the video tool; its scenes are saved.
+  const images = await figureImages(id, figs);
   const scenes = sharedScenes(
     key,
     async function* () {
-      yield* generateScenes({
+      for await (const part of runAgent({
         label: `${req.mode} ${id}`,
-        model: LIVE_MODEL,
         system: ctx.system,
-        messages: [
-          {
-            role: "user",
-            content: [
-              ...(await figureImages(id, figs)),
-              { type: "text", text: `${task}${figs.length ? "\nThe figures you may show are attached." : ""}\nStart with the first JSON line right away.` },
-            ],
-          },
-        ],
-        figures: ctx.ingest.figures,
-        board: emptyBoard(),
-        sectionIds: ctx.sectionIds,
+        history: [],
+        instruction: `${task}${figs.length ? "\nThe figures you may show are attached." : ""}
+Put the explanation on the video with show_on_video (all its scenes in one call). Keep any written text to one
+short sentence.`,
+        images,
+        tools: ["show_on_video"],
         maxScenes,
-      });
+        figures: ctx.ingest.figures,
+        sectionIds: ctx.sectionIds,
+      })) {
+        if ("scene" in part) yield part.scene;
+      }
     },
     { model: LIVE_MODEL, theme },
   );
@@ -324,27 +284,48 @@ function history(h: { role: "user" | "assistant"; text: string }[] | undefined):
   return out;
 }
 
-// ---- chat as text ----
+// ---- chat ----
+// Every message is one agent turn, always answered in text. The tutor decides which tools to use: with "As video"
+// on it may show the answer on the board (show_on_video); it can open a figure or a section for the viewer, search
+// the paper to check wording, and cite sections. A greeting or a yes/no question gets text only.
 
-export async function chatText(id: string, user: User | null, question: string, hist: { role: "user" | "assistant"; text: string }[]) {
+export async function chatTurn(
+  id: string,
+  user: User | null,
+  req: { question: string; history: { role: "user" | "assistant"; text: string }[]; video: boolean; board?: { say?: string; draw?: DrawStep[] } },
+): Promise<AsyncGenerator<AgentPart>> {
   if (!user) throw new HttpError(401, "Sign in to ask the tutor.");
-  const q = question.trim().slice(0, 600);
-  if (!q) throw new HttpError(400, "Ask a question.");
+  const question = req.question.trim().slice(0, 600);
+  if (!question) throw new HttpError(400, "Ask a question.");
   const ctx = await context(id, user);
   await useLimit(user.id, "chat");
-  return generateText({
+  const boardText =
+    req.video && req.board?.draw?.length
+      ? `The board the viewer is looking at. Narration: "${(req.board.say ?? "").slice(0, 400)}"
+Board steps (ids a video answer can point at, highlight or erase): ${JSON.stringify(req.board.draw).slice(0, 6000)}
+
+`
+      : "";
+  const tools: ToolName[] = req.video ? ["show_on_video", "show_figure"] : ["show_figure"];
+  return runAgent({
     label: `chat ${id}`,
     system: ctx.system,
-    messages: [
-      ...history(hist),
-      {
-        role: "user",
-        content: `${q}
+    history: history(req.history),
+    instruction: `${boardText}The viewer says: ${question}
 
-Answer in plain text this time (no JSON, no scenes): 1 to 3 short paragraphs, plain words, inline math as $...$
-when needed. After each claim, cite the section it comes from as [[section-id]] (or [[Section title]] if there is no
-map). If the paper doesn't cover it, say so.`,
-      },
-    ],
+Reply in plain text: short and direct, 1 to 3 short paragraphs (a greeting or thanks gets one friendly sentence).
+After each claim from the paper, cite its section as [[section-id]] (or [[Section title]] if there is no map).
+If the paper doesn't say, say so.${
+      req.video
+        ? ` When the viewer asks how or why something works (a method, mechanism, equation, result or comparison), also
+show it with show_on_video and keep the text to a short summary; its first scene may set "keep": true to add to
+the board above. Greetings, thanks, yes/no and one-fact questions get text only.`
+        : ""
+    }`,
+    tools,
+    maxScenes: 3,
+    figures: ctx.ingest.figures,
+    sectionIds: ctx.sectionIds,
+    board: req.video ? req.board : undefined,
   });
 }
