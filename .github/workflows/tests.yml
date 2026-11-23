@@ -1,0 +1,52 @@
+# Every project's tests on every push and pull request. Green badge in README.md = all suites pass.
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shooter-z:
+    name: Shooter Z (unit + typecheck + build)
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: shooter-z-fps } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: shooter-z-fps/package-lock.json }
+      - run: npm ci
+      - run: npx tsc --noEmit -p .
+      - run: npm test
+      - run: npm run build
+
+  runner:
+    name: Lights-Out Surfer (unit + typecheck + build)
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: runner } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: runner/package-lock.json }
+      - run: npm ci
+      - run: npx tsc --noEmit -p .
+      - run: npm test
+      # the build first downloads the AI models from Hugging Face (pinned revision, checksums in models.lock.json)
+      - run: npm run build
+
+  python:
+    name: CarRacing, dashboard, explainers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11", cache: pip }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      # only what the tests need (no torch): the game with its Box2D physics, TensorBoard for the exporters
+      - run: pip install swig && pip install "gymnasium[box2d]==1.4.0" tensorboard pytest
+      - run: python -m pytest car-racing/tests -q

@@ -1,5 +1,7 @@
 # goatsan-lab
 
+[![tests](https://github.com/GOATsann/goatsan-lab/actions/workflows/tests.yml/badge.svg)](https://github.com/GOATsann/goatsan-lab/actions/workflows/tests.yml)
+
 Things I build on camera for **BULSHY.FM** ("Build Until Lights-out, Seriously Hoping You Follow Me"),
 by [@_goatsan](https://www.instagram.com/_goatsan/). Everything here is free to use and learn from.
 
