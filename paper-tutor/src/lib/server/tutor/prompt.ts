@@ -1,5 +1,6 @@
 import "server-only";
 import type { Figure, Ingest, PaperMeta, Pronunciation, Structure } from "@/lib/types";
+import type { QuickMap } from "../structure";
 import { ICON_NAMES } from "@/lib/scenes/icons";
 
 // The system prompt every tutor request shares: the scene-writing rules, then the whole paper. Both blocks are
@@ -79,7 +80,14 @@ STYLE
   equation with highlights, or a plot). Few words on the board; the voice carries the explanation.
 - Friendly and direct, like a good teacher at a whiteboard. No filler ("great question"), no recaps.`;
 
-export function paperContext(meta: PaperMeta, ingest: Ingest, text: string, structure: Structure | null, say: Pronunciation[] = []): string {
+export function paperContext(
+  meta: PaperMeta,
+  ingest: Ingest,
+  text: string,
+  structure: Structure | null,
+  say: Pronunciation[] = [],
+  quick: QuickMap | null = null,
+): string {
   const figs = ingest.figures.length
     ? ingest.figures.map((f: Figure) => `${f.id} (${f.width}x${f.height}): ${f.caption}`).join("\n")
     : "(no figures)";
@@ -90,7 +98,9 @@ export function paperContext(meta: PaperMeta, ingest: Ingest, text: string, stru
         claims: structure.claims,
         equations: structure.equations.map((e) => ({ id: e.id, tex: e.tex, meaning: e.meaning, section: e.section })),
       })
-    : "(not mapped yet: cite section titles)";
+    : quick
+      ? JSON.stringify({ oneLine: quick.oneLine, outline: quick.outline, note: "a first sketch; cite section titles" })
+      : "(not mapped yet: cite section titles)";
   return `THE PAPER
 Title: ${meta.title}
 Authors: ${meta.authors.join(", ") || "unknown"}

@@ -48,7 +48,7 @@ const agent = new Agent({
   bodyTimeout: 60_000,
 });
 
-function checkUrl(raw: string): URL {
+export function checkUrl(raw: string): URL {
   let url: URL;
   try {
     url = new URL(raw);
@@ -66,7 +66,7 @@ function checkUrl(raw: string): URL {
   return url;
 }
 
-export async function fetchPdf(raw: string, maxBytes: number): Promise<{ data: Buffer; url: URL }> {
+export async function fetchPdf(raw: string, maxBytes: number, onProgress?: (got: number, total: number) => void): Promise<{ data: Buffer; url: URL }> {
   let url = checkUrl(raw);
   for (let hop = 0; hop <= 4; hop++) {
     let res;
@@ -103,6 +103,7 @@ export async function fetchPdf(raw: string, maxBytes: number): Promise<{ data: B
         throw new FetchError(413, `That PDF is larger than ${maxBytes / 1024 / 1024} MB.`);
       }
       chunks.push(chunk as Buffer);
+      onProgress?.(total, declared);
     }
     const data = Buffer.concat(chunks);
     if (data.subarray(0, 5).toString() !== "%PDF-") throw new FetchError(415, "That link isn't a PDF.");

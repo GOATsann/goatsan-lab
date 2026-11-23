@@ -101,12 +101,13 @@ type Props = {
   onPlayStart?: () => void; // the big play button was pressed (before it plays)
   action?: { label: string; onClick: () => void }; // one clear call to action on the board ("Resume overview")
   onAsk?: () => void; // the Ask button in the control bar (leaves full screen first)
+  overlay?: React.ReactNode; // shown over the board instead of the play button (the paper is still opening)
 };
 
 
 // Like a video player: the controls sit inside the frame, at the bottom, and hide while it plays; a tap or a
 // mouse move brings them back.
-export function Whiteboard({ engine, voiceOn, toggleVoice, theme, onTheme, paperSlug, onStart, startLabel, sectionTitle, onCite, onFigure, label, onBack, onPlayStart, action, onAsk }: Props) {
+export function Whiteboard({ engine, voiceOn, toggleVoice, theme, onTheme, paperSlug, onStart, startLabel, sectionTitle, onCite, onFigure, label, onBack, onPlayStart, action, onAsk, overlay }: Props) {
   const frame = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(true);
   const [menu, setMenu] = useState(false);
@@ -252,7 +253,7 @@ export function Whiteboard({ engine, voiceOn, toggleVoice, theme, onTheme, paper
             ) : null}
           </div>
         ) : null}
-        {idle ? (
+        {overlay && !playing ? overlay : idle ? (
           <button type="button" className="big-play" onClick={start} aria-label={startLabel ?? "Play"}>
             <span className="big-play-pill">
               <svg viewBox="0 0 24 24" aria-hidden>

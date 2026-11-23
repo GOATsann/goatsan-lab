@@ -25,6 +25,8 @@ const nextConfig: NextConfig = {
   images: { unoptimized: true },
   // Native and worker-heavy packages stay outside the server bundle.
   serverExternalPackages: ["@napi-rs/canvas", "pdfjs-dist", "undici"],
+  // Uploads go through the proxy (sign-in); its default 10 MB body cap would cut off PDFs below our 40 MB limit.
+  experimental: { proxyClientMaxBodySize: "41mb" },
   turbopack: { root: __dirname },
   async headers() {
     return [

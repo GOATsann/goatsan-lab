@@ -16,11 +16,25 @@ async function open(data: Buffer | Uint8Array) {
   return getDocument({ data: new Uint8Array(data), useSystemFonts: false }).promise;
 }
 
+// Page count and a title, in well under a second: the biggest type on page 1 (what a person would call the
+// title), else the PDF's own Title field when it looks like a real title rather than a file name.
 export async function pdfInfo(data: Buffer): Promise<{ pages: number; title: string | null }> {
   const doc = await open(data);
   try {
-    const meta = await doc.getMetadata().catch(() => null);
-    const title = (meta?.info as { Title?: string } | undefined)?.Title?.trim() || null;
+    let title: string | null = null;
+    const page = await doc.getPage(1);
+    const items = (await page.getTextContent()).items.filter((i) => "str" in i) as unknown as TextItem[];
+    const lines = linesOf(items);
+    if (lines.length) {
+      const big = Math.max(...lines.map((l) => l.size));
+      const t = lines.filter((l) => l.size >= big * 0.9).map((l) => l.text.trim()).join(" ").replace(/\s+/g, " ").trim();
+      if (t.length >= 8 && t.length <= 240) title = t;
+    }
+    if (!title) {
+      const meta = await doc.getMetadata().catch(() => null);
+      const t = (meta?.info as { Title?: string } | undefined)?.Title?.trim() ?? "";
+      if (t.length >= 8 && /\s/.test(t) && !/\.(pdf|docx?|tex)$/i.test(t)) title = t;
+    }
     return { pages: doc.numPages, title };
   } finally {
     await doc.loadingTask.destroy();
@@ -55,10 +69,19 @@ const CAPTION = /^\s*(Figure|Fig\.?)\s*(\d+)\s*[:.|]/i;
 
 // Text of every page, plus figure crops. A figure is the tallest stretch above a "Figure N:" caption that holds no
 // body-text lines (body lines span most of the text column); diagram labels are short lines, so they stay inside.
+// Two passes, so the text (fast) isn't held up by the figures (slow): { figures: false } reads the text of every
+// page and notes which pages have figure captions; { onlyPages } then renders and crops just those pages.
 export async function readPdf(
   data: Buffer,
-  opts: { maxPages: number; scale?: number },
-): Promise<{ pages: number; text: string; figures: PdfFigure[]; title: string | null }> {
+  opts: {
+    maxPages: number;
+    scale?: number;
+    figures?: boolean;
+    onlyPages?: number[];
+    onPage?: (n: number, total: number) => void;
+    onFigure?: (n: number) => void;
+  },
+): Promise<{ pages: number; text: string; figures: PdfFigure[]; title: string | null; captionPages: number[] }> {
   const doc = await open(data);
   const scale = opts.scale ?? 3;
   const pages = doc.numPages;
@@ -66,12 +89,16 @@ export async function readPdf(
   const figures: PdfFigure[] = [];
   const seen = new Set<string>();
   let title: string | null = null;
+  const captionPages: number[] = [];
+  const last = Math.min(pages, opts.maxPages);
+  const list = opts.onlyPages ?? Array.from({ length: last }, (_, i) => i + 1);
   try {
-    for (let p = 1; p <= Math.min(pages, opts.maxPages); p++) {
+    for (const p of list) {
       const page = await doc.getPage(p);
       const content = await page.getTextContent();
       const items = content.items.filter((i) => "str" in i) as unknown as TextItem[];
       textParts.push(items.map((i) => i.str + (i.hasEOL ? "\n" : "")).join(""));
+      opts.onPage?.(p, last);
 
       const lines = linesOf(items);
       if (p === 1 && lines.length) {
@@ -81,7 +108,8 @@ export async function readPdf(
         if (t.length >= 8 && t.length <= 240) title = t;
       }
       const captions = lines.filter((l) => CAPTION.test(l.text));
-      if (!captions.length) {
+      if (captions.length) captionPages.push(p);
+      if (!captions.length || opts.figures === false) {
         page.cleanup();
         continue;
       }
@@ -129,6 +157,7 @@ export async function readPdf(
         crop.getContext("2d").drawImage(rendered, sx, sy, sw, sh, 0, 0, sw, sh);
         const trimmed = trimWhite(crop);
         figures.push({ caption: caption.replace(/\s+/g, " "), png: await trimmed.encode("png"), width: trimmed.width, height: trimmed.height });
+        opts.onFigure?.(figures.length);
         if (figures.length >= 40) break;
         seen.add(num);
       }
@@ -137,7 +166,7 @@ export async function readPdf(
   } finally {
     await doc.loadingTask.destroy();
   }
-  return { pages, text: textParts.join("\n\n"), figures, title };
+  return { pages, text: textParts.join("\n\n"), figures, title, captionPages };
 }
 
 // Render page 1 of a (figure) PDF to a PNG, trimmed to its ink.

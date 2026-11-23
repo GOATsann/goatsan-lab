@@ -188,7 +188,10 @@ function stitch(parts: Canvas[], maxWidth = 1800): Canvas {
   return out;
 }
 
-export async function readLatex(files: Map<string, Buffer>): Promise<{ text: string; figures: LatexFigure[] } | null> {
+export async function readLatex(
+  files: Map<string, Buffer>,
+  opts: { figures?: boolean; onFigure?: (n: number) => void } = {},
+): Promise<{ text: string; figures: LatexFigure[] } | null> {
   const main = findMain(files);
   if (!main) return null;
   const full = flatten(files, main);
@@ -208,7 +211,7 @@ export async function readLatex(files: Map<string, Buffer>): Promise<{ text: str
   const exts = [".pdf", ".png", ".jpg", ".jpeg", ".eps"];
 
   const figures: LatexFigure[] = [];
-  for (const m of body.matchAll(/\\begin\{(figure\*?|wrapfigure)\}([\s\S]*?)\\end\{\1\}/g)) {
+  for (const m of opts.figures === false ? [] : body.matchAll(/\\begin\{(figure\*?|wrapfigure)\}([\s\S]*?)\\end\{\1\}/g)) {
     const env = m[2];
     const capAt = env.search(/\\caption(\[[^\]]*\])?\s*\{/);
     if (capAt < 0) continue;
@@ -228,6 +231,7 @@ export async function readLatex(files: Map<string, Buffer>): Promise<{ text: str
     if (!parts.length) continue;
     const img = stitch(parts);
     figures.push({ label, caption: plainCaption(cap.text, defs), png: await img.encode("png"), width: img.width, height: img.height });
+    opts.onFigure?.(figures.length);
     if (figures.length >= 30) break;
   }
 

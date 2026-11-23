@@ -23,8 +23,10 @@ export const maxDuration = 300;
 export async function POST(request: NextRequest, ctx: RouteContext<"/api/papers/[slug]/overview">) {
   try {
     const { slug } = await ctx.params;
-    const body = (await request.json().catch(() => ({}))) as { voice?: boolean };
-    const out = await overview(slugToId(slug), await currentUser(), { voice: body.voice !== false });
+    const body = (await request.json().catch(() => ({}))) as { voice?: boolean; model?: string };
+    // Development only: try another model for the overview (for measuring); production always uses the default.
+    const model = process.env.NODE_ENV !== "production" && body.model?.startsWith("claude-") ? body.model : undefined;
+    const out = await overview(slugToId(slug), await currentUser(), { voice: body.voice !== false, model });
     return sceneStream({ theme: out.theme, cached: out.cached }, out.scenes);
   } catch (e) {
     return errorResponse(e);

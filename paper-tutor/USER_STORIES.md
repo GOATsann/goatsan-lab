@@ -60,6 +60,15 @@ scrolled), full screen. Device: desktop, phone portrait, phone landscape.
 | T04 | Sections outline | any | All collapsed; the filter narrows it; jump links open the section | auto |
 | T05 | The first viewer of a paper (signed in) | page open | The overview starts writing in the background; play joins it | manual (needs the AI) |
 
+## Opening a paper
+
+| Id | Story | States | Expected | Test |
+|---|---|---|---|---|
+| L01 | Open a PDF link (a 135-page report) | fresh, nothing saved | The page opens at once. The board shows a card with the server's live steps and counts: Downloading (x / y MB), Reading pages (n / total), Finding figures (n found), Mapping the paper, Writing the overview. The title reads "Reading the paper…" until page 1's real title is in, and never the file name. Every step fits the frame on a phone; the card goes when the overview is ready | auto |
+| L02 | Press "Play the opening" on the loading card | the overview is writing | The opening plays at once, the card goes, the rest joins as it is written | auto |
+| L03 | A link that fails | download error | The page says why | auto |
+| T07 | Fresh open timing | the overview stream starts | The opening scene is on the board as soon as the stream sends it (the page adds well under a second). On the real server: whitepaper first AI scene about 15 s and done about 23 s after the text is read | auto (page) / measured (server) |
+
 ## History and accounts
 
 | Id | Story | States | Expected | Test |

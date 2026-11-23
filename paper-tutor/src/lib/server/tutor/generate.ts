@@ -77,7 +77,7 @@ export async function* generateScenes(o: GenOpts): AsyncGenerator<Scene> {
   };
   // Opus 5.5 always thinks: keep it light. Haiku: thinking off, for the fastest first scene.
   const stream =
-    o.model === OVERVIEW_MODEL
+    o.model.startsWith("claude-opus")
       ? anthropic().beta.messages.stream({
           ...params,
           betas: ["server-side-fallback-2026-07-01"],

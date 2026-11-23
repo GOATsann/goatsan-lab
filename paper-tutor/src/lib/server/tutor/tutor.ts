@@ -1,15 +1,16 @@
 import "server-only";
 import type { ContentBlockParam, MessageParam } from "@anthropic-ai/sdk/resources/messages/messages";
 import { getStore } from "../store";
-import { getState, HttpError, ingestPaper, readPaper } from "../papers";
+import { getMeta, getQuickMap, getState, HttpError, ingestPaper, readPaper } from "../papers";
+import { step } from "../progress";
 import { useLimit, usePaperLimit } from "../limits";
 import { speak } from "../tts";
 import type { User } from "../auth";
 import { splitSentences, type DrawStep, type Scene } from "@/lib/scenes/types";
-import { themeFor, type Figure, type PaperMeta, type Structure, type ThemeName } from "@/lib/types";
+import { themeFor, type Figure, type Ingest, type PaperMeta, type Pronunciation, type Structure, type ThemeName } from "@/lib/types";
 import { paperContext, SCENE_RULES } from "./prompt";
 import { emptyBoard } from "./sanitize";
-import { pronunciations, speakable } from "./say";
+import { speakable } from "./say";
 import { checkedInOrder, checkNumbers } from "./verify";
 import { generateScenes, isLive, LIVE_MODEL, OVERVIEW_MODEL, savedScenes, sharedScenes, systemBlocks } from "./generate";
 import { runAgent, type AgentPart, type ToolName } from "./agent";
@@ -34,11 +35,15 @@ async function context(id: string, user: User | null) {
   const state = await getState(id, user);
   const ingest = state.ingest ?? (await ingestPaper(id, user));
   const text = (await getStore().getBlob(`${dir(id)}/text.txt`))?.toString("utf8") ?? "";
-  const say = await pronunciations(dir(id), state.meta, state.structure, text);
-  const system = systemBlocks(SCENE_RULES, paperContext(state.meta, ingest, text, state.structure, say));
+  // The full map when it exists; until then the quick map (which is also where the names' pronunciations come from).
+  const quick = state.structure ? null : await getQuickMap(id, user);
+  const legacy = state.structure?.pronunciations ? null : await getStore().getJSON<{ list: Pronunciation[] }>(`${dir(id)}/say.json`);
+  const say = state.structure?.pronunciations ?? legacy?.list ?? quick?.pronunciations ?? [];
+  const system = systemBlocks(SCENE_RULES, paperContext(state.meta, ingest, text, state.structure, say, quick));
   const sectionIds = new Set(state.structure?.sections.map((s) => s.id) ?? []);
   const speak = (line: string) => speakable(line, say);
-  return { ...state, ingest, system, sectionIds, speak };
+  const theme: ThemeName = state.structure?.theme ?? (quick ? themeFor(quick.paperType) : themeForPaper(state.meta, null));
+  return { ...state, ingest, system, sectionIds, speak, theme };
 }
 
 // The paper's figures as images, so the tutor can see them (to judge which are simple, and what to crop).
@@ -110,14 +115,17 @@ const replay = (saved: { scenes: Scene[] }, speak: (s: string) => string) =>
     for (const sc of saved.scenes) yield { ...sc, say: speak(sc.say) };
   })();
 
-export async function overview(id: string, user: User | null, opts: { voice: boolean }) {
+export async function overview(id: string, user: User | null, opts: { voice: boolean; model?: string }) {
   const key = overviewKey(id);
-  const ctx = await context(id, user); // also the access check for uploads
-  const theme = themeForPaper(ctx.meta, ctx.structure);
+  const meta = await getMeta(id, user); // also the access check for uploads
   const waiting = starting.get(key);
   if (waiting) await waiting.catch(() => undefined);
   const saved = await savedScenes(key);
-  if (saved) return { theme, cached: true, scenes: replay(saved, ctx.speak) };
+  if (saved) {
+    const ctx = await context(id, user);
+    return { theme: ctx.theme, cached: true, scenes: replay(saved, ctx.speak) };
+  }
+  const theme = themeForPaper(meta, null);
   if (!isLive(key)) {
     if (!user) throw new HttpError(401, "Sign in to make this paper's overview.");
     let release = () => {};
@@ -129,76 +137,92 @@ export async function overview(id: string, user: User | null, opts: { voice: boo
       release();
       throw e;
     }
-    // Map the paper at the same time (deep dives and chat use the map); it counts as the same new paper.
-    if (!ctx.structure) void readPaper(id, user).catch((e) => console.error("[structure]", e));
-    const out = startOverview(id, ctx, theme, opts);
+    // The full map runs alongside (deep dives and chat use it); it counts as the same new paper.
+    void readPaper(id, user).catch((e) => console.error("[map]", e));
+    const out = startOverview(id, user, meta, theme, opts);
     starting.delete(key);
     release();
     return out;
   }
-  return startOverview(id, ctx, theme, opts); // joins the stream already being written
+  return startOverview(id, user, meta, theme, opts); // joins the stream already being written
 }
 
-function startOverview(id: string, ctx: Awaited<ReturnType<typeof context>>, theme: ThemeName, opts: { voice: boolean }) {
-  const op = opener(ctx.meta);
-  const first = { ...op, say: ctx.speak(op.say) };
+// The opening scene goes out at once (it needs only the title); the rest waits only for the text and the quick map.
+function startOverview(id: string, user: User | null, meta: PaperMeta, theme: ThemeName, opts: { voice: boolean; model?: string }) {
+  const model = opts.model ?? OVERVIEW_MODEL;
+  const say = (scene: Scene) => {
+    if (!opts.voice) return;
+    // Start the voice for a scene as soon as it exists (the browser's own request joins it).
+    for (const line of splitSentences(scene.say)) void speak(line, "coral").catch(() => undefined);
+  };
   const scenes = sharedScenes(
     overviewKey(id),
     async function* () {
-      yield first; // instant, and nothing in it to check
+      step(id, "overview", "active", "the opening");
+      const op = opener(meta);
+      const plain = { ...op, say: speakable(op.say, []) }; // the general name rules; the paper's own list comes later
+      say(plain);
+      yield plain;
+      // The overview needs only the text. The quick map (the names' pronunciations) runs at the same time and is
+      // applied to each scene's spoken line as it goes out.
+      const quick = getQuickMap(id, user).catch((e) => {
+        console.error("[quickmap]", e);
+        return null;
+      });
+      const ingest = await ingestPaper(id, user);
+      const text = (await getStore().getBlob(`${dir(id)}/text.txt`))?.toString("utf8") ?? "";
+      const state = await getState(id, user);
+      const ctx = {
+        system: systemBlocks(SCENE_RULES, paperContext(meta, ingest, text, state.structure, state.structure?.pronunciations ?? [], null)),
+        sectionIds: new Set(state.structure?.sections.map((x) => x.id) ?? []),
+      };
+      const figs = ((await getStore().getJSON<Ingest>(`${dir(id)}/ingest.json`)) ?? ingest).figures; // whatever figures are ready by now
+      step(id, "overview", "active", "scene 2");
       const written = generateScenes({
         label: `overview ${id}`,
-        model: OVERVIEW_MODEL,
+        model,
         system: ctx.system,
         messages: [
           {
             role: "user",
             content: [
-              ...(await figureImages(id, ctx.ingest.figures.slice(0, 8))),
+              ...(await figureImages(id, figs.slice(0, 8))),
               {
                 type: "text",
                 text: `Write this paper's 60-second overview for the whiteboard.
-The app already shows the opening scene, so do not repeat it: it says "${first.say}" over the paper's title.
+The app already shows the opening scene, so do not repeat it: it says "${plain.say}" over the paper's title.
 Write exactly 5 more scenes. The whole overview must take about 60 seconds of voice, so each scene says 14 to 18
 words (never more than 20): about 85 spoken words in total. The arc: the problem the paper tackles, the key idea,
 how it works (a simple redraw of the method with icons, boxes and arrows, or the key equation with highlights),
 the main result with real numbers from the paper (a plot when there is a results table), and what it means.
 Every scene needs a picture. Prefer simple redraws over the paper's figures: use at most one real figure, and only
-if it is simple or cropped to the part that matters. The paper's figures are attached so you can see them. Start with the first JSON line right away.`,
+if it is simple or cropped to the part that matters.${figs.length ? " The paper's figures are attached so you can see them." : ""} Start with the first JSON line right away.`,
               },
             ],
           },
         ],
-        figures: ctx.ingest.figures,
+        figures: figs,
         board: emptyBoard(),
         sectionIds: ctx.sectionIds,
-        speak: ctx.speak,
         maxScenes: 8,
       });
       // Numbers check against the paper before a scene is shown or saved.
-      yield* checkedInOrder(written, (sc) => checkNumbers(sc, ctx.system, `overview ${id}`));
+      let n = 1;
+      for await (const checked of checkedInOrder(written, (sc) => checkNumbers(sc, ctx.system, `overview ${id}`))) {
+        const list = state.structure?.pronunciations ?? (await quick)?.pronunciations ?? [];
+        const sc = { ...checked, say: speakable(checked.say, list) };
+        n++;
+        say(sc);
+        step(id, "overview", "active", `scene ${n}`);
+        yield sc;
+      }
+      step(id, "overview", "done", `${n} scenes`);
     },
-    { model: OVERVIEW_MODEL, theme },
-    (all) => {
-      // Make the voice once, so everyone who replays the overview hears it (even before signing in).
-      if (opts.voice) void prewarmVoice(all);
-    },
+    { model, theme },
   );
   return { theme, cached: false, scenes };
 }
 
-async function prewarmVoice(scenes: Scene[]) {
-  for (const s of scenes) {
-    for (const line of splitSentences(s.say)) {
-      try {
-        await speak(line, "coral");
-      } catch (e) {
-        console.error("[tts prewarm]", (e as Error).message);
-        return;
-      }
-    }
-  }
-}
 
 // ---- deep dives and "Explain this" ----
 

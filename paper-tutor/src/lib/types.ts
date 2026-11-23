@@ -25,6 +25,8 @@ export type PaperMeta = PaperCard & {
   source: "arxiv" | "upload";
   owner?: string; // uploads only: the WorkOS user id that may see it
   sourceUrl?: string; // a PDF fetched from a link
+  pending?: boolean; // still downloading (a link import)
+  error?: string; // the import failed
   pages?: number;
 };
 
@@ -42,6 +44,7 @@ export type Ingest = {
   via: "latex" | "pdf";
   chars: number;
   figures: Figure[];
+  figuresPending?: boolean; // the figure crops are still being made
   ingestedAt: string;
 };
 

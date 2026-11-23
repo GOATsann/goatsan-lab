@@ -17,6 +17,8 @@ export function handWritten(id: string): SceneList | null {
 export function titleCard(meta: PaperMeta, _structure?: Structure | null): SceneList {
   const authors = meta.authors.length > 2 ? `${meta.authors[0]} and others` : meta.authors.join(" and ");
   const year = meta.published ? new Date(meta.published).getFullYear() : null;
+  // No title yet (a link still downloading): a neutral card, never the file name.
+  if (!meta.title) return { title: "Reading the paper…", scenes: [{ say: "Reading the paper.", draw: [{ t: "title", text: "Reading the paper…", y: 320, size: 72, s: 0 }] }] };
   const title = meta.title.length > 100 ? meta.title.slice(0, 97).replace(/\s+\S*$/, "") + "…" : meta.title;
   const long = title.length > 44;
   return {

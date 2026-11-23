@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PaperState, ThemeName } from "@/lib/types";
 import { titleCard } from "@/lib/scenes";
+import { ProgressCard, type Progress } from "./ProgressCard";
 import type { DrawStep, Scene, SceneList } from "@/lib/scenes/types";
 import { isUploadId, slugToId } from "@/lib/arxivId";
 import { signInHref, useMe } from "@/lib/client/useMe";
@@ -33,7 +34,7 @@ const newId = () => Math.random().toString(36).slice(2, 10);
 
 declare global {
   interface Window {
-    __ptTimes?: { start: number; firstScene?: number };
+    __ptTimes?: { start: number; firstScene?: number; secondScene?: number; done?: number };
   }
 }
 
@@ -82,18 +83,59 @@ export function PaperView({ slug }: { slug: string }) {
   }, [slug]);
 
   useEffect(() => {
-    void load().then(async (s) => {
-      if (s && !s.ingest) {
-        setIngesting(true);
-        try {
-          const r = await fetch(`/api/papers/${slug}/ingest`, { method: "POST" });
-          if (r.ok) await load();
-        } finally {
-          setIngesting(false);
-        }
+    void load();
+  }, [load]);
+
+  // Read the paper (text first; the figures follow on the server) once it has downloaded.
+  const ingestStarted = useRef(false);
+  const pending = Boolean(state?.meta.pending);
+  const hasIngest = Boolean(state?.ingest);
+  useEffect(() => {
+    if (!state || pending || hasIngest || ingestStarted.current) return;
+    ingestStarted.current = true;
+    setIngesting(true);
+    void (async () => {
+      try {
+        const r = await fetch(`/api/papers/${slug}/ingest`, { method: "POST" });
+        if (r.ok) await load();
+        else setError({ status: r.status, message: (await r.json().catch(() => ({}))).error ?? "This paper couldn't be read." });
+      } finally {
+        setIngesting(false);
       }
-    });
-  }, [load, slug]);
+    })();
+  }, [state, pending, hasIngest, load, slug]);
+
+  // ---- live progress while the paper opens (download, pages, figures, map, overview) ----
+  const [progress, setProgress] = useState<Progress | null>(null);
+  const [ovScenes, setOvScenes] = useState(0);
+  const figuresPending = Boolean(state?.ingest?.figuresPending);
+  const everPlayed = useRef(false);
+  if (engine?.playing) everPlayed.current = true;
+  const opening =
+    Boolean(state) && !error && (pending || !hasIngest || (!everPlayed.current && ((ov === "writing" && ovScenes < 2) || ov === "loading")));
+  useEffect(() => {
+    if (!opening && !figuresPending) return;
+    let stop = false;
+    let ticks = 0;
+    const tick = async () => {
+      if (stop) return;
+      ticks++;
+      try {
+        const r = await fetch(`/api/papers/${slug}/progress`, { cache: "no-store" });
+        if (r.ok) setProgress((await r.json()).progress);
+      } catch {}
+      // The download finished (title known), or the figures are in: reload the paper.
+      if (pending || (figuresPending && ticks % 3 === 0)) {
+        const s = await load();
+        if (s?.meta.error) setError({ status: 422, message: s.meta.error });
+      }
+      if (!stop) setTimeout(tick, 800);
+    };
+    void tick();
+    return () => {
+      stop = true;
+    };
+  }, [opening, figuresPending, pending, load, slug]);
 
   // ---- the session history, kept per person and paper in this browser ----
   const storeKey = me === undefined ? null : `pt-history:${me?.id ?? "anon"}:${id}`;
@@ -123,7 +165,7 @@ export function PaperView({ slug }: { slug: string }) {
 
   // ---- the overview ----
   useEffect(() => {
-    if (!engine || !state || started.current) return;
+    if (!engine || !state || state.meta.pending || started.current) return;
     started.current = true;
     void (async () => {
       const r = await fetch(`/api/papers/${slug}/overview`, { cache: "no-store" });
@@ -171,11 +213,14 @@ export function PaperView({ slug }: { slug: string }) {
         meta: (m) => m.theme && setAutoTheme(m.theme),
         scene: (s) => {
           if (!got++ && window.__ptTimes) window.__ptTimes.firstScene = performance.now() - window.__ptTimes.start;
+          if (got === 2 && window.__ptTimes) window.__ptTimes.secondScene = performance.now() - window.__ptTimes.start;
+          setOvScenes(got);
           block.push(s);
         },
       })
         .then(() => {
           block.close();
+          if (window.__ptTimes) window.__ptTimes.done = performance.now() - window.__ptTimes.start;
           setOv("ready");
         })
         .catch((e: StreamError) => {
@@ -570,7 +615,7 @@ export function PaperView({ slug }: { slug: string }) {
               {year ? <span>{year}</span> : null}
               {meta.categories?.slice(0, 3).map((c) => <span key={c}>{c}</span>)}
             </p>
-            <h1 className="paper-title">{meta.title}</h1>
+            <h1 className="paper-title">{meta.title || "Reading the paper…"}</h1>
             {meta.authors.length ? <p className="paper-authors">{meta.authors.join(", ")}</p> : null}
           </header>
           <div className="stage-slot" ref={stageSlot}>
@@ -591,6 +636,23 @@ export function PaperView({ slug }: { slug: string }) {
                       onClick: () => resume(resumable),
                     }
                   : undefined
+              }
+              overlay={
+                opening ? (
+                  <ProgressCard
+                    progress={progress}
+                    title={meta.title || "Reading the paper…"}
+                    onPlay={
+                      pending || !hasIngest
+                        ? undefined
+                        : ov === "writing"
+                          ? () => engine?.play()
+                          : ov === "none"
+                            ? () => startOverview(true)
+                            : () => (playWhenReady.current = true)
+                    }
+                  />
+                ) : undefined
               }
               onAsk={() => {
                 setTab("session");

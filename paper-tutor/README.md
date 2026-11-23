@@ -19,10 +19,15 @@ BULSHY.FM EP 3.
   categories; any arXiv link; any https PDF link (whitepapers and lab reports that aren't on arXiv); or an upload.
   PDFs from links and uploads are private to the person who opened them (up to 40 MB and 150 pages).
 - **Read a paper.** The arXiv LaTeX source when there is one (clean equations, real sections, the original figure
-  files), else the PDF: pdf.js pulls out the text and the figures are cropped from rendered pages. One Claude pass
-  maps it (sections, key claims, equations with symbols, figures, paper type -> whiteboard style).
+  files), else the PDF: pdf.js pulls out the text first (135 pages in about 2 s) and the figures are cropped from
+  rendered pages in the background. Claude Sonnet 5.5 maps it in two steps: a quick map from the beginning, the
+  end and the figure captions (what it does, its type -> whiteboard style, how to say its names), then the full
+  map (sections, key claims, equations with symbols, figures), read in parallel chunks and merged.
+- **Opening a paper shows what is happening.** The title comes from page 1 at once, and the board lists the
+  server's live steps with counts: downloading (MB), reading pages, finding figures, mapping, writing the overview.
 - **The one-minute overview**, the default on every paper page. The opening scene is drawn instantly from the
-  paper's title while Claude Opus 5.5 writes the rest, one validated scene per line, straight into the player.
+  paper's title while Claude Opus 5.5 writes the rest, one validated scene per line, straight into the player. It
+  waits only for the text: the maps and the figures finish alongside, and each scene's voice starts as it lands.
   It is saved and replayed free for everyone after the first viewer (scenes and voice).
 - **Deep dive, Explain this, and chat** (Claude Haiku 5.5, with the whole paper in a cached prompt): a section
   deep dive (60 to 90 s), a 20 to 30 s explanation of any equation or figure, and questions answered as text
@@ -63,8 +68,8 @@ nothing. After any change, run it and report the counts; every bug someone finds
 - Everything the app saves (paper metadata, LaTeX text, figure crops, maps, voice files, caches) goes to
   `.data/`, which is gitignored. Delete it to start fresh.
 
-What costs money (all cached, so each thing is paid for once): the paper map (Claude Opus 5.5, about $0.20 for a
-normal paper, about $1 for a 135-page report), the overview (Opus, about $0.15 to $0.25 for a normal paper), deep
+What costs money (all cached, so each thing is paid for once): the paper maps (Claude Sonnet 5.5, a few cents for a
+normal paper, about $0.40 for a 135-page report), the overview (Opus, about $0.15 to $0.25 for a normal paper), deep
 dives, explanations and chat (Claude Haiku 5.5 with prompt caching, well under a cent each), and voice (OpenAI
 `gpt-4o-mini-tts`, about a cent per overview).
 
@@ -124,8 +129,8 @@ Next.js (App Router) + TypeScript, made to deploy with SST on AWS like the other
     Hugging Face Daily Papers; `cache.ts` cached answers with a time to live.
   - `latex.ts` unpacks the source, inlines every `\input`, finds each figure's images and caption (several
     images in one figure are laid side by side). `pdf.ts` the PDF path with pdf.js and `@napi-rs/canvas`.
-  - `structure.ts` the one Claude pass (structured JSON output). `papers.ts` ties it together: read once, save,
-    share; uploads only for their owner.
+  - `structure.ts` the quick map and the chunked full map (structured JSON output). `papers.ts` ties it together:
+    read once, save, share; uploads only for their owner. `progress.ts` the live steps the loading card shows.
   - `store.ts` **the storage interface**: plain files in `.data/` locally, and DynamoDB + S3 on AWS later,
     with nothing above it changing. `limits.ts` per-user daily limits (3 new papers a day to start).
   - `tts.ts` one sentence of voice, cached by its exact text. `auth.ts` who is asking.
