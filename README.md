@@ -24,3 +24,17 @@ questions, so you don't have to work it all out alone. For example:
 Each project's README has a starter question like this one.
 
 Code: MIT. Art in this repo made for these projects: CC-BY 4.0. The Kai and Nova character models are not included. See [LICENSE](LICENSE).
+
+## Tests
+
+Every project has tests, and GitHub Actions runs all of them on every push (the badge at the top).
+
+| Project | Tests | Run locally |
+|---|---|---|
+| Shooter Z | unit (game core, batch server), e2e in real browsers (desktop Chromium, iPhone WebKit, Android Chromium) | `cd shooter-z-fps && npm test && node test/e2e/fetch-models.mjs && npm run build && npx playwright test` |
+| Lights-Out Surfer | unit (game core, batch server), e2e on the same three devices | `cd runner && npm test && npm run build && npx playwright test` |
+| CarRacing, dashboard, explainers | reward wrappers on the real game, dashboard exporter, every page's script and links | `cd car-racing && python -m pytest tests -q` |
+
+Each game has a `USER_STORIES.md`: every control and flow, with the expected result and which test covers it.
+Rules: run the whole suite after any change (not only the tests near it); every bug a user finds becomes a
+story with a test; a fix is done when its test passes.

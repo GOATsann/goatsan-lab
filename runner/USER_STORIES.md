@@ -59,7 +59,7 @@ Test hooks:
   `window.game().tick` is 0.
 - Check: `#overlay`, `#title`, `#sub`, `#play`, `#race`, `#watch`, `#boardBtn`, `#saveRow`, `window.game().tick`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-002 The page title is the game name
 - Platforms: desktop | phone portrait
@@ -70,7 +70,7 @@ Test hooks:
   page and "Lights-Out Surfer · Watch the AI" on the watch page.
 - Check: `page.title()`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-003 The world animates behind the start card without the run starting
 - Platforms: desktop | phone portrait
@@ -92,7 +92,7 @@ Test hooks:
   other how-to screen in the game; this line is the whole tutorial.
 - Check: `.overlay .hint` text
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-005 Run starts the game from the card
 - Platforms: desktop | phone landscape | phone portrait
@@ -105,7 +105,7 @@ Test hooks:
   `window.game().dead` is false. The HUD (`.hud`) is visible.
 - Check: `#overlay[hidden]`, `window.game().tick`, `.hud`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-006 Space or Enter starts the game from the card
 - Platforms: desktop
@@ -116,7 +116,7 @@ Test hooks:
 - Expected: `#overlay` is hidden and `window.game().tick` rises.
 - Check: `#overlay[hidden]`, `window.game().tick`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-007 Enter in the name field starts the game
 - Platforms: desktop
@@ -141,7 +141,7 @@ Test hooks:
   mute.
 - Check: `#name` value, `#overlay`, `window.game().tick`, `window.sfx.muted`, `window.sfx.musicOn`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ---
 
@@ -158,7 +158,7 @@ Test hooks:
   button colour changes.
 - Check: `#charName`, `getComputedStyle(document.documentElement).getPropertyValue("--accent")`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-010 The chosen runner is remembered
 - Platforms: desktop | phone portrait
@@ -169,7 +169,7 @@ Test hooks:
 - Expected: `#charName` reads "Nova" after the reload and `localStorage["lights-out:runner"]` is "girl".
 - Check: `#charName`, localStorage
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-011 The name is remembered and capped at 16 characters
 - Platforms: desktop | phone portrait
@@ -181,7 +181,7 @@ Test hooks:
 - Expected: After the reload `#name` holds "Ike". The field never holds more than 16 characters.
 - Check: `#name` value, `maxlength` attribute
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-012 The level picker selects one level and shows the AI note
 - Platforms: desktop | phone portrait
@@ -194,7 +194,7 @@ Test hooks:
   `.level-info` is visible and reads "This also sets how good the AI is."
 - Check: `[data-level][aria-checked="true"]`, `.level-info` text
 - Source: 492d2e8
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-013 The chosen level is remembered and used for the run
 - Platforms: desktop | phone portrait
@@ -206,7 +206,7 @@ Test hooks:
   new run has `window.game().options.level === 2`.
 - Check: `[data-level="2"][aria-checked]`, localStorage, `window.game().options.level`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-014 A higher start level starts faster
 - Platforms: desktop
@@ -405,7 +405,7 @@ Test hooks:
 - Expected: `window.game().lane` goes 0, 1, 2, 1, 2.
 - Check: `window.game().lane`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-030 Lane changes stop at the edges
 - Platforms: desktop | phone portrait
@@ -415,7 +415,7 @@ Test hooks:
 - Expected: `window.game().lane` is 0 and stays 0; no error.
 - Check: `window.game().lane`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-031 Up arrow or W jumps
 - Platforms: desktop
@@ -427,7 +427,7 @@ Test hooks:
   lands within about 0.8 seconds.
 - Check: `window.game().grounded`, `window.game().y`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-032 Down arrow or S rolls for a fixed time
 - Platforms: desktop
@@ -439,7 +439,7 @@ Test hooks:
   seconds. Holding the key does not keep the runner rolling: it rolls once and stands up.
 - Check: `window.game().rolling`
 - Source: 98af981
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-033 A held key is one move, not many
 - Platforms: desktop
@@ -450,7 +450,7 @@ Test hooks:
 - Expected: The lane changes once, from 2 to 1, and does not continue to 0.
 - Check: `window.game().lane`
 - Source: 98af981
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-034 Rolling in the air drops the runner fast
 - Platforms: desktop
@@ -473,7 +473,7 @@ Test hooks:
   `rolling` true (or drops the runner if still in the air).
 - Check: `window.game().lane`, `grounded`, `rolling`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-036 A short tap or a slow drag during a run does nothing
 - Platforms: phone portrait
@@ -484,7 +484,7 @@ Test hooks:
 - Expected: The lane, `grounded` and `rolling` do not change and the run continues.
 - Check: `window.game().lane`, `grounded`, `rolling`, `dead`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-037 Inputs from before the run do not leak into it
 - Platforms: desktop
@@ -510,7 +510,7 @@ Test hooks:
   `[data-coins]` equals `window.game().coins`. The score is metres plus coin points and only rises.
 - Check: `[data-score]`, `[data-meters]`, `[data-coins]`, `window.game()`
 - Source: aa57e29
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-039 The track number shows only with ?debug
 - Platforms: desktop
@@ -531,7 +531,7 @@ Test hooks:
 - Expected: `window.game().seed` is 7 both times and the first obstacles are identical.
 - Check: `window.game().seed`, `window.game().obstacles`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-041 Coins are collected and counted
 - Platforms: desktop
@@ -689,7 +689,7 @@ Test hooks:
   visible. The HUD power-up badges and chaser icon are hidden once `dead` is true.
 - Check: `#overlay[hidden]` over time, `[data-chaser]`, `.booster`
 - Source: 437c259
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-055 The game-over card shows the result
 - Platforms: desktop | phone portrait
@@ -701,7 +701,7 @@ Test hooks:
   "<meters> m, <coins> coins · the Blackout caught you" for a catch. `#play` reads "Run again".
 - Check: `#title`, `#sub`, `#play` text vs `window.game()`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-056 The game-over card is compact and can unfold the settings
 - Platforms: desktop | phone portrait
@@ -736,7 +736,7 @@ Test hooks:
   from 0, `dead` false, score 0, coins 0, `stumbleCount` 0.
 - Check: `#overlay[hidden]`, `#saveRow[hidden]`, `window.game()`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-059 Space, Enter or a tap after the card shows starts a new run
 - Platforms: desktop | phone portrait
@@ -760,7 +760,7 @@ Test hooks:
   false.
 - Check: `#overlay[hidden]` while `window.game().dead === false`
 - Source: design (see the report: the current code shows the card over the new run)
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-061 Changing the level on the game-over card applies to the next run
 - Platforms: desktop | phone portrait
@@ -770,7 +770,7 @@ Test hooks:
 - Expected: The new run has `options.level === 0`.
 - Check: `window.game().options.level`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ---
 
@@ -788,7 +788,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   "Save score" and `#saveMsg` empty, hidden again once the next run starts.
 - Check: `#saveRow[hidden]`, `#save` text and `disabled`, `#saveMsg`
 - Source: 12553ff
-- Automated: no
+- Automated: yes (test/e2e/save.spec.ts)
 
 ### LS-063 Saving without a name asks for one
 - Platforms: desktop | phone portrait
@@ -799,7 +799,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   `#saveMsg` reads "Type your name first, so the board can show it."
 - Check: request log, `#overlay.compact`, `document.activeElement.id === "name"`, `#saveMsg`
 - Source: 12553ff
-- Automated: no
+- Automated: yes (test/e2e/save.spec.ts)
 
 ### LS-064 Saving while signed in saves at once
 - Platforms: desktop | phone portrait
@@ -812,7 +812,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   request body has `name` and a `replay` with `options.level` 1; it has no score field.
 - Check: `#save`, `#saveMsg`, request body
 - Source: 12553ff
-- Automated: no
+- Automated: yes (test/e2e/save.spec.ts)
 
 ### LS-065 A lower score says the best is unchanged
 - Platforms: desktop
@@ -835,7 +835,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   same origin and path as the game page.
 - Check: `#saveMsg`, localStorage, the sign-in request URL and its `return` parameter
 - Source: 12553ff
-- Automated: no
+- Automated: yes (test/e2e/save.spec.ts)
 
 ### LS-067 After signing in the player comes back to the game page and the score is saved
 - Platforms: desktop | phone portrait
@@ -849,7 +849,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   The toast hides after about 6 seconds. Exactly two score POSTs were made (the 401 and the success).
 - Check: `page.url()`, `#toast` text and `hidden`, localStorage, request count
 - Source: c8bf717, personal-site bd84ee9 (user-found: sign-in landed on the home page and the score was lost)
-- Automated: no
+- Automated: yes (test/e2e/save.spec.ts)
 
 ### LS-068 The main site's sign-in route returns to the page given in return= or returnTo=
 - Platforms: desktop
@@ -971,7 +971,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   request goes to `/api/surfer/leaderboard?level=2` with credentials.
 - Check: `#board`, `[data-board][aria-checked="true"]`, request URL
 - Source: 12553ff
-- Automated: no
+- Automated: yes (test/e2e/save.spec.ts)
 
 ### LS-078 The leaderboard lists rank, name and score, names as plain text
 - Platforms: desktop | phone portrait
@@ -982,7 +982,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   no `img` element exists inside `#boardList`. `#boardMe` reads "Your best here: 321, number 4."
 - Check: `#boardList li`, `#boardList img` count 0, `#boardMe`
 - Source: 12553ff
-- Automated: no
+- Automated: yes (test/e2e/save.spec.ts)
 
 ### LS-079 Switching boards loads that level
 - Platforms: desktop | phone portrait
@@ -993,7 +993,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   Easy answer does not overwrite it). Exactly one tab is checked.
 - Check: `#boardList` text, `[data-board][aria-checked]`
 - Source: 12553ff
-- Automated: no
+- Automated: yes (test/e2e/save.spec.ts)
 
 ### LS-080 An empty board invites the first score
 - Platforms: desktop
@@ -1013,7 +1013,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
 - Expected: `#boardList` reads "The leaderboard can't be reached right now."
 - Check: `#boardList .empty`
 - Source: 12553ff
-- Automated: no
+- Automated: yes (test/e2e/save.spec.ts)
 
 ### LS-082 Signed out, the board shows no personal line
 - Platforms: desktop | phone portrait
@@ -1023,7 +1023,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
 - Expected: The rows show and `#boardMe` is empty. No sign-in is asked for just to view the board.
 - Check: `#boardMe`, `page.url()` unchanged
 - Source: 12553ff
-- Automated: no
+- Automated: yes (test/e2e/save.spec.ts)
 
 ### LS-083 Close returns to the card
 - Platforms: desktop | phone portrait
@@ -1034,7 +1034,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   example "Saved") is kept.
 - Check: `#board[hidden]`, `#overlay`, `#save` text
 - Source: 12553ff
-- Automated: no
+- Automated: yes (test/e2e/save.spec.ts)
 
 ### LS-084 A long board scrolls inside the card on a phone
 - Platforms: phone portrait | phone landscape
@@ -1061,7 +1061,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   `window.race().ai.options.level` are both 2.
 - Check: `page.url()`, `#youName`, `#youRunner`, `#aiName`, `#aiRunner`, `window.race()`
 - Source: c997466, 492d2e8
-- Automated: no
+- Automated: yes (test/e2e/race-watch.spec.ts)
 
 ### LS-086 Without a stored name the player is called You
 - Platforms: desktop
@@ -1071,7 +1071,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
 - Expected: `#youName` reads "You".
 - Check: `#youName`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/race-watch.spec.ts)
 
 ### LS-087 The start level sets the AI's difficulty
 - Platforms: desktop
@@ -1084,7 +1084,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   Easy (the level's handicap). The page never names the level next to the AI; it says just "AI".
 - Check: `window.race().driver`, `window.race().ai.options.level`, `ai.meters`, `#aiName` text "AI"
 - Source: 9852a7c, 492d2e8 (user decision: the level sets the AI and the opponent is called just "AI")
-- Automated: no
+- Automated: yes (test/e2e/race-watch.spec.ts)
 
 ### LS-088 The race starts with a 3-2-1 countdown
 - Platforms: desktop | phone portrait
@@ -1095,7 +1095,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   the countdown and "race" from GO. Neither game's tick moves before GO.
 - Check: `#count` text and `hidden`, `window.race().phase`, `you.tick`, `ai.tick`
 - Source: c997466
-- Automated: no
+- Automated: yes (test/e2e/race-watch.spec.ts)
 
 ### LS-089 Both runs move on the same track at the same time
 - Platforms: desktop | phone portrait
@@ -1106,7 +1106,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   `#youScore`/`#aiScore` match the games' scores.
 - Check: `window.race()`, `#youScore`, `#aiScore`
 - Source: 35622d7
-- Automated: no
+- Automated: yes (test/e2e/race-watch.spec.ts)
 
 ### LS-090 Desktop and phone landscape show the race side by side; phone portrait stacks it
 - Platforms: desktop | phone landscape | phone portrait
@@ -1140,7 +1140,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   the AI keeps running and `phase` stays "race" until the result can no longer change.
 - Check: `#youOut`, `#aiOut`, `window.race().phase`, `ai.tick`
 - Source: c997466
-- Automated: no
+- Automated: yes (test/e2e/race-watch.spec.ts)
 
 ### LS-093 The result shows as soon as the winner is certain
 - Platforms: desktop | phone portrait
@@ -1153,7 +1153,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   AI scored <ai>." In case B your run stops at that moment.
 - Check: `window.race().phase`, `#overlay`, `#title`, `#sub`
 - Source: c997466, 492d2e8
-- Automated: no
+- Automated: yes (test/e2e/race-watch.spec.ts)
 
 ### LS-094 Race again restarts on a new track
 - Platforms: desktop | phone portrait
@@ -1164,7 +1164,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   0, and the new seed differs from the last one.
 - Check: `#overlay[hidden]`, `#count`, `window.race().you.tick`, seed
 - Source: c997466
-- Automated: no
+- Automated: yes (test/e2e/race-watch.spec.ts)
 
 ### LS-095 Back leaves the race for the start page
 - Platforms: desktop | phone portrait
@@ -1174,7 +1174,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
 - Expected: The browser is on `/` with the start card showing and the same name, runner and level.
 - Check: `page.url()`, `#overlay`, `#name`, `#charName`, `[data-level][aria-checked]`
 - Source: c997466
-- Automated: no
+- Automated: yes (test/e2e/race-watch.spec.ts)
 
 ### LS-096 Race results are not saved to the leaderboard
 - Platforms: desktop
@@ -1184,7 +1184,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
 - Expected: The race result card has no Save score button and no score request is sent.
 - Check: no `#save` on `/race.html`, request log
 - Source: 12553ff
-- Automated: no
+- Automated: yes (test/e2e/race-watch.spec.ts)
 
 ### LS-097 Without the model files the race uses the stand-in bot
 - Platforms: desktop
@@ -1222,7 +1222,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   model label in production builds.
 - Check: `page.url()`, `#level` value, `window.watch()`
 - Source: 03502ea
-- Automated: no
+- Automated: yes (test/e2e/race-watch.spec.ts)
 
 ### LS-100 Watch without a level opens on Hard
 - Platforms: desktop
@@ -1232,7 +1232,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
 - Expected: `#level` value is "2" and the game runs at level 2.
 - Check: `#level`, `window.watch().game.options.level`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/race-watch.spec.ts)
 
 ### LS-101 The panel shows the run number and the best score
 - Platforms: desktop | phone portrait
@@ -1243,7 +1243,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   seconds later a new run starts on its own and `#run` reads "2".
 - Check: `#run`, `#best`, `window.watch().runs`
 - Source: 85ab5a4
-- Automated: no
+- Automated: yes (test/e2e/race-watch.spec.ts)
 
 ### LS-102 Changing the level starts a new run at that level
 - Platforms: desktop | phone portrait
@@ -1254,7 +1254,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   `game.options.level` is 2.
 - Check: `#level`, `#run`, `window.watch()`
 - Source: 6963cbe
-- Automated: no
+- Automated: yes (test/e2e/race-watch.spec.ts)
 
 ### LS-103 Hide, H and a tap toggle the panel
 - Platforms: desktop | phone portrait
@@ -1265,7 +1265,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   playing throughout.
 - Check: `#panel[hidden]`, `window.watch().game.tick`
 - Source: 03502ea
-- Automated: no
+- Automated: yes (test/e2e/race-watch.spec.ts)
 
 ### LS-104 The watch page has no player controls
 - Platforms: desktop | phone portrait
@@ -1276,7 +1276,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   only Level, Run, Best, Hide, Back and the GitHub link (no move display, no AI picker).
 - Check: `#panel` children, `window.watch().game` unchanged by key presses (compare with a fixed seed)
 - Source: 6963cbe
-- Automated: no
+- Automated: yes (test/e2e/race-watch.spec.ts)
 
 ### LS-105 Back returns to the start page
 - Platforms: desktop | phone portrait
@@ -1286,7 +1286,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
 - Expected: The browser is on `/` with the start card.
 - Check: `page.url()` pathname "/", `#overlay`
 - Source: 03502ea
-- Automated: no
+- Automated: yes (test/e2e/race-watch.spec.ts)
 
 ### LS-106 A fixed seed replays the same AI run
 - Platforms: desktop
@@ -1366,7 +1366,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
 - Expected: The canvas CSS size equals `innerWidth` x `innerHeight` (not a corner of the screen).
 - Check: canvas `getBoundingClientRect()` vs window size
 - Source: 98af981
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-113 All three lanes are in view in portrait
 - Platforms: phone portrait
@@ -1388,7 +1388,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   `dead` false) and there is no page error.
 - Check: canvas size, `window.game().tick`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-115 Unverified: rotating a phone during a run keeps the run going
 - Platforms: phone portrait → phone landscape
@@ -1456,7 +1456,7 @@ The API origin is mocked in these stories with `page.route` (see `test/tools/sav
   score is created and no toast shows.
 - Check: `#overlay`, `#charName`, `#name`, `[data-level][aria-checked]`, `window.game().tick`, `#toast[hidden]`
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/play.spec.ts)
 
 ### LS-121 Reloading the race page mid-race starts a new race
 - Platforms: desktop

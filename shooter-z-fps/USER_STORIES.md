@@ -64,7 +64,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
 - Check: `!document.getElementById("menu").hidden`, `window.shooterZ.state === "menu"`, `document.title`
   contains "Shooter Z".
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-002 A live AI match plays behind the menu
 - Platforms: desktop | phone landscape | phone portrait
@@ -78,7 +78,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
 - Check: `window.shooterZ.rig.mode === "overview"`, `getComputedStyle(document.querySelector(".hud")).display === "none"`,
   `window.shooterZ.ai.models` equals `{0:"34m",1:"28m",2:"34m",3:"28m"}`.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-003 Desktop menu shows Play, Start tutorial, Watch AI vs AI and the controls card
 - Platforms: desktop
@@ -91,7 +91,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   (`#playTouch`, `#tutorialTouch`, `#watchPhone`) and the Touch controls field are hidden.
 - Check: `isVisible("#play")`, `isVisible(".controls-card")`, `isHidden("#playTouch")`.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-004 First visit suggests the tutorial
 - Platforms: desktop
@@ -154,7 +154,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   the choice.
 - Check: `[data-setting=mode] .on` data-v, `#modeNote` text, localStorage.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-011 The chosen mode is the mode of the match
 - Platforms: desktop | phone landscape
@@ -165,7 +165,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   or `ffa`.
 - Check: `window.shooterZ.match.game.agents.length`, `window.shooterZ.match.game.options.mode`.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-012 Map: Army training base or Spaceship
 - Platforms: desktop | phone landscape | phone portrait
@@ -177,7 +177,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   at once. A match started afterwards uses the chosen map.
 - Check: `window.shooterZ.match.game.map.id === "ship"` (then `"base"`) while still on the menu.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-013 Character select: four characters with a 3D preview and their Special Move
 - Platforms: desktop | phone landscape | phone portrait
@@ -213,7 +213,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   on phones). The choice is stored in `shooter-z:aiLevel`. No text on the page says "Trained AI".
 - Check: `[data-setting=aiLevel] .on` text; network requests matching `/shooter-ai-(\w+)\.onnx/`.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-016 The AI level decides which model plays each robot
 - Platforms: desktop
@@ -224,7 +224,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   (slot 1) is 28M, the opponents are 34M. Hard 1 vs 3: two 34M robots and the last slot 28M.
 - Check: `window.shooterZ.ai.models` per case.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-017 First to: 5, 10, 15 or 20 eliminations
 - Platforms: desktop | phone landscape
@@ -235,7 +235,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   choice is stored in `shooter-z:limit`.
 - Check: `window.shooterZ.match.game.options.scoreLimit === 5`, `.score .lim` text.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-018 Graphics: switching reloads the page with the new level
 - Platforms: desktop | phone landscape | phone portrait
@@ -319,7 +319,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
 - Expected: every control shows the changed value after the reload.
 - Check: `.seg[data-setting] .on` for each setting, `#chars [aria-checked=true]`, slider values.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-025 Menu buttons work with the keyboard and expose radio roles
 - Platforms: desktop
@@ -551,7 +551,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   the opponent robots are driven by the AI (`window.shooterZ.ai` is set).
 - Check: `window.shooterZ.state`, `window.shooterZ.rig.mode`, tick advancing.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-061 Clicking Play locks the mouse; without a lock the game asks for a click
 - Platforms: desktop
@@ -574,7 +574,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
 - Expected: the robot's position changes in each case (at most 6 m per second).
 - Check: `match.game.agents[0].x/z` before and after.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-063 Mouse movement aims
 - Platforms: desktop
@@ -595,7 +595,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   amount. A laser sound plays (when effects are on).
 - Check: `match.game.agents[0].shots`, `.ammo`.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-065 R reloads; firing an empty clip reloads by itself
 - Platforms: desktop
@@ -608,7 +608,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   the class `empty` while ammo is 0.
 - Check: `agents[0].reloadTicks`, `.ammo`, `.ammo.classList`.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-066 Space jumps
 - Platforms: desktop
@@ -618,7 +618,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
 - Expected: `agents[0].grounded` becomes false and `y` rises, then lands again. Space does not scroll the page.
 - Check: `match.game.agents[0].y`, `.grounded`.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-067 C or Ctrl crouches while held
 - Platforms: desktop
@@ -628,7 +628,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
 - Expected: `agents[0].crouch === true` while held and false after release.
 - Check: `match.game.agents[0].crouch`.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-068 E or right click uses the Special Move, then it cools down
 - Platforms: desktop
@@ -667,7 +667,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   Tab does not move focus to a menu button.
 - Check: `getComputedStyle(document.querySelector(".board")).display`.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-071 2v2 scoreboard groups the teams
 - Platforms: desktop | phone landscape
@@ -841,7 +841,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   ticks stop; held keys and buttons are released. `#clickHint` stays hidden.
 - Check: `isVisible("#pause")`, tick stable over 500 ms, `window.shooterZ.input.keys.size === 0`.
 - Source: design
-- Automated: no
+- Automated: written (test/e2e/desktop.spec.ts) but skipped: headless browsers give no pointer lock. Check by hand until it runs headed.
 
 ### SZ-101 Resume locks the mouse and plays on
 - Platforms: desktop
@@ -851,7 +851,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
 - Expected: the pointer is locked again, `#pause` is hidden and ticks advance.
 - Check: `document.pointerLockElement`, `isHidden("#pause")`, tick advancing.
 - Source: design
-- Automated: no
+- Automated: written (test/e2e/desktop.spec.ts) but skipped: headless browsers give no pointer lock. Check by hand until it runs headed.
 
 ### SZ-102 Leave match returns to the menu
 - Platforms: desktop
@@ -862,7 +862,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   not locked.
 - Check: `window.shooterZ.state === "menu"`, `isHidden("#pause")`.
 - Source: design
-- Automated: no
+- Automated: written (test/e2e/desktop.spec.ts) but skipped: headless browsers give no pointer lock. Check by hand until it runs headed.
 
 ### SZ-103 The pause menu has no settings
 - Platforms: desktop | phone landscape
@@ -900,7 +900,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   this one."; the music switches to the end level; on desktop the pointer lock is released.
 - Check: `match.game.over`, `.board h2` text, tick stable, `document.pointerLockElement === null`.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-111 Desktop: Enter plays again, Esc goes to the menu
 - Platforms: desktop
@@ -912,7 +912,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   settings (`over === false`, tick restarts near 0). Escape shows the menu.
 - Check: `.board .hint` text, `window.shooterZ.match.game.over`, `window.shooterZ.state`.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-112 Phone: Menu works by tap after a match ends (iOS)
 - Platforms: phone landscape (WebKit iPhone 13 landscape and Chromium Pixel 7 landscape)
@@ -926,7 +926,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   and threw).
 - Check: `isVisible("#touchEnd")`, `.touch` display none, `window.shooterZ.state === "menu"`, no `pageerror`.
 - Source: 73bb2ae
-- Automated: no
+- Automated: yes (test/e2e/phone.spec.ts)
 
 ### SZ-113 Phone: Play again works by tap after a match ends (iOS)
 - Platforms: phone landscape (WebKit and Chromium)
@@ -937,7 +937,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   `#touchEnd` hidden, touch controls shown again.
 - Check: `window.shooterZ.state`, `window.shooterZ.match.game.over`, tick.
 - Source: 73bb2ae
-- Automated: no
+- Automated: yes (test/e2e/phone.spec.ts)
 
 ### SZ-114 Touch controls step aside after the match
 - Platforms: phone landscape
@@ -948,7 +948,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   (`input.touch.fire === false`, `forward === 0`).
 - Check: `document.querySelector(".touch").classList.contains("off")`, `window.shooterZ.input.touch`.
 - Source: 73bb2ae
-- Automated: no
+- Automated: yes (test/e2e/phone.spec.ts)
 
 ### SZ-115 Unverified: the phone end screen tells you to press Enter
 - Platforms: phone landscape
@@ -974,7 +974,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   the HUD has the class `spectating`, ticks advance, and the robots meet and fire within 90 s.
 - Check: `window.shooterZ.state === "watch"`, `window.shooterZ.ai.models`, total `shots` of all agents > 0.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-121 Spectator bar: previous and next robot
 - Platforms: desktop | phone landscape | phone portrait
@@ -985,7 +985,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   robot's name and character; from overview or free camera it switches to follow; the auto-director stops.
 - Check: `window.shooterZ.rig.target`, `.specbar .who` text.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-122 Spectator bar: camera button cycles views
 - Platforms: desktop | phone landscape | phone portrait
@@ -996,7 +996,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   Robot's eyes -> Overview -> Follow (no free camera). The button text names the current view.
 - Check: `window.shooterZ.rig.mode` (`follow`, `pov`, `overview`, `free`), `[data-sb=cam]` text.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-123 Spectator bar: Menu
 - Platforms: desktop | phone landscape | phone portrait
@@ -1006,7 +1006,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
 - Expected: `state === "menu"` and `#menu` is visible.
 - Check: `window.shooterZ.state === "menu"`.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-124 Spectator keys on desktop
 - Platforms: desktop
@@ -1250,7 +1250,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   are hidden (`.touch.off`). After Resume, `#pause` is hidden, ticks advance and the controls are back.
 - Check: `isVisible("#pause")`, `window.shooterZ.touchPaused`, tick, `.touch.off`.
 - Source: 73bb2ae
-- Automated: no
+- Automated: yes (test/e2e/phone.spec.ts)
 
 ### SZ-153 Phone: Leave match works by tap from the pause menu (iOS)
 - Platforms: phone landscape (WebKit iPhone 13 landscape and Chromium Pixel 7 landscape)
@@ -1261,7 +1261,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   called the missing `document.exitPointerLock` and threw).
 - Check: `window.shooterZ.state === "menu"`, no `pageerror`.
 - Source: 73bb2ae
-- Automated: no
+- Automated: yes (test/e2e/phone.spec.ts)
 
 ### SZ-154 Touch play HUD fits a phone in landscape
 - Platforms: phone landscape
@@ -1334,7 +1334,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   hidden and every held touch is released.
 - Check: tick equal, `isVisible("#rotatePause")`, `isHidden("#pause")`, `.touch.off`.
 - Source: 73bb2ae
-- Automated: no
+- Automated: yes (test/e2e/phone.spec.ts)
 
 ### SZ-163 Turning back to landscape brings back Resume
 - Platforms: phone portrait -> phone landscape (WebKit and Chromium)
@@ -1346,7 +1346,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   after Resume ticks advance, `#pause` hides and the touch controls return. The match does not resume by itself.
 - Check: `isVisible("#pause")`, canvas `clientWidth/clientHeight` vs `innerWidth/innerHeight`, tick.
 - Source: 73bb2ae
-- Automated: no
+- Automated: yes (test/e2e/phone.spec.ts)
 
 ### SZ-164 Resume does nothing while the phone is still upright
 - Platforms: phone portrait
@@ -1404,7 +1404,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   itself; tapping `#resume` does.
 - Check: tick equal, `isVisible("#pause")`, `window.shooterZ.touchPaused`.
 - Source: 73bb2ae
-- Automated: no
+- Automated: yes (test/e2e/phone.spec.ts)
 
 ### SZ-171 Hiding the tab pauses desktop play
 - Platforms: desktop
@@ -1445,7 +1445,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   is taller than wide and 72 otherwise; the HUD stays inside the viewport; play continues without pausing.
 - Check: canvas `clientWidth/clientHeight`, `view.stage.camera.aspect`, `.fov`, tick advancing.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-175 Unverified: a narrow desktop window at load uses the phone layout
 - Platforms: desktop
@@ -1468,7 +1468,7 @@ and `devices["iPhone 13 landscape"]`) and Android Chromium (`devices["Pixel 7"]`
   is as chosen, and there are no page errors. The match is not resumed (no saved match state exists).
 - Check: `window.shooterZ.state === "menu"`, settings `.on` buttons.
 - Source: design
-- Automated: no
+- Automated: yes (test/e2e/desktop.spec.ts)
 
 ### SZ-177 Start links skip the menu
 - Platforms: desktop
