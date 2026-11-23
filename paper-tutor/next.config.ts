@@ -24,6 +24,8 @@ const nextConfig: NextConfig = {
   ...(isDev ? { allowedDevOrigins: (process.env.DEV_ORIGINS ?? "").split(",").filter(Boolean) } : {}),
   images: { unoptimized: true },
   // Native and worker-heavy packages stay outside the server bundle.
+  // The e2e suite runs its own dev server next to yours; it builds into its own folder.
+  ...(process.env.PT_DIST_DIR ? { distDir: process.env.PT_DIST_DIR } : {}),
   serverExternalPackages: ["@napi-rs/canvas", "pdfjs-dist", "undici"],
   // Uploads go through the proxy (sign-in); its default 10 MB body cap would cut off PDFs below our 40 MB limit.
   experimental: { proxyClientMaxBodySize: "41mb" },

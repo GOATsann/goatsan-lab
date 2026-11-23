@@ -51,6 +51,7 @@ npm run dev                    # http://localhost:3200
 npm run typecheck
 npm run build
 npm run test:e2e               # the user stories (USER_STORIES.md) on desktop Chromium and iPhone WebKit
+                               # (starts its own fresh dev server on :3210; PT_E2E_REUSE=1 uses yours on :3200)
 ```
 
 `npm run test:e2e` plays every control in every state (playing, paused, between scenes, at the end; normal,

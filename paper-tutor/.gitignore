@@ -10,6 +10,7 @@
 # Build output and dependencies
 node_modules/
 .next/
+.next-e2e/
 out/
 *.tsbuildinfo
 next-env.d.ts
