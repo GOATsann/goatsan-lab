@@ -7,3 +7,5 @@ public/audio/music.mp3
 public/models/
 sst-env.d.ts
 public/characters/
+test-results/
+playwright-report/
