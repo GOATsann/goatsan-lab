@@ -16,3 +16,5 @@ sst-env.d.ts
 # background music: Pixabay licence allows it inside the game, not redistribution (ASSETS.md)
 public/audio/
 media-src/
+test-results/
+playwright-report/

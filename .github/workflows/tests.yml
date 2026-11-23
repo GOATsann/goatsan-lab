@@ -24,6 +24,25 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  shooter-z-e2e:
+    name: Shooter Z e2e (desktop, iPhone, Android)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults: { run: { working-directory: shooter-z-fps } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: shooter-z-fps/package-lock.json }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+      # the AI models come from Hugging Face at the pinned revision (checksums in models.lock.json), never from git
+      - run: node test/e2e/fetch-models.mjs
+      - run: npm run build
+      - run: npx playwright test
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with: { name: shooter-z-e2e-traces, path: shooter-z-fps/test-results, retention-days: 7 }
+
   runner:
     name: Lights-Out Surfer (unit + typecheck + build)
     runs-on: ubuntu-latest
