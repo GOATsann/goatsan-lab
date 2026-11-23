@@ -61,6 +61,8 @@ export function usePlayer(initial: SceneList) {
     } catch {}
     setVoiceOn(on);
     const e = new PlayerEngine({ ...initial, scenes: [...initial.scenes] }, loadSentence, on);
+    // Tests read the player's state (audio muted, position, speed) from here; never in a production build.
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __ptEngine?: PlayerEngine }).__ptEngine = e;
     const off = e.subscribe(rerender);
     setEngine(e);
     return () => {
@@ -146,10 +148,14 @@ export function Whiteboard({ engine, voiceOn, toggleVoice, theme, onTheme, paper
   }, [fs]);
   const askFromPlayer = () => {
     // Leave full screen synchronously (so the question box can take focus inside this tap), then hand over.
-    if (fs === "native") void document.exitFullscreen?.();
     document.documentElement.classList.remove("pt-fullscreen");
-    setFs("off");
     setMenu(false);
+    if (fs === "native" && document.fullscreenElement) {
+      // The browser's own full screen ends asynchronously; the box can only take focus after it has.
+      void document.exitFullscreen().then(() => onAsk?.(), () => onAsk?.());
+      return;
+    }
+    setFs("off");
     onAsk?.();
   };
   useEffect(() => {
@@ -325,6 +331,7 @@ export function Whiteboard({ engine, voiceOn, toggleVoice, theme, onTheme, paper
             onSpeed={(v) => engine.setSpeed(v)}
             voiceOn={voiceOn}
             onVoice={(on) => on !== voiceOn && toggleVoice()}
+            inside={fs !== "off" ? frame.current : null}
           />
         ) : null}
       </div>

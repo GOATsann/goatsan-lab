@@ -19,9 +19,10 @@ type Props = {
   onSpeed: (v: number) => void;
   voiceOn: boolean;
   onVoice: (on: boolean) => void;
+  inside?: HTMLElement | null; // full screen: the sheet must live inside the full-screen element to be seen
 };
 
-function Rows({ theme, onTheme, speed, onSpeed, voiceOn, onVoice }: Omit<Props, "onClose">) {
+function Rows({ theme, onTheme, speed, onSpeed, voiceOn, onVoice }: Omit<Props, "onClose" | "inside">) {
   return (
     <div className="settings-rows">
       {onTheme ? (
@@ -101,7 +102,7 @@ export function SettingsPanel(props: Props) {
     );
   }
   return createPortal(
-    <div className="settings-backdrop">
+    <div className={`settings-backdrop ${props.inside ? "is-inside" : ""}`}>
       <div
         ref={box}
         className="settings settings-sheet"
@@ -136,6 +137,6 @@ export function SettingsPanel(props: Props) {
         <Rows {...props} />
       </div>
     </div>,
-    document.body,
+    props.inside ?? document.body,
   );
 }

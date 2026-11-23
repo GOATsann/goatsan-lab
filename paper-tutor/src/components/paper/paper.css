@@ -1007,11 +1007,20 @@
   color: var(--ink-3);
 }
 @media (max-width: 960px) {
+  /* phones: the pinned player and the tabs already take the top of the screen, so the search and the index
+     scroll with the outline instead of pinning too */
   .outline-tools {
-    top: calc(var(--stage-h, 0px) + 42px);
+    position: static;
     margin: 0 0 12px;
     padding: 10px 0;
     background: var(--paper);
+  }
+  .outline-item,
+  #outline-figures,
+  .side-col button,
+  .side-col .figure-open {
+    scroll-margin-top: calc(var(--stage-h, 0px) + 56px);
+    scroll-margin-bottom: 150px;
   }
 }
 

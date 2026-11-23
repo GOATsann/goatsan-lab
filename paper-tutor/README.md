@@ -45,7 +45,13 @@ cp .env.example .env.local     # then fill in the keys (never commit them; this 
 npm run dev                    # http://localhost:3200
 npm run typecheck
 npm run build
+npm run test:e2e               # the user stories (USER_STORIES.md) on desktop Chromium and iPhone WebKit
 ```
+
+`npm run test:e2e` plays every control in every state (playing, paused, between scenes, at the end; normal,
+pinned, full screen; desktop, phone portrait and landscape) with the voice on, checking the audio element itself.
+Every API is stubbed from `e2e/fixtures` (a made-up paper, a short generated tone as the voice), so a run costs
+nothing. After any change, run it and report the counts; every bug someone finds gets a story and a test first.
 
 - `?voice=off` on any paper page plays with captions only and costs nothing. The voice button under the
   board does the same and is remembered.

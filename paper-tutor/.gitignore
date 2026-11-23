@@ -25,3 +25,7 @@ sst-env.d.ts
 *.safetensors
 
 .DS_Store
+
+# Playwright output
+test-results/
+playwright-report/

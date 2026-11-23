@@ -27,6 +27,7 @@ export class PlayerEngine {
   current = -1; // sentence being spoken
   voiceError: string | null = null;
   speed = 1; // playback speed (voice and drawing pace)
+  private audioFor = -1; // which sentence of this scene the audio element holds
   private cur: Scene = { say: "", draw: [] };
 
   private voiceOn: boolean;
@@ -93,11 +94,45 @@ export class PlayerEngine {
     if (on === this.voiceOn) return;
     this.voiceOn = on;
     this.voiceError = null;
-    if (!on) this.audio?.pause();
-    // The sentence being spoken keeps its length; the next ones use the new setting.
+    // Muting keeps the sentence's audio running, silently, so unmuting picks it up at the same moment.
+    if (this.audio) this.audio.muted = !on;
+    if (on) this.joinCurrentSentence();
     this.preload(this.sceneIndex);
     this.preload(this.sceneIndex + 1);
     this.emit();
+  }
+
+  // Voice turned on in the middle of a sentence that started silent: fetch its voice and join at the matching
+  // point; the sentence then ends when the voice does.
+  private joinCurrentSentence() {
+    const k = this.current;
+    if (k < 0 || !this.speaking() || this.audioFor === k) return;
+    const sentence = this.sentences[k];
+    const scene = this.cur;
+    this.loadClip(sentence);
+    void this.clips.get(this.key(sentence))?.then((clip) => {
+      if (!clip.url || !this.audio || this.cur !== scene || this.current !== k || !this.voiceOn || !this.speaking()) return;
+      const elapsed = this.time - this.sentStart[k];
+      const pos = elapsed * this.speed;
+      if (pos >= clip.seconds - 0.3) return; // nearly over: the next sentence will have its voice
+      this.audio.src = clip.url;
+      this.audio.currentTime = pos;
+      this.audio.playbackRate = this.speed;
+      this.audio.muted = false;
+      this.audioFor = k;
+      this.sentDur[k] = elapsed + (clip.seconds - pos) / this.speed;
+      this.timingCache = null;
+      if (this.playing) void this.audio.play().catch(() => {});
+      this.emit();
+    });
+  }
+
+  // What the audio element is doing (for tests and the debug overlay).
+  audioState() {
+    const a = this.audio;
+    return a
+      ? { hasSource: Boolean(a.src) && !a.src.startsWith("data:"), muted: a.muted, paused: a.paused, currentTime: a.currentTime, playbackRate: a.playbackRate, sentence: this.current, voicedSentence: this.audioFor }
+      : null;
   }
   get voice() {
     return this.voiceOn;
@@ -131,6 +166,7 @@ export class PlayerEngine {
     this.ended = false;
     this.timingCache = null;
     this.audio?.pause();
+    this.audioFor = -1;
     this.preload(this.sceneIndex);
     this.preload(this.sceneIndex + 1);
   }
@@ -275,9 +311,12 @@ export class PlayerEngine {
         this.audio.src = clip.url;
         this.audio.currentTime = 0;
         this.audio.playbackRate = this.speed;
+        this.audio.muted = !this.voiceOn;
+        this.audioFor = k;
         if (this.playing) void this.audio.play().catch(() => {});
       } else {
         this.audio.pause();
+        this.audioFor = -1;
       }
     }
     return true;
