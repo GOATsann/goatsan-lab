@@ -48,6 +48,7 @@ export async function stubApp(page: Page, opts: StubOptions = {}): Promise<Calls
     return r.fulfill({ status: 200, contentType: "application/x-ndjson", body: ndjson(lines) });
   });
   await page.route(`**/api/papers/${PAPER_ID}`, (r) => json(r, { meta, ingest, structure }));
+  await page.route(`**/api/papers/${PAPER_ID}/progress`, (r) => json(r, { progress: null }));
   await page.route(`**/api/papers/${PAPER_ID}/ingest`, (r) => json(r, { ingest }));
   await page.route("**/auth/signin**", (r) => {
     calls.signIn++;
