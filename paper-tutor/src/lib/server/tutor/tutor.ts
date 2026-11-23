@@ -257,6 +257,7 @@ Put the explanation on the video with show_on_video (all its scenes in one call)
 short sentence.`,
         images,
         tools: ["show_on_video"],
+        stopAfterVideo: true,
         maxScenes,
         figures: ctx.ingest.figures,
         sectionIds: ctx.sectionIds,

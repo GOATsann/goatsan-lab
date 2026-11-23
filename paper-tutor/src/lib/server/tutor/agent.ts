@@ -97,6 +97,7 @@ export type AgentOpts = {
   figures: Figure[];
   sectionIds: Set<string>;
   board?: { say?: string; draw?: DrawStep[] }; // what the viewer is looking at (for video answers)
+  stopAfterVideo?: boolean; // deep dives and explanations: done once the video is written
 };
 
 export async function* runAgent(o: AgentOpts): AsyncGenerator<AgentPart> {
@@ -171,6 +172,7 @@ export async function* runAgent(o: AgentOpts): AsyncGenerator<AgentPart> {
     }
     const calls = msg.content.filter((b): b is ToolUseBlock => b.type === "tool_use");
     if (msg.stop_reason !== "tool_use" || !calls.length) break;
+    if (o.stopAfterVideo && scenes > 0) break;
 
     // Run the tools (each input checked), then let the model continue.
     const results: ToolResultBlockParam[] = [];
