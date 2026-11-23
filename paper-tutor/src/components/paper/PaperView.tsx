@@ -592,6 +592,12 @@ export function PaperView({ slug }: { slug: string }) {
                     }
                   : undefined
               }
+              onAsk={() => {
+                setTab("session");
+                const box = document.getElementById("ask-q") as HTMLTextAreaElement | null;
+                box?.focus();
+                box?.scrollIntoView({ block: "nearest" });
+              }}
               onPlayStart={() => {
                 if (track.kind === "overview") addCard({ id: newId(), kind: "overview" });
               }}

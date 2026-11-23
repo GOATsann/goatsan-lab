@@ -1028,3 +1028,16 @@
     top: 0;
   }
 }
+
+/* full screen (the CSS fallback on iPhone): only the player, nothing of the page on top of it */
+html.pt-fullscreen .ask-dock,
+html.pt-fullscreen .side-tabs,
+html.pt-fullscreen .acct {
+  display: none;
+}
+html.pt-fullscreen .stage-slot {
+  z-index: 80;
+}
+html.pt-fullscreen body {
+  overflow: hidden;
+}

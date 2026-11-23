@@ -811,6 +811,7 @@
   position: relative;
 }
 .frame-caption {
+  pointer-events: none;
   display: none;
   position: absolute;
   left: 50%;

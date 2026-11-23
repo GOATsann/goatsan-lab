@@ -8,7 +8,7 @@ import { idToSlug } from "@/lib/arxivId";
 import { signInHref } from "@/lib/client/useMe";
 import { Board, FigureClick } from "./Board";
 import { SettingsPanel } from "./Settings";
-import { ChevronLeft, Maximize, Minimize, Pause, Play, Settings, SkipBack, SkipForward, Volume2, VolumeX } from "lucide-react";
+import { ChevronLeft, Maximize, MessageSquare, Minimize, Pause, Play, Settings, SkipBack, SkipForward, Volume2, VolumeX } from "lucide-react";
 import "./player.css";
 
 // The whiteboard player: draws and voices a scene list. Play, pause, skip scenes, voice on or off.
@@ -98,12 +98,13 @@ type Props = {
   onBack?: () => void; // shown on the board when it isn't the overview
   onPlayStart?: () => void; // the big play button was pressed (before it plays)
   action?: { label: string; onClick: () => void }; // one clear call to action on the board ("Resume overview")
+  onAsk?: () => void; // the Ask button in the control bar (leaves full screen first)
 };
 
 
 // Like a video player: the controls sit inside the frame, at the bottom, and hide while it plays; a tap or a
 // mouse move brings them back.
-export function Whiteboard({ engine, voiceOn, toggleVoice, theme, onTheme, paperSlug, onStart, startLabel, sectionTitle, onCite, onFigure, label, onBack, onPlayStart, action }: Props) {
+export function Whiteboard({ engine, voiceOn, toggleVoice, theme, onTheme, paperSlug, onStart, startLabel, sectionTitle, onCite, onFigure, label, onBack, onPlayStart, action, onAsk }: Props) {
   const frame = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(true);
   const [menu, setMenu] = useState(false);
@@ -137,6 +138,19 @@ export function Whiteboard({ engine, voiceOn, toggleVoice, theme, onTheme, paper
     else if (fs === "css") setFs("off");
     else if (el?.requestFullscreen && document.fullscreenEnabled) void el.requestFullscreen().catch(() => setFs("css"));
     else setFs("css");
+  };
+  // While full screen, the page around the player (question box, tabs, account button) steps aside.
+  useEffect(() => {
+    document.documentElement.classList.toggle("pt-fullscreen", fs !== "off");
+    return () => document.documentElement.classList.remove("pt-fullscreen");
+  }, [fs]);
+  const askFromPlayer = () => {
+    // Leave full screen synchronously (so the question box can take focus inside this tap), then hand over.
+    if (fs === "native") void document.exitFullscreen?.();
+    document.documentElement.classList.remove("pt-fullscreen");
+    setFs("off");
+    setMenu(false);
+    onAsk?.();
   };
   useEffect(() => {
     if (fs !== "css") return;
@@ -283,6 +297,11 @@ export function Whiteboard({ engine, voiceOn, toggleVoice, theme, onTheme, paper
                 {Math.min(shownIndex + 1, real)} / {real}
               </span>
               <span className="pbar-spacer" />
+              {onAsk ? (
+                <button type="button" className="pbtn" onClick={askFromPlayer} aria-label="Ask a question">
+                  <MessageSquare size={18} strokeWidth={2} />
+                </button>
+              ) : null}
               <button type="button" className="pbtn" onClick={() => (toggleVoice(), poke())} aria-label={voiceOn ? "Mute the voice" : "Turn the voice on"} aria-pressed={!voiceOn}>
                 {voiceOn ? <Volume2 size={19} strokeWidth={2} /> : <VolumeX size={19} strokeWidth={2} />}
               </button>
