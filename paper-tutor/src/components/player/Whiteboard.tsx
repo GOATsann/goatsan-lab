@@ -5,7 +5,7 @@ import { PlayerEngine, type Clip } from "@/lib/player/engine";
 import type { DrawStep, SceneList } from "@/lib/scenes/types";
 import type { ThemeName } from "@/lib/types";
 import { idToSlug } from "@/lib/arxivId";
-import { signInHref } from "@/lib/client/useMe";
+import { goToSignIn, useSignInPending, warmProps } from "@/lib/client/signIn";
 import { Board, FigureClick } from "./Board";
 import { SettingsPanel } from "./Settings";
 import { ChevronLeft, Maximize, MessageSquare, Minimize, Pause, Play, Settings, SkipBack, SkipForward, Volume2, VolumeX } from "lucide-react";
@@ -356,15 +356,7 @@ export function Whiteboard({ engine, voiceOn, toggleVoice, theme, onTheme, paper
           {engine.voiceError.startsWith("Sign in") ? (
             <>
               The voice is for signed-in viewers, so this plays with captions.{" "}
-              <a
-                href="#sign-in"
-                onClick={(e) => {
-                  e.preventDefault();
-                  location.assign(signInHref());
-                }}
-              >
-                Sign in
-              </a>
+              <SignInLink />
             </>
           ) : (
             <>The voice couldn&apos;t load ({engine.voiceError}), so this plays with captions.</>
@@ -372,5 +364,22 @@ export function Whiteboard({ engine, voiceOn, toggleVoice, theme, onTheme, paper
         </p>
       ) : null}
     </div>
+  );
+}
+
+function SignInLink() {
+  const pending = useSignInPending();
+  return (
+    <a
+      href="#sign-in"
+      aria-disabled={pending || undefined}
+      {...warmProps}
+      onClick={(e) => {
+        e.preventDefault();
+        goToSignIn();
+      }}
+    >
+      {pending ? "Opening sign-in…" : "Sign in"}
+    </a>
   );
 }

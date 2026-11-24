@@ -77,3 +77,41 @@
 .acct-item:hover {
   background: rgba(255, 255, 255, 0.07);
 }
+
+/* On the way to sign-in (src/lib/client/signIn.ts). */
+.acct-signin[aria-disabled="true"] {
+  pointer-events: none;
+  opacity: 0.85;
+  gap: 6px;
+}
+.signin-pending {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(8, 12, 28, 0.88);
+  color: #eef1fb;
+  font-size: 0.95rem;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+}
+.signin-spin {
+  animation: signin-spin 900ms linear infinite;
+}
+@keyframes signin-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .signin-spin {
+    animation: none;
+  }
+}

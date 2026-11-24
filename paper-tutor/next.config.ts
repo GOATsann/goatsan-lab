@@ -9,7 +9,8 @@ const csp = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://cdn-thumbnails.huggingface.co https://huggingface.co",
   "font-src 'self' data:",
-  `connect-src 'self'${isDev ? " ws:" : ""}`,
+  // The sign-in warm-up wakes www's server before the redirect (src/lib/client/signIn.ts).
+  `connect-src 'self'${process.env.NEXT_PUBLIC_AUTH_ORIGIN ? ` ${process.env.NEXT_PUBLIC_AUTH_ORIGIN}` : ""}${isDev ? " ws:" : ""}`,
   "media-src 'self' blob: data:",
   "worker-src 'self' blob:",
   "object-src 'none'",

@@ -7,7 +7,8 @@ import { titleCard } from "@/lib/scenes";
 import { ProgressCard, type Progress } from "./ProgressCard";
 import type { DrawStep, Scene, SceneList } from "@/lib/scenes/types";
 import { isUploadId, slugToId } from "@/lib/arxivId";
-import { signInHref, useMe } from "@/lib/client/useMe";
+import { useMe } from "@/lib/client/useMe";
+import { goToSignIn } from "@/lib/client/signIn";
 import { readChat, readScenes, StreamError } from "@/lib/client/streams";
 import { usePlayer, Whiteboard } from "@/components/player/Whiteboard";
 import { renderRich } from "@/components/player/math";
@@ -196,7 +197,7 @@ export function PaperView({ slug }: { slug: string }) {
       if (!engine || !state) return;
       setTutorError(null);
       if (me === null) {
-        location.assign(signInHref("overview"));
+        goToSignIn("overview");
         return;
       }
       const list: SceneList = { title: state.meta.title, paper: state.meta.source === "arxiv" ? state.meta.id : undefined, scenes: [] };
@@ -285,7 +286,7 @@ export function PaperView({ slug }: { slug: string }) {
       if (!engine || !state) return;
       setTutorError(null);
       if (me === null) {
-        location.assign(signInHref());
+        goToSignIn();
         return;
       }
       liveAbort.current?.abort();
@@ -409,7 +410,7 @@ export function PaperView({ slug }: { slug: string }) {
   const ask = useCallback(
     async (question: string, mode: AskMode) => {
       if (me === null) {
-        location.assign(signInHref());
+        goToSignIn();
         return;
       }
       if (!engine) return;
@@ -508,7 +509,7 @@ export function PaperView({ slug }: { slug: string }) {
   const read = useCallback(async () => {
     setReadError(null);
     if (me === null) {
-      location.assign(signInHref("read"));
+      goToSignIn("read");
       return;
     }
     setReading(true);

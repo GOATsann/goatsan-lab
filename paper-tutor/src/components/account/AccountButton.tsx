@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { signInHref, signOutHref, useAuthEnabled, useMe } from "@/lib/client/useMe";
+import { signOutHref, useAuthEnabled, useMe } from "@/lib/client/useMe";
+import { goToSignIn, useSignInPending, warmProps } from "@/lib/client/signIn";
+import { LoaderCircle } from "lucide-react";
 import "./account.css";
 
 // The one account control for every theonlygoatsan.com app page, always top-right (copied from the personal
 // site so it looks the same everywhere). Signed out: "Sign in". Signed in: an initial that opens a small menu
 // with the email and "Sign out".
 export function AccountButton() {
+  const signingIn = useSignInPending();
   const me = useMe();
   const authOn = useAuthEnabled();
   const [open, setOpen] = useState(false);
@@ -35,12 +38,21 @@ export function AccountButton() {
         <a
           className="acct-signin"
           href="#sign-in"
+          aria-disabled={signingIn || undefined}
+          {...warmProps}
           onClick={(e) => {
             e.preventDefault();
-            location.assign(signInHref());
+            goToSignIn();
           }}
         >
-          Sign in
+          {signingIn ? (
+            <>
+              <LoaderCircle size={14} strokeWidth={2.5} className="signin-spin" aria-hidden />
+              Opening sign-in…
+            </>
+          ) : (
+            "Sign in"
+          )}
         </a>
       </div>
     );

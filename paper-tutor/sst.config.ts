@@ -67,6 +67,8 @@ export default $config({
         SPEND_CAP_USD: "50",
         ...(workos ?? { AUTH_MODE: "www" }),
         NEXT_PUBLIC_AUTH_ORIGIN: "https://www.theonlygoatsan.com",
+        // The hosted sign-in page (WorkOS AuthKit); the browser connects to it early when someone heads to sign in.
+        NEXT_PUBLIC_AUTHKIT_ORIGIN: "https://glorious-peacock-56.authkit.app",
       },
       // 60 s is CloudFront's longest wait between bytes (the overview streams, so it never waits that long).
       server: { timeout: "60 seconds", memory: "2048 MB", architecture: "arm64" }, // arm64 matches the canvas binary in open-next.config.ts

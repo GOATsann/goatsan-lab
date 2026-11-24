@@ -79,6 +79,7 @@ scrolled), full screen. Device: desktop, phone portrait, phone landscape.
 | A02 | Signed out: watch a saved overview | any | Plays | auto |
 | A03 | New papers per day limit | 4th new paper | A clear message; nothing is written | manual (server) |
 | A04 | Login through www (AUTH_MODE=www, no WorkOS keys here) | signed in, signed out, www down or slow | The user www reports; nobody if www says null, fails or takes over 1.5 s; a refreshed session cookie goes back to the browser; a browser can't fake the user header | auto (mock www) |
+| A04b | Tap anything that leads to sign-in (account button, the voice note's Sign in, play or ask while signed out) | signed out | Within 100 ms the button says "Opening sign-in…" with a spinner and is disabled, and a pill confirms it; a double tap starts one sign-in; back from sign-in (back/forward cache) clears it. On hover, focus or touch the browser connects to www and WorkOS early and wakes www's server | auto |
 | M01 | Phone: question box | scrolled | Always visible at the bottom | auto |
 
 ## Found by the suite and the exploratory pass

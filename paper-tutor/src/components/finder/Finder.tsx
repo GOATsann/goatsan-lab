@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import type { PaperCard } from "@/lib/types";
 import { CATEGORIES } from "@/lib/categories";
 import { idToSlug, parseArxivId } from "@/lib/arxivId";
-import { signInHref, useMe } from "@/lib/client/useMe";
+import { useMe } from "@/lib/client/useMe";
+import { goToSignIn } from "@/lib/client/signIn";
 import { PaperRow } from "../PaperRow";
 
 // Find a paper: one box for arXiv search or a pasted arXiv link, a PDF upload, today's trending papers, and the
@@ -59,7 +60,7 @@ export function Finder() {
   const openLink = async (url: string) => {
     setLinkError(null);
     if (me === null) {
-      location.assign(signInHref());
+      goToSignIn();
       return;
     }
     setOpening(true);
@@ -87,7 +88,7 @@ export function Finder() {
   const pickFile = () => {
     setUploadError(null);
     if (me === null) {
-      location.assign(signInHref("upload"));
+      goToSignIn("upload");
       return;
     }
     fileInput.current?.click();
