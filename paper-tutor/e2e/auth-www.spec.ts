@@ -15,7 +15,7 @@ async function me(cookie?: string, extra: Record<string, string> = {}) {
 
 test.describe("@desktop-only A04 login through www", () => {
   test("signed in on www: the user, and the refreshed session cookie goes back to the browser", async () => {
-    const r = await me("wos-session=GOOD");
+    const r = await me(`wos-session=GOOD-${Date.now()}`); // a fresh session, so not answered from the cache
     expect(r.status).toBe(200);
     expect(r.body.auth).toBe(true);
     expect(r.body.user?.id).toBe("user_www");
@@ -40,6 +40,21 @@ test.describe("@desktop-only A04 login through www", () => {
     expect(r.body.user).toBeNull();
     const r2 = await me(undefined, { "x-pt-user": fake });
     expect(r2.body.user).toBeNull();
+  });
+
+  test("one www call per session per 30 s, and none for public reads", async () => {
+    const count = async () => ((await (await fetch("http://127.0.0.1:3299/count")).json()) as { calls: number }).calls;
+    const cookie = `wos-session=GOOD-cache-${Date.now()}`;
+    const before = await count();
+    expect((await me(cookie)).body.user?.id).toBe("user_www");
+    expect((await me(cookie)).body.user?.id).toBe("user_www");
+    expect((await me(cookie)).body.user?.id).toBe("user_www");
+    expect((await count()) - before).toBeLessThanOrEqual(1);
+    const ctx = await pw.newContext({ baseURL: APP });
+    const mid = await count();
+    await ctx.get("/api/search?q=2401.00001", { headers: { cookie: "wos-session=NULL" } });
+    expect(await count()).toBe(mid);
+    await ctx.dispose();
   });
 
   test("actions that need sign-in are refused for nobody", async () => {

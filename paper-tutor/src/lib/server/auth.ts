@@ -1,7 +1,7 @@
 import "server-only";
 import { headers } from "next/headers";
 import { withAuth } from "@workos-inc/authkit-nextjs";
-import { lookupWwwUser } from "./wwwSession";
+import { lookupWwwUserCached } from "./wwwSession";
 
 // One login for every theonlygoatsan.com app (WorkOS AuthKit, run by the personal site). This app never
 // handles the callback: sign-in starts and ends on www, and the sealed `wos-session` cookie is shared across
@@ -53,7 +53,7 @@ async function wwwUser(): Promise<User | null> {
       return null;
     }
   }
-  return (await lookupWwwUser(h.get("cookie"), { url: process.env.WWW_ME_URL || undefined })).user;
+  return (await lookupWwwUserCached(h.get("cookie"), { url: process.env.WWW_ME_URL || undefined })).user;
 }
 
 export class AuthError extends Error {

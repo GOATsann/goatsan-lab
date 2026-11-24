@@ -3,6 +3,8 @@
 //   the whole answer.
 // - @napi-rs/canvas renders PDF pages and crops figures. Its native binary must be the Linux arm64 build (the Lambda runs on arm64),
 //   not the one on the build machine.
+// - Middleware stays internal (OpenNext's default: no `middleware` key here). Login through www relies on the proxy
+//   running in the same process as the routes; never set middleware.external without changing src/proxy.ts.
 const config = {
   default: {
     override: { wrapper: "aws-lambda-streaming" },

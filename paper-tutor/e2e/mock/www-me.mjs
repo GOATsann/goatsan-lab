@@ -3,6 +3,7 @@
 import http from "node:http";
 
 const port = Number(process.argv[2] || 3299);
+let calls = 0;
 http
   .createServer((req, res) => {
     const m = /wos-session=([A-Z]+)/.exec(req.headers.cookie ?? "");
@@ -12,6 +13,8 @@ http
       res.end(JSON.stringify(body));
     };
     if (req.url === "/health") return send(200, { ok: true });
+    if (req.url === "/count") return send(200, { calls });
+    calls++;
     if (v === "GOOD") return send(200, { user: { id: "user_www", email: "www@example.com", name: "Www" }, auth: true }, { "set-cookie": "wos-session=GOOD; Domain=localhost; Path=/; HttpOnly" });
     if (v === "FAIL") return send(500, { error: "boom" });
     if (v === "SLOW") return setTimeout(() => send(200, { user: { id: "late", email: "l@x.y" } }), 3000);

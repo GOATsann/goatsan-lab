@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import { lookupWwwUser } from "../src/lib/server/wwwSession";
+import { clearWwwUserCache, lookupWwwUser, lookupWwwUserCached, needsUser } from "../src/lib/server/wwwSession";
 
 // Login option "www": asking the main site who is signed in. A local server stands in for
 // https://www.theonlygoatsan.com/api/me and answers as each case needs.
@@ -9,12 +9,14 @@ import { lookupWwwUser } from "../src/lib/server/wwwSession";
 type Mode = "user" | "null" | "slow" | "500" | "refresh" | "junk";
 let mode: Mode = "user";
 let lastCookie = "";
+let calls = 0;
 let server: http.Server;
 let url = "";
 
 test.beforeAll(async () => {
   server = http.createServer((req, res) => {
     lastCookie = req.headers.cookie ?? "";
+    calls++;
     const json = (status: number, body: unknown, extra: Record<string, string | string[]> = {}) => {
       res.writeHead(status, { "content-type": "application/json", ...extra });
       res.end(JSON.stringify(body));
@@ -84,4 +86,48 @@ test("W06 no session cookie: nobody, without calling www", async () => {
 test("W07 a malformed answer is nobody", async () => {
   mode = "junk";
   expect((await lookupWwwUser(COOKIE, { url })).user).toBeNull();
+});
+
+test("W08 cache: one www call per session per 30 s; failures aren't kept", async () => {
+  clearWwwUserCache();
+  let t = 1_000_000;
+  const now = () => t;
+  mode = "user";
+  calls = 0;
+  const a = await lookupWwwUserCached(COOKIE, { url, now });
+  const b = await lookupWwwUserCached(COOKIE, { url, now });
+  expect(a.user?.id).toBe("user_1");
+  expect(b.user?.id).toBe("user_1");
+  expect(b.cached).toBe(true);
+  expect(calls).toBe(1);
+  // Another session is its own entry.
+  await lookupWwwUserCached("wos-session=OTHER", { url, now });
+  expect(calls).toBe(2);
+  // After 30 s, ask again.
+  t += 31_000;
+  await lookupWwwUserCached(COOKIE, { url, now });
+  expect(calls).toBe(3);
+  // A failure isn't cached: the next call asks again.
+  clearWwwUserCache();
+  mode = "500";
+  await lookupWwwUserCached(COOKIE, { url, now });
+  await lookupWwwUserCached(COOKIE, { url, now });
+  expect(calls).toBe(5);
+  // A refreshed cookie comes through on a fresh lookup.
+  clearWwwUserCache();
+  mode = "refresh";
+  expect((await lookupWwwUserCached(COOKIE, { url, now })).setCookies).toHaveLength(1);
+});
+
+test("W09 public reads skip the lookup; writes and uploads don't", () => {
+  expect(needsUser("GET", "/api/trending")).toBe(false);
+  expect(needsUser("GET", "/api/search")).toBe(false);
+  expect(needsUser("GET", "/api/icons/mdi/robot")).toBe(false);
+  expect(needsUser("GET", "/api/papers/2106.09685/progress")).toBe(false);
+  expect(needsUser("GET", "/api/papers/2106.09685/figures/fig1.png")).toBe(false);
+  expect(needsUser("GET", "/api/papers/up_abc/progress")).toBe(true);
+  expect(needsUser("POST", "/api/papers/2106.09685/overview")).toBe(true);
+  expect(needsUser("POST", "/api/papers/2106.09685/chat")).toBe(true);
+  expect(needsUser("GET", "/api/me")).toBe(true);
+  expect(needsUser("POST", "/api/link")).toBe(true);
 });
