@@ -74,7 +74,7 @@ export default $config({
         server: (args) => {
           // The function itself may run longer than a response: downloads, figure crops and the full map finish
           // in the background after the page has its answer (next/server after()).
-          args.timeout = 240;
+          args.timeout = "240 seconds";
         },
       },
       // The real client IP, set at the edge so a visitor can't fake it (rate limits use it).

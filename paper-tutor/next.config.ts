@@ -32,6 +32,14 @@ const nextConfig: NextConfig = {
   outputFileTracingExcludes: {
     "*": [".data/**", ".next-e2e/**", "test-results/**", "e2e/**", "tests/**", "node_modules/@napi-rs/canvas-darwin-*/**"],
   },
+  // pdf.js loads its worker, fonts and image decoders by path at run time, so tracing can't see them.
+  outputFileTracingIncludes: {
+    "*": [
+      "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+      "node_modules/pdfjs-dist/standard_fonts/**",
+      "node_modules/pdfjs-dist/wasm/**",
+    ],
+  },
   // Uploads go through the proxy (sign-in); its default 10 MB body cap would cut off PDFs below our 40 MB limit.
   experimental: { proxyClientMaxBodySize: "41mb" },
   turbopack: { root: __dirname },

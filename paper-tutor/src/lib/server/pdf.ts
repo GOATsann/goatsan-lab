@@ -1,5 +1,6 @@
 import "server-only";
 import { createCanvas, type Canvas } from "@napi-rs/canvas";
+import path from "node:path";
 
 // PDF reading with pdf.js: the text, and figure crops cut from rendered page images.
 // pdf.js in Node renders onto @napi-rs/canvas.
@@ -13,7 +14,14 @@ type TextItem = { str: string; transform: number[]; width: number; height: numbe
 async function open(data: Buffer | Uint8Array) {
   const { getDocument } = await pdfjs();
   // pdf.js takes ownership of the buffer it gets, so give it a copy.
-  return getDocument({ data: new Uint8Array(data), useSystemFonts: false }).promise;
+  // The standard fonts and image decoders ship with pdfjs-dist (traced into the server bundle by next.config.ts).
+  const dir = path.join(process.cwd(), "node_modules/pdfjs-dist");
+  return getDocument({
+    data: new Uint8Array(data),
+    useSystemFonts: false,
+    standardFontDataUrl: `${dir}/standard_fonts/`,
+    wasmUrl: `${dir}/wasm/`,
+  }).promise;
 }
 
 // Page count and a title, in well under a second: the biggest type on page 1 (what a person would call the
