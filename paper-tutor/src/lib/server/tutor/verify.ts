@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { TextBlockParam } from "@anthropic-ai/sdk/resources/messages/messages";
 import type { Scene } from "@/lib/scenes/types";
 import { CHECK_MODEL } from "./generate";
+import { recordAnthropic } from "../spend";
 
 // A numbers check for overview scenes: every number and quantity a scene says or draws is compared with the
 // paper (same cached prompt), and anything that doesn't match, including rounding that changes the meaning
@@ -92,6 +93,7 @@ ${content}`,
         },
       ],
     });
+    void recordAnthropic(msg.model, msg.usage);
     const out = msg.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
     // Corrections only: drop "fixes" that keep the original and just add to it, or that change nothing.
     const fixes = (JSON.parse(out) as { fixes: Fix[] }).fixes.filter(

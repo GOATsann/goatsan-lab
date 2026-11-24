@@ -1,30 +1,22 @@
 import "server-only";
 import { XMLParser } from "fast-xml-parser";
 import { cached } from "./cache";
+import { getStore } from "./store";
 import type { PaperCard } from "@/lib/types";
 
 // arXiv asks for at most 1 request every 3 seconds. Every arXiv call goes through this one queue, and every
-// answer is cached, so the same thing is never fetched twice. (One queue per server process: on AWS with
-// several instances this becomes a shared lock in DynamoDB.)
+// answer is cached, so the same thing is never fetched twice.
 const GAP_MS = 3000;
 const UA = "paper-tutor/0.1 (BULSHY.FM; open source)";
 
-type QueueState = { tail: Promise<unknown>; last: number };
-const g = globalThis as unknown as { __arxivQueue?: QueueState };
-const queue: QueueState = (g.__arxivQueue ??= { tail: Promise.resolve(), last: 0 });
-
+// The slot is reserved in the store (a conditional write in DynamoDB on AWS), so the gap holds across every
+// server instance, not just this one.
 function enqueue<T>(job: () => Promise<T>): Promise<T> {
-  const run = queue.tail.then(async () => {
-    const wait = queue.last + GAP_MS - Date.now();
+  return (async () => {
+    const wait = await getStore().reserveSlot("rate/arxiv.json", GAP_MS);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    try {
-      return await job();
-    } finally {
-      queue.last = Date.now();
-    }
-  });
-  queue.tail = run.catch(() => undefined);
-  return run;
+    return job();
+  })();
 }
 
 export class UpstreamError extends Error {

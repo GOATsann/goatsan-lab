@@ -1,6 +1,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { themeFor, type Figure, type PaperMeta, type PaperType, type Pronunciation, type Structure } from "@/lib/types";
+import { recordAnthropic } from "./spend";
 
 // Mapping a paper, in two steps so the overview can start early:
 // 1. A quick map (seconds): from the title, abstract, introduction, conclusion and figure captions, one fast call
@@ -44,6 +45,7 @@ async function structured<T>(system: string, user: string, schema: Record<string
     output_config: { effort: "low", format: { type: "json_schema", schema } },
     messages: [{ role: "user", content: user }],
   });
+  void recordAnthropic(msg.model, msg.usage);
   if (msg.stop_reason === "refusal") throw new Error("The AI declined to read this paper.");
   return JSON.parse(msg.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("")) as T;
 }

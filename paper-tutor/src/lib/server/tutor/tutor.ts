@@ -12,8 +12,10 @@ import { paperContext, SCENE_RULES } from "./prompt";
 import { emptyBoard } from "./sanitize";
 import { speakable } from "./say";
 import { checkedInOrder, checkNumbers } from "./verify";
-import { generateScenes, isLive, LIVE_MODEL, OVERVIEW_MODEL, savedScenes, sharedScenes, systemBlocks } from "./generate";
+import { claimWriter, generateScenes, isLive, LIVE_MODEL, OVERVIEW_MODEL, releaseWriter, savedScenes, sharedScenes, systemBlocks } from "./generate";
 import { runAgent, type AgentPart, type ToolName } from "./agent";
+import { assertBudget } from "../spend";
+import { background } from "../background";
 
 // The live tutor: the 60-second overview (written once by the strongest model, then replayed for everyone),
 // deep dives, "Explain this", and chat answers on the whiteboard or as text.
@@ -105,11 +107,6 @@ export async function cachedOverview(id: string, user: User | null) {
   return { ...saved, scenes: saved.scenes.map((sc) => ({ ...sc, say: ctx.speak(sc.say) })) };
 }
 
-// One writer per overview: while the first request is still checking limits and loading the paper, others wait
-// for it and then join its stream (or read the saved result), so two tabs or two people never pay twice.
-const g = globalThis as unknown as { __ovStarting?: Map<string, Promise<void>> };
-const starting = (g.__ovStarting ??= new Map());
-
 const replay = (saved: { scenes: Scene[] }, speak: (s: string) => string) =>
   (async function* () {
     for (const sc of saved.scenes) yield { ...sc, say: speak(sc.say) };
@@ -118,37 +115,33 @@ const replay = (saved: { scenes: Scene[] }, speak: (s: string) => string) =>
 export async function overview(id: string, user: User | null, opts: { voice: boolean; model?: string }) {
   const key = overviewKey(id);
   const meta = await getMeta(id, user); // also the access check for uploads
-  const waiting = starting.get(key);
-  if (waiting) await waiting.catch(() => undefined);
   const saved = await savedScenes(key);
   if (saved) {
     const ctx = await context(id, user);
     return { theme: ctx.theme, cached: true, scenes: replay(saved, ctx.speak) };
   }
   const theme = themeForPaper(meta, null);
-  if (!isLive(key)) {
+  // One writer across all servers; everyone else joins its stream, so two tabs or two people never pay twice.
+  if (!(await isLive(key))) {
     if (!user) throw new HttpError(401, "Sign in to make this paper's overview.");
-    let release = () => {};
-    starting.set(key, new Promise<void>((r) => (release = r)));
-    try {
-      await usePaperLimit(user.id, id);
-    } catch (e) {
-      starting.delete(key);
-      release();
-      throw e;
+    if (await claimWriter(key)) {
+      try {
+        await assertBudget();
+        await usePaperLimit(user.id, id);
+      } catch (e) {
+        await releaseWriter(key);
+        throw e;
+      }
+      // The full map runs alongside (deep dives and chat use it); it counts as the same new paper.
+      background(() => readPaper(id, user).then(() => undefined));
+      return startOverview(id, user, meta, theme, opts, true);
     }
-    // The full map runs alongside (deep dives and chat use it); it counts as the same new paper.
-    void readPaper(id, user).catch((e) => console.error("[map]", e));
-    const out = startOverview(id, user, meta, theme, opts);
-    starting.delete(key);
-    release();
-    return out;
   }
-  return startOverview(id, user, meta, theme, opts); // joins the stream already being written
+  return startOverview(id, user, meta, theme, opts, false); // joins the stream already being written
 }
 
 // The opening scene goes out at once (it needs only the title); the rest waits only for the text and the quick map.
-function startOverview(id: string, user: User | null, meta: PaperMeta, theme: ThemeName, opts: { voice: boolean; model?: string }) {
+function startOverview(id: string, user: User | null, meta: PaperMeta, theme: ThemeName, opts: { voice: boolean; model?: string }, owner: boolean) {
   const model = opts.model ?? OVERVIEW_MODEL;
   const say = (scene: Scene) => {
     if (!opts.voice) return;
@@ -219,6 +212,7 @@ if it is simple or cropped to the part that matters.${figs.length ? " The paper'
       step(id, "overview", "done", `${n} scenes`);
     },
     { model, theme },
+    { owner },
   );
   return { theme, cached: false, scenes };
 }
@@ -274,9 +268,19 @@ figure, cropped or zoomed (camera) to the part you talk about. Say why it matter
 
   const saved = await savedScenes(key);
   if (saved) return { theme, cached: true, scenes: replay(saved, ctx.speak) };
-  if (!isLive(key)) {
+  let owner = false;
+  if (!(await isLive(key))) {
     if (!user) throw new HttpError(401, "Sign in for deep dives and explanations.");
-    await useLimit(user.id, "deepdive");
+    owner = await claimWriter(key);
+    if (owner) {
+      try {
+        await assertBudget();
+        await useLimit(user.id, "deepdive");
+      } catch (e) {
+        await releaseWriter(key);
+        throw e;
+      }
+    }
   }
   // The same tutor agent as chat, with a starting instruction and the video tool; its scenes are saved.
   const images = await figureImages(id, figs);
@@ -302,6 +306,7 @@ short sentence.`,
       }
     },
     { model: LIVE_MODEL, theme },
+    { owner },
   );
   return { theme, cached: false, scenes };
 }
@@ -334,6 +339,7 @@ export async function chatTurn(
   if (!user) throw new HttpError(401, "Sign in to ask the tutor.");
   const question = req.question.trim().slice(0, 600);
   if (!question) throw new HttpError(400, "Ask a question.");
+  await assertBudget();
   const ctx = await context(id, user);
   await useLimit(user.id, "chat");
   const boardText =

@@ -2,6 +2,8 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { checkUrl, fetchPdf } from "./safeFetch";
 import { fail, mb, step } from "./progress";
+import { assertBudget } from "./spend";
+import { background } from "./background";
 import { getStore } from "./store";
 import { arxivMeta, arxivPdf, arxivSource } from "./arxiv";
 import { readLatex, unpackSource } from "./latex";
@@ -64,6 +66,30 @@ function once<T>(key: string, job: () => Promise<T>): Promise<T> {
   return p;
 }
 
+// Across server instances: one of them does a costly job (and saves its result at `resultKey`); the others wait
+// for that saved result. If the worker dies, its lock expires and a waiter does the job itself.
+async function singleFlight<T>(resultKey: string, job: () => Promise<T>, waitSec = 240): Promise<T> {
+  const store = getStore();
+  const done = await store.getJSON<T>(resultKey);
+  if (done) return done;
+  const lock = resultKey.replace(/\.json$/, ".lock.json");
+  if (await store.createJSON(lock, { at: Date.now() }, { ttlSec: waitSec })) {
+    try {
+      return await job();
+    } finally {
+      await store.delete(lock).catch(() => undefined);
+    }
+  }
+  const until = Date.now() + waitSec * 1000;
+  while (Date.now() < until) {
+    await new Promise((r) => setTimeout(r, 700));
+    const r = await store.getJSON<T>(resultKey);
+    if (r) return r;
+    if (!(await store.getJSON(lock))) break;
+  }
+  return job();
+}
+
 // Step 1 of reading: the text and the figure crops. Free (no AI), so the paper page can show figures early.
 export async function ingestPaper(id: string, user: User | null): Promise<Ingest> {
   const meta = await getMeta(id, user);
@@ -72,7 +98,7 @@ export async function ingestPaper(id: string, user: User | null): Promise<Ingest
   const existing = await store.getJSON<Ingest>(`${dir(id)}/ingest.json`);
   if (existing) return existing;
 
-  return once(`ingest:${id}`, async () => {
+  return once(`ingest:${id}`, () => singleFlight(`${dir(id)}/ingest.json`, async () => {
     let via: Ingest["via"] = "pdf";
     let text = "";
     // The figures come second, in the background, so the text (and the AI work that needs it) never waits for
@@ -116,7 +142,7 @@ export async function ingestPaper(id: string, user: User | null): Promise<Ingest
     await store.putJSON(`${dir(id)}/ingest.json`, ingest);
 
     step(id, "figures", "active", "0 found");
-    void once(`figures:${id}`, async () => {
+    background(() => once(`figures:${id}`, async () => {
       try {
         const crops = await figureJob();
         const figures: Figure[] = [];
@@ -132,16 +158,22 @@ export async function ingestPaper(id: string, user: User | null): Promise<Ingest
         await store.putJSON(`${dir(id)}/ingest.json`, { ...ingest, figuresPending: false });
         step(id, "figures", "error", "couldn't crop them");
       }
-    });
+    }));
     return ingest;
-  });
+  }));
 }
 
 // Resolves when the figure crops are done (or at once if they already are).
 export async function figuresReady(id: string): Promise<Ingest | null> {
   const running = inflight.get(`figures:${id}`);
   if (running) await running.catch(() => undefined);
-  return getStore().getJSON<Ingest>(`${dir(id)}/ingest.json`);
+  // Another instance may be cropping them: wait for its saved result (at most 2 minutes).
+  const until = Date.now() + 120_000;
+  for (;;) {
+    const ingest = await getStore().getJSON<Ingest>(`${dir(id)}/ingest.json`);
+    if (!ingest?.figuresPending || Date.now() > until) return ingest;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
 }
 
 // The quick map (seconds): what the paper does, its type, an outline, how to say its names. Saved; the overview
@@ -151,7 +183,7 @@ export async function getQuickMap(id: string, user: User | null): Promise<QuickM
   const key = `${dir(id)}/quickmap.json`;
   const saved = await store.getJSON<QuickMap>(key);
   if (saved) return saved;
-  return once(`quickmap:${id}`, async () => {
+  return once(`quickmap:${id}`, () => singleFlight(key, async () => {
     const meta = await getMeta(id, user);
     await ingestPaper(id, user);
     const text = (await store.getBlob(`${dir(id)}/text.txt`))?.toString("utf8") ?? "";
@@ -160,7 +192,7 @@ export async function getQuickMap(id: string, user: User | null): Promise<QuickM
     await store.putJSON(key, q);
     step(id, "map", "active", "sketch ready, mapping the sections");
     return q;
-  });
+  }, 90));
 }
 
 // The full map (background): the paper in parallel chunks, merged. Needs sign-in; counts toward the daily "new
@@ -169,10 +201,11 @@ export async function readPaper(id: string, user: User): Promise<PaperState> {
   const state = await getState(id, user);
   if (state.structure) return state;
   await ingestPaper(id, user);
-  const structure = await once(`structure:${id}`, async () => {
+  const structure = await once(`structure:${id}`, () => singleFlight(`${dir(id)}/structure.json`, async () => {
     const store = getStore();
     const done = await store.getJSON<Structure>(`${dir(id)}/structure.json`);
     if (done) return done;
+    await assertBudget();
     await usePaperLimit(user.id, id);
     const quick = await getQuickMap(id, user);
     const ingest = (await figuresReady(id))!; // figure notes need the crops
@@ -181,7 +214,7 @@ export async function readPaper(id: string, user: User): Promise<PaperState> {
     await store.putJSON(`${dir(id)}/structure.json`, s);
     step(id, "map", "done", `${s.sections.length} sections`);
     return s;
-  });
+  }));
   return { ...(await getState(id, user)), structure };
 }
 
@@ -234,7 +267,7 @@ export async function createUpload(user: User, data: Buffer, fileName: string): 
   const id = newUploadId();
   step(id, "download", "done", `${mb(data.length)} MB`);
   const meta = await finishUpload(user, id, data, fileName);
-  void ingestPaper(id, user).catch((e) => console.error("[ingest]", e));
+  background(() => ingestPaper(id, user));
   return meta;
 }
 
@@ -255,7 +288,7 @@ export async function createFromLink(user: User, link: string): Promise<PaperMet
   await store.putJSON(`${dir(id)}/meta.json`, meta);
   await store.putJSON(key, { id });
   step(id, "download", "active", "starting");
-  void (async () => {
+  background(async () => {
     try {
       const got = await fetchPdf(url.toString(), UPLOAD_MAX_BYTES, (n, total) =>
         step(id, "download", "active", total ? `${mb(n)} / ${mb(total)} MB` : `${mb(n)} MB`),
@@ -269,6 +302,6 @@ export async function createFromLink(user: User, link: string): Promise<PaperMet
       fail(id, message);
       await store.putJSON(`${dir(id)}/meta.json`, { ...meta, pending: false, error: message });
     }
-  })();
+  });
   return meta;
 }

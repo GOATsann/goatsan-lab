@@ -1,11 +1,11 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 
-// Paper Tutor on AWS (profile panda-dev, us-east-1). NOT DEPLOYED YET: the owner OKs every deploy.
+// Paper Tutor on AWS (profile panda-dev, us-east-1), at papers.theonlygoatsan.com. Deploys need the owner's OK.
 //   npx sst secret set AnthropicApiKey --stage prod      (and OpenaiApiKey, plus the 3 Workos* secrets)
 //   npx sst deploy --stage prod
 // Login is the personal site's WorkOS AuthKit: same 3 secrets, cookie scoped to theonlygoatsan.com, and sign-in
-// starts and ends on www (this app never handles the callback). DNS stays at GoDaddy: the papers subdomain is a
-// CNAME to the CloudFront URL this prints, once a certificate exists (PAPERS_CERT_ARN in a gitignored .env).
+// starts and ends on www (this app never handles the callback). DNS stays at GoDaddy: papers is a CNAME to the
+// CloudFront URL this prints, with the ACM certificate in PAPERS_CERT_ARN (gitignored .env).
 export default $config({
   app(input) {
     return {
@@ -22,29 +22,39 @@ export default $config({
     const workosClientId = new sst.Secret("WorkosClientId");
     const workosCookiePassword = new sst.Secret("WorkosCookiePassword");
 
-    // The paper index and its read results (structure JSON), plus cached scenes. pk = "paper#<id>", sk = kind.
-    const papers = new sst.aws.Dynamo("Papers", {
-      fields: { pk: "string", sk: "string" },
-      primaryIndex: { hashKey: "pk", rangeKey: "sk" },
-    });
-    // Per-user daily limits: pk = "<userId>#<YYYY-MM-DD>#<kind>", conditional increment; rows expire.
-    const limits = new sst.aws.Dynamo("Limits", {
+    // The store (src/lib/server/store-aws.ts): one table for JSON records, counters, locks and rate slots
+    // (pk = the store key; rows with expireAt expire on their own), and one private bucket for blobs.
+    const table = new sst.aws.Dynamo("Store", {
       fields: { pk: "string" },
       primaryIndex: { hashKey: "pk" },
       ttl: "expireAt",
     });
-    // PDFs, figure crops and voice files. Private: the app serves them after its own access checks.
     const files = new sst.aws.Bucket("Files");
 
-    const withDomain = $app.stage === "prod" && Boolean(process.env.PAPERS_CERT_ARN);
+    // An alarm on the whole AWS account's monthly bill (AI spend has its own cap in the app: SPEND_CAP_USD).
+    if ($app.stage === "prod") {
+      new aws.budgets.Budget("MonthlyBudget", {
+        budgetType: "COST",
+        limitAmount: "50",
+        limitUnit: "USD",
+        timeUnit: "MONTHLY",
+        notifications: [
+          { comparisonOperator: "GREATER_THAN", threshold: 80, thresholdType: "PERCENTAGE", notificationType: "ACTUAL", subscriberEmailAddresses: (process.env.BUDGET_EMAIL ?? "").split(",").filter(Boolean) },
+          { comparisonOperator: "GREATER_THAN", threshold: 100, thresholdType: "PERCENTAGE", notificationType: "FORECASTED", subscriberEmailAddresses: (process.env.BUDGET_EMAIL ?? "").split(",").filter(Boolean) },
+        ],
+      });
+    }
+
+    const cert = process.env.PAPERS_CERT_ARN;
+    const withDomain = $app.stage === "prod" && Boolean(cert);
     const site = new sst.aws.Nextjs("Site", {
-      link: [papers, limits, files],
+      link: [table, files],
       environment: {
         ANTHROPIC_API_KEY: anthropicKey.value,
         OPENAI_API_KEY: openaiKey.value,
-        PAPERS_TABLE: papers.name,
-        LIMITS_TABLE: limits.name,
+        PAPERS_TABLE: table.name,
         FILES_BUCKET: files.name,
+        SPEND_CAP_USD: "50",
         WORKOS_API_KEY: workosApiKey.value,
         WORKOS_CLIENT_ID: workosClientId.value,
         WORKOS_COOKIE_PASSWORD: workosCookiePassword.value,
@@ -52,10 +62,22 @@ export default $config({
         NEXT_PUBLIC_WORKOS_REDIRECT_URI: "https://www.theonlygoatsan.com/callback",
         NEXT_PUBLIC_AUTH_ORIGIN: "https://www.theonlygoatsan.com",
       },
-      server: { timeout: "120 seconds", memory: "2048 MB" },
-      ...(withDomain
-        ? { domain: { name: "papers.theonlygoatsan.com", dns: false, cert: process.env.PAPERS_CERT_ARN! } }
-        : {}),
+      // 60 s is CloudFront's longest wait between bytes (the overview streams, so it never waits that long).
+      server: { timeout: "60 seconds", memory: "2048 MB", architecture: "arm64" }, // arm64 matches the canvas binary in open-next.config.ts
+      transform: {
+        server: (args) => {
+          // The function itself may run longer than a response: downloads, figure crops and the full map finish
+          // in the background after the page has its answer (next/server after()).
+          args.timeout = 240;
+        },
+      },
+      // The real client IP, set at the edge so a visitor can't fake it (rate limits use it).
+      edge: {
+        viewerRequest: {
+          injection: `event.request.headers["x-client-ip"] = { value: event.viewer.ip };`,
+        },
+      },
+      ...(withDomain ? { domain: { name: "papers.theonlygoatsan.com", dns: false, cert: cert! } } : {}),
     });
     return { url: site.url };
   },

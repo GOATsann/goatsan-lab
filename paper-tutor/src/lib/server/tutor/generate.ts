@@ -7,6 +7,7 @@ import { layoutScene } from "@/lib/scenes/layout";
 import type { Figure } from "@/lib/types";
 import { resolvePictures, sanitizeScene, type BoardState } from "./sanitize";
 import { findIcon } from "../iconify";
+import { recordAnthropic } from "../spend";
 
 // Claude writes scenes, one JSON object per line, and each line is checked and handed on the moment it is
 // complete, so the player can draw scene 1 while scene 2 is still being written.
@@ -120,6 +121,7 @@ export async function* generateScenes(o: GenOpts): AsyncGenerator<Scene> {
     yield last;
   }
   const msg = await (stream as unknown as { finalMessage(): Promise<Anthropic.Message> }).finalMessage();
+  void recordAnthropic(msg.model, msg.usage);
   if (msg.stop_reason === "refusal" && !count) throw new Error("The tutor declined this request.");
   logUsage(
     `${o.label} (${count} scenes, first after ${(firstAt / 1000).toFixed(1)}s)`,
@@ -148,18 +150,31 @@ export async function savedScenes(key: string): Promise<SavedScenes | null> {
   return getStore().getJSON<SavedScenes>(key);
 }
 
-export function isLive(key: string) {
-  return live.has(key);
+// One writer per scene list across every server instance: a lock row in the store (a DynamoDB conditional write on
+// AWS). The writer saves each scene to a "live" record as it goes; a viewer on another instance follows that.
+const lockKey = (key: string) => key.replace(/\.json$/, ".lock.json");
+const liveKey = (key: string) => key.replace(/\.json$/, ".live.json");
+const LOCK_SEC = 300;
+
+export async function isLive(key: string) {
+  return live.has(key) || Boolean(await getStore().getJSON(lockKey(key)));
+}
+// True if this caller is now the one writer.
+export function claimWriter(key: string) {
+  return getStore().createJSON(lockKey(key), { at: Date.now() }, { ttlSec: LOCK_SEC });
+}
+export async function releaseWriter(key: string) {
+  await getStore().delete(lockKey(key)).catch(() => undefined);
 }
 
-// Start (or join) the job that writes the list saved at `key`.
 export function sharedScenes(
   key: string,
   start: () => AsyncGenerator<Scene>,
   meta: { model: string; theme?: string },
-  onDone?: (scenes: Scene[]) => void,
+  opts: { owner: boolean },
 ): AsyncGenerator<Scene> {
   let job = live.get(key);
+  if (!job && !opts.owner) return followRemote(key);
   if (!job) {
     const j: Live = { scenes: [], done: false, error: null, wake: new Set() };
     job = j;
@@ -168,14 +183,15 @@ export function sharedScenes(
       for (const w of j.wake) w();
     };
     void (async () => {
+      const store = getStore();
       try {
         for await (const s of start()) {
           j.scenes.push(s);
           ping();
+          await store.putJSON(liveKey(key), { scenes: j.scenes }, { ttlSec: LOCK_SEC }).catch(() => undefined);
         }
         if (j.scenes.length) {
-          await getStore().putJSON(key, { scenes: j.scenes, model: meta.model, theme: meta.theme, createdAt: new Date().toISOString() });
-          onDone?.(j.scenes);
+          await store.putJSON(key, { scenes: j.scenes, model: meta.model, theme: meta.theme, createdAt: new Date().toISOString() });
         } else {
           j.error = "The tutor didn't write any scenes. Try again.";
         }
@@ -185,6 +201,8 @@ export function sharedScenes(
       } finally {
         j.done = true;
         live.delete(key);
+        await store.delete(liveKey(key)).catch(() => undefined);
+        await releaseWriter(key);
         ping();
       }
     })();
@@ -207,4 +225,25 @@ export function sharedScenes(
       });
     }
   })();
+}
+
+// Another instance is writing: follow its live record until the saved list appears.
+async function* followRemote(key: string): AsyncGenerator<Scene> {
+  const store = getStore();
+  const until = Date.now() + LOCK_SEC * 1000;
+  let i = 0;
+  while (Date.now() < until) {
+    const saved = await store.getJSON<SavedScenes>(key);
+    if (saved) {
+      while (i < saved.scenes.length) yield saved.scenes[i++];
+      return;
+    }
+    const now = await store.getJSON<{ scenes: Scene[] }>(liveKey(key));
+    while (now && i < now.scenes.length) yield now.scenes[i++];
+    if (!now && !(await store.getJSON(lockKey(key)))) {
+      if (i === 0) throw new Error("The tutor stopped. Try again.");
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
 }

@@ -12,7 +12,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext<"/api/papers/[slu
     const { slug } = await ctx.params;
     const id = slugToId(slug);
     await getMeta(id, await currentUser()); // uploads: only the owner
-    return NextResponse.json({ progress: progressOf(id) }, { headers: noStore });
+    return NextResponse.json({ progress: await progressOf(id) }, { headers: noStore });
   } catch (e) {
     return errorResponse(e);
   }

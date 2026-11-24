@@ -5,6 +5,7 @@ import type { DrawStep, Scene } from "@/lib/scenes/types";
 import type { Figure } from "@/lib/types";
 import { anthropicClient, LIVE_MODEL, sceneCleaner } from "./generate";
 import { boardFromSteps, emptyBoard } from "./sanitize";
+import { recordAnthropic } from "../spend";
 
 // The tutor as a small agent. One loop serves chat, deep dives and "Explain this": the model gets the paper
 // (cached), a starting instruction, and two tools, and decides when to use them. show_on_video is offered only
@@ -164,6 +165,7 @@ export async function* runAgent(o: AgentOpts): AsyncGenerator<AgentPart> {
       }
     }
     const msg = await stream.finalMessage();
+    void recordAnthropic(msg.model, msg.usage);
     usage.in += msg.usage.input_tokens;
     usage.cacheRead += msg.usage.cache_read_input_tokens ?? 0;
     usage.cacheWrite += msg.usage.cache_creation_input_tokens ?? 0;

@@ -29,7 +29,7 @@ BULSHY.FM EP 3.
   paper's title while Claude Opus 5.5 writes the rest, one validated scene per line, straight into the player. It
   waits only for the text: the maps and the figures finish alongside, and each scene's voice starts as it lands.
   It is saved and replayed free for everyone after the first viewer (scenes and voice).
-- **Deep dive, Explain this, and chat** (Claude Haiku 5.5, with the whole paper in a cached prompt): a section
+- **Deep dive, Explain this, and chat** (Claude Sonnet 5.5, with the whole paper in a cached prompt): a section
   deep dive (60 to 90 s), a 20 to 30 s explanation of any equation or figure, and questions answered as text
   or on the whiteboard. Answers cite the section they come from. Ask while it plays: it pauses, answers on the
   board you're looking at, then replays the scene it was on and carries on.
@@ -71,8 +71,9 @@ nothing. After any change, run it and report the counts; every bug someone finds
 
 What costs money (all cached, so each thing is paid for once): the paper maps (Claude Sonnet 5.5, a few cents for a
 normal paper, about $0.40 for a 135-page report), the overview (Opus, about $0.15 to $0.25 for a normal paper), deep
-dives, explanations and chat (Claude Haiku 5.5 with prompt caching, well under a cent each), and voice (OpenAI
-`gpt-4o-mini-tts`, about a cent per overview).
+dives, explanations and chat (Claude Sonnet 5.5 with prompt caching, a few cents each), and voice (OpenAI
+`gpt-4o-mini-tts`, about a cent per overview). A monthly cap (`SPEND_CAP_USD`, $50 in production) stops new
+generation once the month's AI and voice spend reaches it; anything already made still plays.
 
 ## The scene list
 
@@ -132,8 +133,9 @@ Next.js (App Router) + TypeScript, made to deploy with SST on AWS like the other
     images in one figure are laid side by side). `pdf.ts` the PDF path with pdf.js and `@napi-rs/canvas`.
   - `structure.ts` the quick map and the chunked full map (structured JSON output). `papers.ts` ties it together:
     read once, save, share; uploads only for their owner. `progress.ts` the live steps the loading card shows.
-  - `store.ts` **the storage interface**: plain files in `.data/` locally, and DynamoDB + S3 on AWS later,
-    with nothing above it changing. `limits.ts` per-user daily limits (3 new papers a day to start).
+  - `store.ts` **the storage interface**: plain files in `.data/` locally; `store-aws.ts` DynamoDB + S3 on AWS
+    (conditional writes for the daily limits, the one-writer locks and the shared arXiv queue), with nothing above
+    it changing. `npm run test:store` tests it against DynamoDB Local. `spend.ts` the monthly AI spend cap. `limits.ts` per-user daily limits (3 new papers a day to start).
   - `tts.ts` one sentence of voice, cached by its exact text. `auth.ts` who is asking.
   - `tutor/` the live tutor: `prompt.ts` the scene rules and the paper (one cached prompt for every request),
     `generate.ts` streams Claude's lines and checks each scene, `sanitize.ts` and `sketch.ts` clean them,

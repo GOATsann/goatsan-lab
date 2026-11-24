@@ -129,6 +129,7 @@ test("T07 fresh open: the opening scene shows as soon as the overview stream sta
   await stubOpening(page, { overviewDelay: 1200 });
   await open(page);
   await expect(page.locator(".progress-card")).toHaveCount(0, { timeout: 12_000 });
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __ptTimes?: { done?: number } }).__ptTimes?.done), { timeout: 8000 }).toBeDefined();
   const t = await page.evaluate(() => (window as unknown as { __ptTimes?: { firstScene?: number; secondScene?: number; done?: number } }).__ptTimes);
   // The stub answers after 1.2 s; the page adds almost nothing on top.
   expect(t?.firstScene).toBeLessThan(2500);

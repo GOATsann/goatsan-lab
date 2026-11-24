@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { getStore } from "./store";
+import { assertBudget, recordSpend, ttsCost } from "./spend";
 
 // The tutor's voice: OpenAI text-to-speech, one sentence per request, so the first word plays quickly.
 // Every sentence is cached by its exact text, so a replayed overview costs nothing.
@@ -41,6 +42,7 @@ async function make(text: string, voice: Voice, key: string): Promise<Buffer> {
   if (hit) return hit;
   const key_ = process.env.OPENAI_API_KEY;
   if (!key_) throw new Error("Voice is off: no OpenAI key on the server.");
+  await assertBudget();
   const res = await fetch("https://api.openai.com/v1/audio/speech", {
     method: "POST",
     headers: { Authorization: `Bearer ${key_}`, "Content-Type": "application/json" },
@@ -49,6 +51,7 @@ async function make(text: string, voice: Voice, key: string): Promise<Buffer> {
   });
   if (!res.ok) throw new Error(`OpenAI TTS answered ${res.status}`);
   const audio = Buffer.from(await res.arrayBuffer());
+  void recordSpend(ttsCost(text.length));
   await store.putBlob(key, audio);
   console.log(`[tts] ${text.length} chars (${voice})`);
   return audio;

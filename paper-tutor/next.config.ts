@@ -27,6 +27,11 @@ const nextConfig: NextConfig = {
   // The e2e suite runs its own dev server next to yours; it builds into its own folder.
   ...(process.env.PT_DIST_DIR ? { distDir: process.env.PT_DIST_DIR } : {}),
   serverExternalPackages: ["@napi-rs/canvas", "pdfjs-dist", "undici"],
+  // Never ship local data or build leftovers in the server bundle: .data/ holds cached papers and private uploads
+  // (the file store points there, so tracing would pick it up), and the Lambda gets the Linux canvas binary.
+  outputFileTracingExcludes: {
+    "*": [".data/**", ".next-e2e/**", "test-results/**", "e2e/**", "tests/**", "node_modules/@napi-rs/canvas-darwin-*/**"],
+  },
   // Uploads go through the proxy (sign-in); its default 10 MB body cap would cut off PDFs below our 40 MB limit.
   experimental: { proxyClientMaxBodySize: "41mb" },
   turbopack: { root: __dirname },

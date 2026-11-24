@@ -112,7 +112,11 @@ export function PaperView({ slug }: { slug: string }) {
   const everPlayed = useRef(false);
   if (engine?.playing) everPlayed.current = true;
   const opening =
-    Boolean(state) && !error && (pending || !hasIngest || (!everPlayed.current && ((ov === "writing" && ovScenes < 2) || ov === "loading")));
+    Boolean(state) &&
+    !error &&
+    (pending ||
+      !hasIngest ||
+      (!everPlayed.current && ((ov === "writing" && ovScenes < 2) || ov === "loading" || (ov === "none" && me === undefined))));
   useEffect(() => {
     if (!opening && !figuresPending) return;
     let stop = false;

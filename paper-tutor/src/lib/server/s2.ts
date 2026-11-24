@@ -1,5 +1,6 @@
 import "server-only";
 import { cached } from "./cache";
+import { getStore } from "./store";
 import { spellings } from "./arxiv";
 import type { PaperCard } from "@/lib/types";
 
@@ -8,22 +9,14 @@ import type { PaperCard } from "@/lib/types";
 // SEMANTIC_SCHOLAR_API_KEY.
 
 const GAP_MS = 1100;
-type Q = { tail: Promise<unknown>; last: number };
-const g = globalThis as unknown as { __s2Queue?: Q };
-const queue: Q = (g.__s2Queue ??= { tail: Promise.resolve(), last: 0 });
-
+// The slot is reserved in the store (a conditional write in DynamoDB on AWS), so the gap holds across every
+// server instance, not just this one.
 function enqueue<T>(job: () => Promise<T>): Promise<T> {
-  const run = queue.tail.then(async () => {
-    const wait = queue.last + GAP_MS - Date.now();
+  return (async () => {
+    const wait = await getStore().reserveSlot("rate/s2.json", GAP_MS);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    try {
-      return await job();
-    } finally {
-      queue.last = Date.now();
-    }
-  });
-  queue.tail = run.catch(() => undefined);
-  return run;
+    return job();
+  })();
 }
 
 type S2Paper = {
