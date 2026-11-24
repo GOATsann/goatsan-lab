@@ -1,11 +1,14 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 
 // Paper Tutor on AWS (profile panda-dev, us-east-1), at papers.theonlygoatsan.com. Deploys need the owner's OK.
-//   npx sst secret set AnthropicApiKey --stage prod      (and OpenaiApiKey, plus the 3 Workos* secrets)
+//   npx sst secret set AnthropicApiKey --stage prod      (and OpenaiApiKey; the 3 Workos* secrets only for "workos")
 //   npx sst deploy --stage prod
-// Login is the personal site's WorkOS AuthKit: same 3 secrets, cookie scoped to theonlygoatsan.com, and sign-in
-// starts and ends on www (this app never handles the callback). DNS stays at GoDaddy: papers is a CNAME to the
-// CloudFront URL this prints, with the ACM certificate in PAPERS_CERT_ARN (gitignored .env).
+// Login is shared with www.theonlygoatsan.com; sign-in starts and ends on www (this app never handles the callback).
+// PAPERS_LOGIN picks how this app learns who is signed in:
+//   "www" (default): it asks www's /api/me with the browser's cookies; no WorkOS secrets here.
+//   "workos": WorkOS AuthKit runs here too, with the 3 Workos* secrets (same values as www).
+// DNS stays at GoDaddy: papers is a CNAME to the CloudFront URL this prints, with the ACM certificate in
+// PAPERS_CERT_ARN (gitignored .env).
 export default $config({
   app(input) {
     return {
@@ -18,9 +21,16 @@ export default $config({
   async run() {
     const anthropicKey = new sst.Secret("AnthropicApiKey");
     const openaiKey = new sst.Secret("OpenaiApiKey");
-    const workosApiKey = new sst.Secret("WorkosApiKey");
-    const workosClientId = new sst.Secret("WorkosClientId");
-    const workosCookiePassword = new sst.Secret("WorkosCookiePassword");
+    const loginViaWww = (process.env.PAPERS_LOGIN ?? "www") !== "workos";
+    const workos = loginViaWww
+      ? null
+      : {
+          WORKOS_API_KEY: new sst.Secret("WorkosApiKey").value,
+          WORKOS_CLIENT_ID: new sst.Secret("WorkosClientId").value,
+          WORKOS_COOKIE_PASSWORD: new sst.Secret("WorkosCookiePassword").value,
+          WORKOS_COOKIE_DOMAIN: "theonlygoatsan.com",
+          NEXT_PUBLIC_WORKOS_REDIRECT_URI: "https://www.theonlygoatsan.com/callback",
+        };
 
     // The store (src/lib/server/store-aws.ts): one table for JSON records, counters, locks and rate slots
     // (pk = the store key; rows with expireAt expire on their own), and one private bucket for blobs.
@@ -55,11 +65,7 @@ export default $config({
         PAPERS_TABLE: table.name,
         FILES_BUCKET: files.name,
         SPEND_CAP_USD: "50",
-        WORKOS_API_KEY: workosApiKey.value,
-        WORKOS_CLIENT_ID: workosClientId.value,
-        WORKOS_COOKIE_PASSWORD: workosCookiePassword.value,
-        WORKOS_COOKIE_DOMAIN: "theonlygoatsan.com",
-        NEXT_PUBLIC_WORKOS_REDIRECT_URI: "https://www.theonlygoatsan.com/callback",
+        ...(workos ?? { AUTH_MODE: "www" }),
         NEXT_PUBLIC_AUTH_ORIGIN: "https://www.theonlygoatsan.com",
       },
       // 60 s is CloudFront's longest wait between bytes (the overview streams, so it never waits that long).

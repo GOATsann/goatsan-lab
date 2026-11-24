@@ -63,6 +63,10 @@ nothing. After any change, run it and report the counts; every bug someone finds
   board does the same and is remembered.
 - `/demo` plays a hand-written walkthrough of *Attention Is All You Need* that uses every drawing tool (no AI).
 - `/api/dev/layout` (dev only) runs the layout checks over the demo and the saved overviews.
+- Login is shared with www.theonlygoatsan.com (sign-in starts and ends there). In production this app holds no
+  WorkOS keys (`AUTH_MODE=www`): for each API request the proxy asks www's `/api/me` with the browser's cookies
+  (1.5 s timeout, nobody on failure) and passes any refreshed session cookie back. `AUTH_MODE` unset with the
+  WorkOS keys present runs AuthKit here instead.
 - `PAPER_TUTOR_DEV_USER=1` (dev only, ignored in production builds) pretends someone is signed in, so
   uploading and reading work without the login. For the real login locally, run the personal site on port
   3100, set `PAPER_TUTOR_DEV_USER=0`, and sign in there: the session cookie is shared across localhost ports.

@@ -78,6 +78,7 @@ scrolled), full screen. Device: desktop, phone portrait, phone landscape.
 | A01 | Signed out: ask, or deep dive | any | Sent to sign in | auto |
 | A02 | Signed out: watch a saved overview | any | Plays | auto |
 | A03 | New papers per day limit | 4th new paper | A clear message; nothing is written | manual (server) |
+| A04 | Login through www (AUTH_MODE=www, no WorkOS keys here) | signed in, signed out, www down or slow | The user www reports; nobody if www says null, fails or takes over 1.5 s; a refreshed session cookie goes back to the browser; a browser can't fake the user header | auto (mock www) |
 | M01 | Phone: question box | scrolled | Always visible at the bottom | auto |
 
 ## Found by the suite and the exploratory pass
