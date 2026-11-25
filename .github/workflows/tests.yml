@@ -76,7 +76,8 @@ jobs:
 
   paper-tutor:
     name: Paper Tutor (typecheck + e2e on desktop and iPhone, canned AI, no secrets)
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest is 26.04 now, which Playwright 1.56 can't install browsers on.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults: { run: { working-directory: paper-tutor } }
     # DynamoDB Local for the store tests (limits, locks, rate slots under parallel load), free.
