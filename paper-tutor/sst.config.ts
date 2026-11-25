@@ -42,7 +42,8 @@ export default $config({
     const files = new sst.aws.Bucket("Files");
 
     // An alarm on the whole AWS account's monthly bill (AI spend has its own cap in the app: SPEND_CAP_USD).
-    if ($app.stage === "prod") {
+    // The address comes from BUDGET_EMAIL in the gitignored .env; no address, no alarm.
+    if ($app.stage === "prod" && process.env.BUDGET_EMAIL) {
       new aws.budgets.Budget("MonthlyBudget", {
         budgetType: "COST",
         limitAmount: "50",

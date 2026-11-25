@@ -6,7 +6,7 @@ through it in about a minute. Then deep dive into any section, ask it to explain
 interrupt it with a question: it answers on the same board and carries on. Nothing is rendered to a video file:
 Claude writes a list of scenes, and your browser draws and voices them live.
 
-BULSHY.FM EP 3.
+**Live: [papers.theonlygoatsan.com](https://papers.theonlygoatsan.com)** · BULSHY.FM EP 3.
 
 > **New to this code?** Open this folder with an AI coding agent (Claude Code, Cursor, GitHub Copilot or
 > similar) and ask it to walk you through it. For example: *"Explain how a paper goes from an arXiv link to
@@ -52,7 +52,12 @@ npm run typecheck
 npm run build
 npm run test:e2e               # the user stories (USER_STORIES.md) on desktop Chromium and iPhone WebKit
                                # (starts its own fresh dev server on :3210; PT_E2E_REUSE=1 uses yours on :3200)
+npm run test:store             # the AWS store against DynamoDB Local (start it first, e.g.
+                               # docker run -p 8000:8000 amazon/dynamodb-local), plus the login lookup tests
 ```
+
+You only need the two AI keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`); with `PAPER_TUTOR_DEV_USER=1` a pretend
+user is signed in, so there is nothing else to set up.
 
 `npm run test:e2e` plays every control in every state (playing, paused, between scenes, at the end; normal,
 pinned, full screen; desktop, phone portrait and landscape) with the voice on, checking the audio element itself.
@@ -68,8 +73,9 @@ nothing. After any change, run it and report the counts; every bug someone finds
   (1.5 s timeout, nobody on failure) and passes any refreshed session cookie back. `AUTH_MODE` unset with the
   WorkOS keys present runs AuthKit here instead.
 - `PAPER_TUTOR_DEV_USER=1` (dev only, ignored in production builds) pretends someone is signed in, so
-  uploading and reading work without the login. For the real login locally, run the personal site on port
-  3100, set `PAPER_TUTOR_DEV_USER=0`, and sign in there: the session cookie is shared across localhost ports.
+  uploading and reading work without the login. To try a real login locally, run the login site on port 3100,
+  set `PAPER_TUTOR_DEV_USER=0` and `AUTH_MODE=www` with `WWW_ME_URL=http://localhost:3100/api/me`, and sign in
+  there: the session cookie is shared across localhost ports.
 - Everything the app saves (paper metadata, LaTeX text, figure crops, maps, voice files, caches) goes to
   `.data/`, which is gitignored. Delete it to start fresh.
 
@@ -128,7 +134,10 @@ play while the AI is still writing scene 2.
 
 ## How it's built
 
-Next.js (App Router) + TypeScript, made to deploy with SST on AWS like the other builds (not deployed yet).
+Next.js (App Router) + TypeScript, deployed with SST on AWS (Lambda behind CloudFront, DynamoDB, S3):
+`sst.config.ts` and `open-next.config.ts`. Deploying your own copy: set the two AI keys as SST secrets
+(`npx sst secret set AnthropicApiKey`, `OpenaiApiKey`), optionally `PAPERS_CERT_ARN` and `BUDGET_EMAIL` in a
+gitignored `.env`, change the domain names in `sst.config.ts`, then `npx sst deploy --stage prod`.
 
 - `src/lib/server/` (server only; every key stays here):
   - `arxiv.ts` search, browse, metadata, source and PDF downloads behind the 3-second queue; `trending.ts`
@@ -139,8 +148,10 @@ Next.js (App Router) + TypeScript, made to deploy with SST on AWS like the other
     read once, save, share; uploads only for their owner. `progress.ts` the live steps the loading card shows.
   - `store.ts` **the storage interface**: plain files in `.data/` locally; `store-aws.ts` DynamoDB + S3 on AWS
     (conditional writes for the daily limits, the one-writer locks and the shared arXiv queue), with nothing above
-    it changing. `npm run test:store` tests it against DynamoDB Local. `spend.ts` the monthly AI spend cap. `limits.ts` per-user daily limits (3 new papers a day to start).
-  - `tts.ts` one sentence of voice, cached by its exact text. `auth.ts` who is asking.
+    it changing. `npm run test:store` tests it against DynamoDB Local. `spend.ts` the monthly AI spend cap.
+    `limits.ts` per-user daily limits (3 new papers a day to start).
+  - `tts.ts` one sentence of voice, cached by its exact text. `auth.ts` who is asking; `wwwSession.ts` asks the
+    login site (with a 30 s cache per session); `background.ts` work that outlives a response on Lambda.
   - `tutor/` the live tutor: `prompt.ts` the scene rules and the paper (one cached prompt for every request),
     `generate.ts` streams Claude's lines and checks each scene, `sanitize.ts` and `sketch.ts` clean them,
     `tutor.ts` the overview, deep dives, explanations and chat. `iconify.ts` icon lookups, `safeFetch.ts`
@@ -148,15 +159,10 @@ Next.js (App Router) + TypeScript, made to deploy with SST on AWS like the other
 - `src/lib/scenes/layout.ts` the layout checks (overlaps and arrow routing), shared by server and browser.
 - `src/lib/player/engine.ts` the player's clock: sentences, buffering, pause, scenes.
   `src/components/player/` draws each moment (`Board.tsx`) and the controls (`Whiteboard.tsx`).
-- Login: the shared theonlygoatsan.com account (WorkOS AuthKit). Sign-in happens on the main site and the
-  session cookie covers every subdomain; this app only reads it. Pages are public, and sign-in is asked only
-  when you act (read a paper, upload, and a new voice line).
-
-## Where it's going
-
-1. Move the local store to DynamoDB + S3 (the interface is ready), share the arXiv queue and limits across
-   server instances, and add a monthly spending cap.
-2. Deploy as papers.theonlygoatsan.com.
+- Login: the shared theonlygoatsan.com account. Sign-in happens on the main site (WorkOS AuthKit there) and the
+  session cookie covers every subdomain; this app holds no login keys and asks the main site who is signed in
+  (`src/proxy.ts`). Pages are public, and sign-in is asked only when you act (make an overview, ask, upload,
+  and a new voice line).
 
 ## Credits
 
