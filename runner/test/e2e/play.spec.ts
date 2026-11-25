@@ -146,7 +146,10 @@ test("LS-060: starting a new run during the crash scene does not bring the old c
   await open(page);
   await startRun(page);
   await crash(page);
-  await page.waitForTimeout(300); // the crash scene is still playing
+  // wait until the game has handled the crash (same frame that schedules the card), not a fixed time:
+  // on a slow machine a fixed wait can start the new run before the crash is even seen
+  await expect(page.locator("#title")).toContainText("points");
+  expect(await visible(page, "#overlay")).toBe(false); // the crash scene is still playing
   if (isMobile) await swipe(page, 0, 0); else await page.keyboard.press("Space");
   await page.waitForTimeout(2500);
   const bad = (await visible(page, "#overlay")) && !(await g(page, "dead"));
