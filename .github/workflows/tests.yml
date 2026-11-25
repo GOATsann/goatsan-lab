@@ -13,7 +13,7 @@ concurrency:
 jobs:
   shooter-z:
     name: Shooter Z (unit + typecheck + build)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright 1.56 has no browsers for 26.04 (ubuntu-latest)
     defaults: { run: { working-directory: shooter-z-fps } }
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +26,7 @@ jobs:
 
   shooter-z-e2e:
     name: Shooter Z e2e (desktop, iPhone, Android)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright 1.56 has no browsers for 26.04 (ubuntu-latest)
     timeout-minutes: 40
     defaults: { run: { working-directory: shooter-z-fps } }
     steps:
@@ -45,7 +45,7 @@ jobs:
 
   runner:
     name: Lights-Out Surfer (unit + typecheck + build)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright 1.56 has no browsers for 26.04 (ubuntu-latest)
     defaults: { run: { working-directory: runner } }
     steps:
       - uses: actions/checkout@v4
@@ -59,7 +59,7 @@ jobs:
 
   runner-e2e:
     name: Lights-Out Surfer e2e (desktop, iPhone, Android)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright 1.56 has no browsers for 26.04 (ubuntu-latest)
     timeout-minutes: 40
     defaults: { run: { working-directory: runner } }
     steps:
@@ -101,7 +101,7 @@ jobs:
 
   python:
     name: CarRacing, dashboard, explainers
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright 1.56 has no browsers for 26.04 (ubuntu-latest)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -109,5 +109,5 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       # only what the tests need (no torch): the game with its Box2D physics, TensorBoard for the exporters
-      - run: pip install swig && pip install "gymnasium[box2d]==1.4.0" tensorboard pytest
+      - run: pip install swig && pip install "gymnasium[box2d]==1.4.0" opencv-python-headless tensorboard pytest
       - run: python -m pytest car-racing/tests -q
