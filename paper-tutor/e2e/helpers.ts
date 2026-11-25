@@ -134,9 +134,18 @@ export async function startPlaying(page: Page) {
   await expect.poll(async () => (await player(page)).audio?.hasSource && !(await player(page)).audio?.paused, { timeout: 10_000 }).toBe(true);
 }
 
+// The voice is moving: its time goes forward, or it has gone on to the next sentence (each clip is 3 s, so a
+// single fixed sample could land on a sentence change, or on a moment the busy machine stalls). Checked for up to
+// `ms` + 2 s; false only if the voice never moves.
 export async function audioAdvances(page: Page, ms = 700): Promise<boolean> {
-  const a = (await player(page)).audio?.currentTime ?? 0;
-  await page.waitForTimeout(ms);
-  const b = (await player(page)).audio?.currentTime ?? 0;
-  return b > a + 0.1;
+  const a = (await player(page)).audio;
+  if (!a) return false;
+  const until = Date.now() + ms + 2000;
+  await page.waitForTimeout(Math.min(ms, 300));
+  while (Date.now() < until) {
+    const b = (await player(page)).audio;
+    if (b && (b.currentTime > a.currentTime + 0.1 || b.voicedSentence !== a.voicedSentence)) return true;
+    await page.waitForTimeout(150);
+  }
+  return false;
 }

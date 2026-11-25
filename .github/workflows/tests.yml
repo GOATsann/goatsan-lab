@@ -79,6 +79,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults: { run: { working-directory: paper-tutor } }
+    # DynamoDB Local for the store tests (limits, locks, rate slots under parallel load), free.
+    services:
+      dynamodb:
+        image: amazon/dynamodb-local
+        ports: ["8000:8000"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -87,6 +92,7 @@ jobs:
       - run: npx next typegen # the route types (PageProps, RouteContext) that next dev/build would generate
       - run: npm run typecheck
       - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:store # the AWS store against DynamoDB Local, and the www login lookup
       - run: npm run test:e2e
       - if: failure()
         uses: actions/upload-artifact@v4
